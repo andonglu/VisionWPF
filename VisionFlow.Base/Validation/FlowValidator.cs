@@ -1,0 +1,402 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using VisionFlow.Conditions;
+using VisionFlow.Core;
+using VisionFlow.Editing;
+using VisionFlow.Nodes;
+using VisionFlow.Variables;
+
+namespace VisionFlow.Validation
+{
+    public enum FlowValidationSeverity
+    {
+        Error,
+        Warning
+    }
+
+    public sealed class FlowValidationIssue
+    {
+        public FlowValidationSeverity Severity { get; private set; }
+        public string NodeId { get; private set; }
+        public string NodeName { get; private set; }
+        public string Parameter { get; private set; }
+        public string Message { get; private set; }
+
+        public FlowValidationIssue(FlowValidationSeverity severity, FlowNode node, string parameter, string message)
+        {
+            Severity = severity;
+            NodeId = node?.Id;
+            NodeName = node?.Name;
+            Parameter = parameter;
+            Message = message;
+        }
+
+        public override string ToString()
+        {
+            string prefix = string.IsNullOrEmpty(NodeName) ? string.Empty : NodeName + " - ";
+            string parameter = string.IsNullOrEmpty(Parameter) ? string.Empty : Parameter + "：";
+            return $"{Severity}: {prefix}{parameter}{Message}";
+        }
+    }
+
+    public sealed class FlowValidationResult
+    {
+        private readonly List<FlowValidationIssue> _issues = new List<FlowValidationIssue>();
+
+        public IReadOnlyList<FlowValidationIssue> Issues
+        {
+            get { return _issues; }
+        }
+
+        public bool IsValid
+        {
+            get { return !_issues.Any(i => i.Severity == FlowValidationSeverity.Error); }
+        }
+
+        internal void Add(FlowValidationIssue issue)
+        {
+            _issues.Add(issue);
+        }
+    }
+
+    /// <summary>声明级流程校验：不运行工具，只根据输出声明、引用路径和作用域判断流程是否可执行。</summary>
+    public static class FlowValidator
+    {
+        public static FlowValidationResult Validate(FlowNode root)
+        {
+            var result = new FlowValidationResult();
+            if (root == null)
+            {
+                result.Add(new FlowValidationIssue(FlowValidationSeverity.Error, null, null, "流程根节点为空"));
+                return result;
+            }
+
+            ValidateDuplicateNamespaces(root, result);
+            ValidateNode(root, root, result);
+            return result;
+        }
+
+        private static void ValidateNode(FlowNode root, FlowNode node, FlowValidationResult result)
+        {
+            if (node is ToolNode toolNode)
+            {
+                ValidateTool(root, toolNode, result);
+            }
+            else if (node is IfElseNode ifElse)
+            {
+                ValidateIfElse(root, ifElse, result);
+            }
+            else if (node is ForLoopNode loop)
+            {
+                ValidateLoop(root, loop, result);
+            }
+            else if (node is FlowOutputNode outputNode)
+            {
+                ValidateFlowOutput(root, outputNode, result);
+            }
+
+            foreach (FlowNode child in EnumerateChildren(node))
+            {
+                ValidateNode(root, child, result);
+            }
+        }
+
+        private static void ValidateTool(FlowNode root, ToolNode node, FlowValidationResult result)
+        {
+            foreach (ToolInputRefDef def in ToolMetadata.GetInputRefs(node.Tool.GetType()))
+            {
+                string path = def.Property.GetValue(node.Tool) as string;
+                if (string.IsNullOrWhiteSpace(path))
+                {
+                    if (!def.Optional)
+                    {
+                        result.Add(new FlowValidationIssue(FlowValidationSeverity.Error, node, def.DisplayName, "必填引用为空"));
+                    }
+                    continue;
+                }
+
+                ValidateReference(root, node, path.Trim(), def.ExpectedType, def.DisplayName, result);
+            }
+        }
+
+        private static void ValidateIfElse(FlowNode root, IfElseNode node, FlowValidationResult result)
+        {
+            if (node.Condition == null)
+            {
+                result.Add(new FlowValidationIssue(FlowValidationSeverity.Error, node, "条件", "未设置条件"));
+            }
+            else
+            {
+                ValidateOperand(root, node, node.Condition.Left, null, "左操作数", result);
+                ValidateOperand(root, node, node.Condition.Right, null, "右操作数", result);
+            }
+
+            var outputNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (BranchOutputDef output in node.Outputs)
+            {
+                if (string.IsNullOrWhiteSpace(output.Name))
+                {
+                    result.Add(new FlowValidationIssue(FlowValidationSeverity.Error, node, "公共输出", "输出名不能为空"));
+                    continue;
+                }
+                if (!outputNames.Add(output.Name))
+                {
+                    result.Add(new FlowValidationIssue(FlowValidationSeverity.Error, node, output.Name, "公共输出名重复"));
+                }
+
+                Type expected = ClrTypeOf(output);
+                ValidateBranchOutputOperand(root, node, output, IfBranch.If, output.IfValue, expected, result);
+                ValidateBranchOutputOperand(root, node, output, IfBranch.Else, output.ElseValue, expected, result);
+            }
+        }
+
+        private static void ValidateLoop(FlowNode root, ForLoopNode node, FlowValidationResult result)
+        {
+            if (node.Mode == ForLoopMode.Count)
+            {
+                if (node.CountSource == null)
+                {
+                    result.Add(new FlowValidationIssue(FlowValidationSeverity.Error, node, "次数", "未设置循环次数来源"));
+                }
+                else
+                {
+                    ValidateOperand(root, node, node.CountSource, typeof(int), "次数", result);
+                }
+                }
+                else
+                {
+                    if (string.IsNullOrWhiteSpace(node.ItemsPath))
+                {
+                    result.Add(new FlowValidationIssue(FlowValidationSeverity.Error, node, "循环源", "未设置集合来源"));
+                }
+                else
+                {
+                    List<RefCandidate> collections = RefCandidateService.Collections(root, node);
+                    if (!collections.Any(c => SamePath(c.Path, node.ItemsPath)))
+                    {
+                        result.Add(new FlowValidationIssue(FlowValidationSeverity.Error, node, "循环源",
+                            $"引用 '{node.ItemsPath}' 不是当前节点可用的上游集合输出"));
+                    }
+                }
+            }
+        }
+
+        private static void ValidateFlowOutput(FlowNode root, FlowOutputNode node, FlowValidationResult result)
+        {
+            var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (FlowOutputDef output in node.Outputs)
+            {
+                if (string.IsNullOrWhiteSpace(output.Name))
+                {
+                    result.Add(new FlowValidationIssue(FlowValidationSeverity.Error, node, "流程输出", "输出名不能为空"));
+                    continue;
+                }
+                if (!names.Add(output.Name))
+                {
+                    result.Add(new FlowValidationIssue(FlowValidationSeverity.Error, node, output.Name, "输出名重复"));
+                }
+                if (output.Value == null)
+                {
+                    result.Add(new FlowValidationIssue(FlowValidationSeverity.Error, node, output.Name, "未配置取值"));
+                    continue;
+                }
+                ValidateOperand(root, node, output.Value, ClrTypeOf(output), output.Name, result);
+            }
+        }
+
+        private static void ValidateBranchOutputOperand(FlowNode root, IfElseNode node, BranchOutputDef output,
+            IfBranch branch, Operand operand, Type expected, FlowValidationResult result)
+        {
+            string branchName = branch == IfBranch.If ? "If" : "Else";
+            if (operand == null)
+            {
+                result.Add(new FlowValidationIssue(FlowValidationSeverity.Error, node, output.Name,
+                    $"{branchName} 分支取值未配置"));
+                return;
+            }
+            if (operand.IsConstant)
+            {
+                return;
+            }
+
+            List<RefCandidate> candidates = RefCandidateService.ForBranchOutput(root, node, branch);
+            AddInputImage(candidates);
+            RefCandidate candidate = candidates.FirstOrDefault(c => SamePath(c.Path, operand.Reference.ToString()));
+            if (candidate == null)
+            {
+                result.Add(new FlowValidationIssue(FlowValidationSeverity.Error, node, output.Name,
+                    $"{branchName} 分支引用 '{operand.Reference}' 不存在、顺序不合法或不在该分支作用域内"));
+                return;
+            }
+            if (expected != null && expected != typeof(object) && !expected.IsAssignableFrom(candidate.ClrType))
+            {
+                result.Add(new FlowValidationIssue(FlowValidationSeverity.Error, node, output.Name,
+                    $"{branchName} 分支引用 '{operand.Reference}' 类型为 {candidate.ClrType.Name}，不能作为 {expected.Name} 输出"));
+            }
+        }
+
+        private static void ValidateOperand(FlowNode root, FlowNode node, Operand operand, Type expectedType,
+            string parameter, FlowValidationResult result)
+        {
+            if (operand == null)
+            {
+                result.Add(new FlowValidationIssue(FlowValidationSeverity.Error, node, parameter, "操作数为空"));
+                return;
+            }
+            if (!operand.IsConstant)
+            {
+                ValidateReference(root, node, operand.Reference.ToString(), expectedType, parameter, result);
+            }
+        }
+
+        private static void ValidateReference(FlowNode root, FlowNode node, string path, Type expectedType,
+            string parameter, FlowValidationResult result)
+        {
+            try
+            {
+                VariableReference.Parse(path);
+            }
+            catch (Exception ex)
+            {
+                result.Add(new FlowValidationIssue(FlowValidationSeverity.Error, node, parameter,
+                    $"引用 '{path}' 格式错误：{ex.Message}"));
+                return;
+            }
+
+            List<RefCandidate> candidates = RefCandidateService.ForNode(root, node);
+            AddInputImage(candidates);
+            RefCandidate candidate = candidates.FirstOrDefault(c => SamePath(c.Path, path));
+            if (candidate == null)
+            {
+                result.Add(new FlowValidationIssue(FlowValidationSeverity.Error, node, parameter,
+                    $"引用 '{path}' 不存在、顺序不合法，或引用了 If/Else 分支内部私有输出"));
+                return;
+            }
+            if (expectedType != null && !expectedType.IsAssignableFrom(candidate.ClrType))
+            {
+                result.Add(new FlowValidationIssue(FlowValidationSeverity.Error, node, parameter,
+                    $"引用 '{path}' 类型为 {candidate.ClrType.Name}，不能赋给 {expectedType.Name}"));
+            }
+        }
+
+        private static void ValidateDuplicateNamespaces(FlowNode root, FlowValidationResult result)
+        {
+            var seen = new Dictionary<string, FlowNode>(StringComparer.OrdinalIgnoreCase);
+            foreach (FlowNode node in EnumerateTree(root))
+            {
+                string name = null;
+                if (node is ToolNode toolNode)
+                {
+                    name = toolNode.Tool.ModuleName;
+                }
+                else if (node is IfElseNode ifElse && ifElse.Outputs.Count > 0)
+                {
+                    name = ifElse.Name;
+                }
+                else if (node is FlowOutputNode outputNode && outputNode.Outputs.Count > 0)
+                {
+                    name = outputNode.Name;
+                }
+                if (string.IsNullOrWhiteSpace(name))
+                {
+                    continue;
+                }
+
+                if (seen.TryGetValue(name, out FlowNode existing))
+                {
+                    result.Add(new FlowValidationIssue(FlowValidationSeverity.Error, node, "名称",
+                        $"输出命名空间 '{name}' 与节点 '{existing.Name}' 重复，会导致变量覆盖"));
+                }
+                else
+                {
+                    seen[name] = node;
+                }
+            }
+        }
+
+        private static IEnumerable<FlowNode> EnumerateTree(FlowNode node)
+        {
+            yield return node;
+            foreach (FlowNode child in EnumerateChildren(node))
+            {
+                foreach (FlowNode nested in EnumerateTree(child))
+                {
+                    yield return nested;
+                }
+            }
+        }
+
+        private static IEnumerable<FlowNode> EnumerateChildren(FlowNode node)
+        {
+            if (node is SequenceNode sequence)
+            {
+                return sequence.Children;
+            }
+            if (node is IfElseNode ifElse)
+            {
+                return ifElse.IfBranch.Concat(ifElse.ElseBranch);
+            }
+            if (node is ForLoopNode loop)
+            {
+                return loop.Body;
+            }
+            if (node is FlowOutputNode)
+            {
+                return Enumerable.Empty<FlowNode>();
+            }
+            return Enumerable.Empty<FlowNode>();
+        }
+
+        private static void AddInputImage(List<RefCandidate> candidates)
+        {
+            if (!candidates.Any(c => SamePath(c.Path, "Input.Image")))
+            {
+                candidates.Insert(0, new RefCandidate { Path = "Input.Image", ClrType = typeof(HalconImage) });
+            }
+        }
+
+        private static bool SamePath(string left, string right)
+        {
+            return string.Equals(left, right, StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static Type ClrTypeOf(BranchOutputDef def)
+        {
+            if (def.Kind == VariableKind.Single)
+            {
+                switch (def.Type)
+                {
+                    case VariableType.Int: return typeof(int);
+                    case VariableType.Double: return typeof(double);
+                    case VariableType.String: return typeof(string);
+                    case VariableType.Bool: return typeof(bool);
+                }
+            }
+            if (!string.IsNullOrWhiteSpace(def.ClrTypeName))
+            {
+                return Type.GetType(def.ClrTypeName, throwOnError: false) ?? typeof(object);
+            }
+            return typeof(object);
+        }
+
+        private static Type ClrTypeOf(FlowOutputDef def)
+        {
+            if (def.Kind == VariableKind.Single)
+            {
+                switch (def.Type)
+                {
+                    case VariableType.Int: return typeof(int);
+                    case VariableType.Double: return typeof(double);
+                    case VariableType.String: return typeof(string);
+                    case VariableType.Bool: return typeof(bool);
+                }
+            }
+            if (!string.IsNullOrWhiteSpace(def.ClrTypeName))
+            {
+                return Type.GetType(def.ClrTypeName, throwOnError: false) ?? typeof(object);
+            }
+            return typeof(object);
+        }
+    }
+}

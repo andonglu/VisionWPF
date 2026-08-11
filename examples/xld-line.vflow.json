@@ -1,0 +1,131 @@
+{
+  "Id": "sample_xld_root",
+  "Kind": "Sequence",
+  "Name": "XLD直线示例",
+  "Tool": null,
+  "Condition": null,
+  "Loop": null,
+  "Outputs": null,
+  "FlowOutputs": null,
+  "Children": [
+    {
+      "Id": "sample_xld_edges",
+      "Kind": "Tool",
+      "Name": "边缘提取1",
+      "Tool": {
+        "TypeName": "VisionFlow.Tools.ContourCreateTool, VisionFlow.Tools, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null",
+        "ModuleName": "边缘提取1",
+        "Properties": {
+          "ImagePath": "Input.Image",
+          "Filter": "canny",
+          "Sigma": 1.0,
+          "Low": 20,
+          "High": 40
+        }
+      },
+      "Condition": null,
+      "Loop": null,
+      "Outputs": null,
+      "FlowOutputs": null,
+      "Children": null,
+      "IfBranch": null,
+      "ElseBranch": null
+    },
+    {
+      "Id": "sample_xld_select",
+      "Kind": "Tool",
+      "Name": "边缘选择1",
+      "Tool": {
+        "TypeName": "VisionFlow.Tools.SelectContourTool, VisionFlow.Tools, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null",
+        "ModuleName": "边缘选择1",
+        "Properties": {
+          "XldPath": "边缘提取1.Xld",
+          "Features": "contlength",
+          "Operation": "and",
+          "Min": 30,
+          "Max": 999999
+        }
+      },
+      "Condition": null,
+      "Loop": null,
+      "Outputs": null,
+      "FlowOutputs": null,
+      "Children": null,
+      "IfBranch": null,
+      "ElseBranch": null
+    },
+    {
+      "Id": "sample_xld_fit_line",
+      "Kind": "Tool",
+      "Name": "拟合直线1",
+      "Tool": {
+        "TypeName": "VisionFlow.Tools.FitLineTool, VisionFlow.Tools, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null",
+        "ModuleName": "拟合直线1",
+        "Properties": {
+          "XldPath": "边缘选择1.Xld",
+          "Algorithm": "tukey",
+          "MaxNumPoints": -1,
+          "ClippingEndPoint": 0,
+          "Iterations": 3,
+          "ClippingFactor": 2
+        }
+      },
+      "Condition": null,
+      "Loop": null,
+      "Outputs": null,
+      "FlowOutputs": null,
+      "Children": null,
+      "IfBranch": null,
+      "ElseBranch": null
+    },
+    {
+      "Id": "sample_xld_output",
+      "Kind": "FlowOutput",
+      "Name": "流程输出1",
+      "Tool": null,
+      "Condition": null,
+      "Loop": null,
+      "Outputs": null,
+      "FlowOutputs": [
+        {
+          "Name": "Ok",
+          "Kind": "Single",
+          "Type": "Bool",
+          "ClrTypeName": null,
+          "Value": {
+            "IsConstant": true,
+            "Reference": null,
+            "Constant": true
+          }
+        },
+        {
+          "Name": "LineCount",
+          "Kind": "Single",
+          "Type": "Int",
+          "ClrTypeName": null,
+          "Value": {
+            "IsConstant": false,
+            "Reference": "拟合直线1.Count",
+            "Constant": null
+          }
+        },
+        {
+          "Name": "Row1",
+          "Kind": "Single",
+          "Type": "Double",
+          "ClrTypeName": null,
+          "Value": {
+            "IsConstant": false,
+            "Reference": "拟合直线1.Row1",
+            "Constant": null
+          }
+        }
+      ],
+      "Children": null,
+      "IfBranch": null,
+      "ElseBranch": null
+    }
+  ],
+  "IfBranch": null,
+  "ElseBranch": null
+}

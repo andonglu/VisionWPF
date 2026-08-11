@@ -1,0 +1,148 @@
+{
+  "Id": "sample_region_root",
+  "Kind": "Sequence",
+  "Name": "区域处理示例",
+  "Tool": null,
+  "Condition": null,
+  "Loop": null,
+  "Outputs": null,
+  "FlowOutputs": null,
+  "Children": [
+    {
+      "Id": "sample_region_threshold",
+      "Kind": "Tool",
+      "Name": "二值化1",
+      "Tool": {
+        "TypeName": "VisionFlow.Tools.ThresholdTool, VisionFlow.Tools, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null",
+        "ModuleName": "二值化1",
+        "Properties": {
+          "ImagePath": "Input.Image",
+          "MinGray": 80,
+          "MaxGray": 255,
+          "Connection": true
+        }
+      },
+      "Condition": null,
+      "Loop": null,
+      "Outputs": null,
+      "FlowOutputs": null,
+      "Children": null,
+      "IfBranch": null,
+      "ElseBranch": null
+    },
+    {
+      "Id": "sample_region_morphology",
+      "Kind": "Tool",
+      "Name": "圆形形态学1",
+      "Tool": {
+        "TypeName": "VisionFlow.Tools.MorphologyCircleTool, VisionFlow.Tools, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null",
+        "ModuleName": "圆形形态学1",
+        "Properties": {
+          "RegionPath": "二值化1.Region",
+          "Radius": 3.5,
+          "Connection": true,
+          "Operation": "opening"
+        }
+      },
+      "Condition": null,
+      "Loop": null,
+      "Outputs": null,
+      "FlowOutputs": null,
+      "Children": null,
+      "IfBranch": null,
+      "ElseBranch": null
+    },
+    {
+      "Id": "sample_region_select",
+      "Kind": "Tool",
+      "Name": "区域筛选1",
+      "Tool": {
+        "TypeName": "VisionFlow.Tools.SelectRegionTool, VisionFlow.Tools, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null",
+        "ModuleName": "区域筛选1",
+        "Properties": {
+          "RegionPath": "圆形形态学1.Region",
+          "Feature": "area",
+          "Min": 50,
+          "Max": 99999999,
+          "TakeMode": "Largest"
+        }
+      },
+      "Condition": null,
+      "Loop": null,
+      "Outputs": null,
+      "FlowOutputs": null,
+      "Children": null,
+      "IfBranch": null,
+      "ElseBranch": null
+    },
+    {
+      "Id": "sample_region_features",
+      "Kind": "Tool",
+      "Name": "Region特征1",
+      "Tool": {
+        "TypeName": "VisionFlow.Tools.RegionFeaturesTool, VisionFlow.Tools, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null",
+        "ModuleName": "Region特征1",
+        "Properties": {
+          "RegionPath": "区域筛选1.Region",
+          "Features": "area,row,column"
+        }
+      },
+      "Condition": null,
+      "Loop": null,
+      "Outputs": null,
+      "FlowOutputs": null,
+      "Children": null,
+      "IfBranch": null,
+      "ElseBranch": null
+    },
+    {
+      "Id": "sample_region_output",
+      "Kind": "FlowOutput",
+      "Name": "流程输出1",
+      "Tool": null,
+      "Condition": null,
+      "Loop": null,
+      "Outputs": null,
+      "FlowOutputs": [
+        {
+          "Name": "Ok",
+          "Kind": "Single",
+          "Type": "Bool",
+          "ClrTypeName": null,
+          "Value": {
+            "IsConstant": true,
+            "Reference": null,
+            "Constant": true
+          }
+        },
+        {
+          "Name": "RegionCount",
+          "Kind": "Single",
+          "Type": "Int",
+          "ClrTypeName": null,
+          "Value": {
+            "IsConstant": false,
+            "Reference": "区域筛选1.Count",
+            "Constant": null
+          }
+        },
+        {
+          "Name": "FirstArea",
+          "Kind": "Single",
+          "Type": "Double",
+          "ClrTypeName": null,
+          "Value": {
+            "IsConstant": false,
+            "Reference": "Region特征1.FirstValue",
+            "Constant": null
+          }
+        }
+      ],
+      "Children": null,
+      "IfBranch": null,
+      "ElseBranch": null
+    }
+  ],
+  "IfBranch": null,
+  "ElseBranch": null
+}

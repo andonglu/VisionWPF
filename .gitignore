@@ -1,0 +1,14 @@
+.vs/
+[Bb]in/
+[Oo]bj/
+
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+*.dll
+*.exe
+*.pdb
+
+src/Image/temp.shm

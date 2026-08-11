@@ -1,0 +1,8 @@
+<Solution>
+  <Project Path="VisionFlow.App/VisionFlow.App.csproj" />
+  <Project Path="VisionFlow.Base/VisionFlow.Base.csproj" />
+  <Project Path="VisionFlow.Controls/VisionFlow.Controls.csproj" />
+  <Project Path="VisionFlow.LDWeldingPlugins/VisionFlow.LDWeldingPlugins.csproj" />
+  <Project Path="VisionFlow.ToolEditors/VisionFlow.ToolEditors.csproj" />
+  <Project Path="VisionFlow.Tools/VisionFlow.Tools.csproj" />
+</Solution>
