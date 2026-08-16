@@ -81,6 +81,206 @@ namespace VisionFlow.Tools
         }
     }
 
+    [ToolOutput("Region", VariableKind.Object, VariableType.Object, ElementClrType = typeof(HalconRegion))]
+    [ToolOutput("Count", VariableKind.Single, VariableType.Int)]
+    public sealed class AutoThresholdTool : ToolBase
+    {
+        [InputRef("图像", typeof(HalconImage))]
+        public string ImagePath { get; set; } = "Input.Image";
+
+        public double Sigma { get; set; } = 2.0;
+        public bool Connection { get; set; }
+
+        public AutoThresholdTool(string moduleName) : base(moduleName)
+        {
+        }
+
+        public override NodeResult Run(FlowContext ctx)
+        {
+            HObject image = Input<HalconImage>(ctx, ImagePath).Object;
+            HOperatorSet.AutoThreshold(image, out HObject region, Sigma);
+            return SetRegionOutput(ctx, region, "AutoThreshold", $"Sigma={Sigma}");
+        }
+
+        private NodeResult SetRegionOutput(FlowContext ctx, HObject region, string label, string detail)
+        {
+            if (Connection)
+            {
+                HOperatorSet.Connection(region, out HObject connected);
+                region.Dispose();
+                region = connected;
+            }
+            return RegionThresholdOutput.Set(ctx, ModuleName, region, label, detail);
+        }
+    }
+
+    [ToolOutput("Region", VariableKind.Object, VariableType.Object, ElementClrType = typeof(HalconRegion))]
+    [ToolOutput("UsedThreshold", VariableKind.Single, VariableType.Double)]
+    [ToolOutput("Count", VariableKind.Single, VariableType.Int)]
+    public sealed class BinaryThresholdTool : ToolBase
+    {
+        [InputRef("图像", typeof(HalconImage))]
+        public string ImagePath { get; set; } = "Input.Image";
+
+        public string Method { get; set; } = "max_separability";
+        public string LightDark { get; set; } = "light";
+        public bool Connection { get; set; }
+
+        public BinaryThresholdTool(string moduleName) : base(moduleName)
+        {
+        }
+
+        public override NodeResult Run(FlowContext ctx)
+        {
+            HObject image = Input<HalconImage>(ctx, ImagePath).Object;
+            HOperatorSet.BinaryThreshold(image, out HObject region, Method, LightDark, out HTuple usedThreshold);
+            NodeResult result = RegionThresholdOutput.Set(ctx, ModuleName, ApplyConnection(region), "BinaryThreshold",
+                $"Method={Method}, LightDark={LightDark}, UsedThreshold={usedThreshold.D}");
+            if (result.IsSuccess)
+            {
+                SetOutput(ctx, Variable.Single(ModuleName, "UsedThreshold", VariableType.Double, usedThreshold.D));
+            }
+            return result;
+        }
+
+        private HObject ApplyConnection(HObject region)
+        {
+            if (!Connection)
+            {
+                return region;
+            }
+            HOperatorSet.Connection(region, out HObject connected);
+            region.Dispose();
+            return connected;
+        }
+    }
+
+    [ToolOutput("Region", VariableKind.Object, VariableType.Object, ElementClrType = typeof(HalconRegion))]
+    [ToolOutput("Count", VariableKind.Single, VariableType.Int)]
+    public sealed class FastThresholdTool : ToolBase
+    {
+        [InputRef("图像", typeof(HalconImage))]
+        public string ImagePath { get; set; } = "Input.Image";
+
+        public double MinGray { get; set; } = 128;
+        public double MaxGray { get; set; } = 255;
+        public int MinSize { get; set; } = 20;
+        public bool Connection { get; set; }
+
+        public FastThresholdTool(string moduleName) : base(moduleName)
+        {
+        }
+
+        public override NodeResult Run(FlowContext ctx)
+        {
+            HObject image = Input<HalconImage>(ctx, ImagePath).Object;
+            HOperatorSet.FastThreshold(image, out HObject region, MinGray, MaxGray, MinSize);
+            if (Connection)
+            {
+                HOperatorSet.Connection(region, out HObject connected);
+                region.Dispose();
+                region = connected;
+            }
+            return RegionThresholdOutput.Set(ctx, ModuleName, region, "FastThreshold",
+                $"Gray=[{MinGray}, {MaxGray}], MinSize={MinSize}");
+        }
+    }
+
+    [ToolOutput("Region", VariableKind.Object, VariableType.Object, ElementClrType = typeof(HalconRegion))]
+    [ToolOutput("UsedThreshold", VariableKind.Single, VariableType.Double)]
+    [ToolOutput("Count", VariableKind.Single, VariableType.Int)]
+    public sealed class CharThresholdTool : ToolBase
+    {
+        [InputRef("图像", typeof(HalconImage))]
+        public string ImagePath { get; set; } = "Input.Image";
+
+        public double Sigma { get; set; } = 1.0;
+        public double Percent { get; set; } = 5.0;
+        public bool Connection { get; set; }
+
+        public CharThresholdTool(string moduleName) : base(moduleName)
+        {
+        }
+
+        public override NodeResult Run(FlowContext ctx)
+        {
+            HObject image = Input<HalconImage>(ctx, ImagePath).Object;
+            HOperatorSet.GetDomain(image, out HObject domain);
+            try
+            {
+                HOperatorSet.CharThreshold(image, domain, out HObject region, Sigma, Percent, out HTuple threshold);
+                if (Connection)
+                {
+                    HOperatorSet.Connection(region, out HObject connected);
+                    region.Dispose();
+                    region = connected;
+                }
+                NodeResult result = RegionThresholdOutput.Set(ctx, ModuleName, region, "CharThreshold",
+                    $"Sigma={Sigma}, Percent={Percent}, Threshold={threshold.D}");
+                if (result.IsSuccess)
+                {
+                    SetOutput(ctx, Variable.Single(ModuleName, "UsedThreshold", VariableType.Double, threshold.D));
+                }
+                return result;
+            }
+            finally
+            {
+                domain.Dispose();
+            }
+        }
+    }
+
+    [ToolOutput("Region", VariableKind.Object, VariableType.Object, ElementClrType = typeof(HalconRegion))]
+    [ToolOutput("Count", VariableKind.Single, VariableType.Int)]
+    public sealed class VarThresholdTool : ToolBase
+    {
+        [InputRef("图像", typeof(HalconImage))]
+        public string ImagePath { get; set; } = "Input.Image";
+
+        public int MaskWidth { get; set; } = 15;
+        public int MaskHeight { get; set; } = 15;
+        public double StdDevScale { get; set; } = 0.2;
+        public double AbsThreshold { get; set; } = 15;
+        public string LightDark { get; set; } = "light";
+        public bool Connection { get; set; }
+
+        public VarThresholdTool(string moduleName) : base(moduleName)
+        {
+        }
+
+        public override NodeResult Run(FlowContext ctx)
+        {
+            HObject image = Input<HalconImage>(ctx, ImagePath).Object;
+            HOperatorSet.VarThreshold(image, out HObject region, MaskWidth, MaskHeight, StdDevScale, AbsThreshold, LightDark);
+            if (Connection)
+            {
+                HOperatorSet.Connection(region, out HObject connected);
+                region.Dispose();
+                region = connected;
+            }
+            return RegionThresholdOutput.Set(ctx, ModuleName, region, "VarThreshold",
+                $"Mask={MaskWidth}x{MaskHeight}, StdDevScale={StdDevScale}, AbsThreshold={AbsThreshold}, LightDark={LightDark}");
+        }
+    }
+
+    internal static class RegionThresholdOutput
+    {
+        public static NodeResult Set(FlowContext ctx, string moduleName, HObject region, string label, string detail)
+        {
+            HOperatorSet.CountObj(region, out HTuple count);
+            if (count.I == 0)
+            {
+                region.Dispose();
+                return NodeResult.Fail($"{label} 结果为空（{detail}）");
+            }
+
+            ctx.SetVariable(Variable.Object(moduleName, "Region", new HalconRegion(region), count.I));
+            ctx.SetVariable(Variable.Single(moduleName, "Count", VariableType.Int, count.I));
+            ctx.AddLog(FlowLogLevel.Info, $"[{label}] {detail}，区域数 {count.I}");
+            return NodeResult.Ok;
+        }
+    }
+
     /// <summary>区域处理方式（参考 VisionTools.ProcessRegionTool 的 Method，并补充圆形形态学）。</summary>
     public enum RegionProcessOp
     {

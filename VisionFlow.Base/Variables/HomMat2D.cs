@@ -37,6 +37,15 @@ namespace VisionFlow.Variables
             return new HomMat2D(hom);
         }
 
+        public static HomMat2D FromScaledPose(double row, double col, double angle, double scale)
+        {
+            HOperatorSet.HomMat2dIdentity(out HTuple hom);
+            HOperatorSet.HomMat2dScale(hom, scale, scale, 0, 0, out hom);
+            HOperatorSet.HomMat2dRotate(hom, angle, 0, 0, out hom);
+            HOperatorSet.HomMat2dTranslate(hom, row, col, out hom);
+            return new HomMat2D(hom);
+        }
+
         /// <summary>变换一个点（affine_trans_point_2d）。</summary>
         public void TransformPoint(double row, double col, out double outRow, out double outCol)
         {

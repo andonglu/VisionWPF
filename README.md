@@ -28,11 +28,14 @@ VisionFlow 当前不定位为：
 | 项目 | 说明 |
 |---|---|
 | `VisionFlow.Base` | 流程核心、节点、运行上下文、变量、校验、序列化、运行时接口 |
+| `VisionFlow.EditorCore` | WinForms/WPF 编辑器共用的流程编辑模型、工具箱注册表、插件加载 |
 | `VisionFlow.Tools` | 内置 HALCON 视觉工具 |
 | `VisionFlow.Controls` | 图像显示、ROI 绘制和基础视觉控件 |
 | `VisionFlow.ToolEditors` | 内置工具的专用参数编辑页面 |
 | `VisionFlow.LDWeldingPlugins` | LDWelding 相关插件工具 |
 | `VisionFlow.App` | WinForms 流程编辑器应用 |
+| `VisionFlow.WpfApp` | WPF 流程编辑器应用，复用现有流程核心、工具和专用工具编辑窗体 |
+| `VisionFlow.WpfToolEditors` | WPF 专用工具编辑页面，和 WinForms 编辑页分离 |
 
 ## 已提供的流程能力
 
@@ -85,7 +88,7 @@ VisionFlow 支持以下流程节点：
 
 ## 如何编辑视觉流程
 
-1. 启动 `VisionFlow.App`。
+1. 启动 `VisionFlow.WpfApp`（推荐）或旧版 `VisionFlow.App`。
 2. 从左侧工具箱中双击或拖拽工具到流程树。
 3. 在流程树中调整节点顺序，或将节点放入 IfElse 分支、For 循环体中。
 4. 选中节点后，在参数面板中配置输入引用。

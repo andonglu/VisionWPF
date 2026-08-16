@@ -18,7 +18,7 @@ namespace VisionFlow.Ui
         {
             public double AngleStart = -0.39;
             public double AngleExtent = 0.79;
-            public double AngleStep = 0.01;
+            public double AngleStep = -1;
             public int NumLevels = 0;
             public string Optimization = "auto";
             public string Metric = "use_polarity";

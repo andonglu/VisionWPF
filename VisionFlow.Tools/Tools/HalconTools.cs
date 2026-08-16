@@ -40,6 +40,9 @@ namespace VisionFlow.Tools
         public double Row { get; set; }
         public double Column { get; set; }
         public double Angle { get; set; }
+        public double Scale { get; set; } = 1;
+        public double ScaleRow { get; set; } = 1;
+        public double ScaleColumn { get; set; } = 1;
         public double Score { get; set; }
         /// <summary>匹配后的轮廓（已仿射变换到图像位置）。</summary>
         public HObject Contour { get; set; }
@@ -49,7 +52,114 @@ namespace VisionFlow.Tools
 
         public override string ToString()
         {
-            return $"#{Index} Row={Row:F2}, Col={Column:F2}, Angle={Angle:F4}, Score={Score:F3}, 轮廓点数={ContourPointCount}";
+            return $"#{Index} Row={Row:F2}, Col={Column:F2}, Angle={Angle:F4}, Scale={Scale:F3}, Score={Score:F3}, 轮廓点数={ContourPointCount}";
+        }
+    }
+
+    public interface IHalconTemplateMatchTool
+    {
+        string ModuleName { get; set; }
+        string ImagePath { get; set; }
+        byte[] ShapeModelData { get; set; }
+        double FindStartAngle { get; set; }
+        double FindExtentAngle { get; set; }
+        double MinScore { get; set; }
+        int NumMatches { get; set; }
+        double MaxOverlap { get; set; }
+        string SubPixel { get; set; }
+        int NumLevelsFind { get; set; }
+        double Greediness { get; set; }
+        double BaseRow { get; set; }
+        double BaseColumn { get; set; }
+        double BaseAngle { get; set; }
+    }
+
+    public abstract class HalconTemplateMatchToolBase : ToolBase, IHalconTemplateMatchTool
+    {
+        private double _findStartAngle = -0.39;
+        private double _findExtentAngle = 0.79;
+
+        [InputRef("图像", typeof(HalconImage))]
+        public string ImagePath { get; set; } = "Input.Image";
+        public byte[] ShapeModelData { get; set; }
+        public double FindStartAngle { get { return _findStartAngle; } set { _findStartAngle = value; } }
+        public double FindExtentAngle { get { return _findExtentAngle; } set { _findExtentAngle = value; } }
+        public double MinScore { get; set; } = 0.5;
+        public int NumMatches { get; set; } = 10;
+        public double MaxOverlap { get; set; } = 0.5;
+        public string SubPixel { get; set; } = "least_squares";
+        public int NumLevelsFind { get; set; }
+        public double Greediness { get; set; } = 0.9;
+        public double BaseRow { get; set; } = 99;
+        public double BaseColumn { get; set; } = 79;
+        public double BaseAngle { get; set; }
+
+        protected HalconTemplateMatchToolBase(string moduleName) : base(moduleName)
+        {
+        }
+
+        protected bool TryLoadImage(FlowContext ctx, out HObject image, out string error)
+        {
+            image = null;
+            error = null;
+            if (string.IsNullOrWhiteSpace(ImagePath))
+            {
+                error = "未配置输入图像";
+                return false;
+            }
+            if (File.Exists(ImagePath))
+            {
+                HOperatorSet.ReadImage(out image, ImagePath);
+                return true;
+            }
+            try
+            {
+                image = Input<HalconImage>(ctx, ImagePath).Object;
+                return true;
+            }
+            catch (Exception ex)
+            {
+                error = $"输入图像引用无效：{ImagePath}，{ex.Message}";
+                return false;
+            }
+        }
+
+        protected void SetMatchOutputs(FlowContext ctx, HObject image, List<MatchResultItem> items,
+            List<HomMat2D> homMats, List<HObject> contours, HObject resultContour)
+        {
+            SetOutput(ctx, Variable.Single(ModuleName, "MatchCount", VariableType.Int, items.Count));
+            SetOutput(ctx, Variable.Array(ModuleName, "Scores", VariableType.Double, ToScores(items)));
+            SetOutput(ctx, Variable.Array(ModuleName, "Items", VariableType.Object, items));
+            SetOutput(ctx, Variable.Array(ModuleName, "HomMats", VariableType.Object, homMats));
+            SetOutput(ctx, Variable.Object(ModuleName, "BestMatch", items[0], 1));
+            SetOutput(ctx, Variable.Object(ModuleName, "BestHomMat", homMats[0], 1));
+            SetOutput(ctx, Variable.Object(ModuleName, "Contours", contours, contours.Count));
+            SetOutput(ctx, Variable.Object(ModuleName, "ResultContour", resultContour, items.Count));
+            SetOutput(ctx, Variable.Object(ModuleName, "Image", new HalconImage(image), 1));
+        }
+
+        protected static double[] ToScores(List<MatchResultItem> items)
+        {
+            var scores = new double[items.Count];
+            for (int i = 0; i < items.Count; i++)
+            {
+                scores[i] = items[i].Score;
+            }
+            return scores;
+        }
+
+        protected static int CountContourPoints(HObject contourObject)
+        {
+            HOperatorSet.CountObj(contourObject, out HTuple contourCount);
+            int pointCount = 0;
+            for (int k = 1; k <= contourCount.I; k++)
+            {
+                HOperatorSet.SelectObj(contourObject, out HObject single, k);
+                HOperatorSet.GetContourXld(single, out HTuple rows, out _);
+                pointCount += rows.Length;
+                single.Dispose();
+            }
+            return pointCount;
         }
     }
 
@@ -75,7 +185,7 @@ namespace VisionFlow.Tools
     [ToolOutput("Contours", VariableKind.Object, VariableType.Object, ElementClrType = typeof(List<HObject>))]
     [ToolOutput("ResultContour", VariableKind.Object, VariableType.Object, ElementClrType = typeof(HObject))]
     [ToolOutput("Image", VariableKind.Object, VariableType.Object, ElementClrType = typeof(HalconImage))]
-    public sealed class HalconModelMatchTool : ToolBase
+    public sealed class HalconModelMatchTool : ToolBase, IHalconTemplateMatchTool
     {
         private double _findStartAngle = -0.39;
         private double _findExtentAngle = 0.79;
@@ -284,6 +394,315 @@ namespace VisionFlow.Tools
             {
                 error = $"输入图像引用无效：{ImagePath}，{ex.Message}";
                 return false;
+            }
+        }
+    }
+
+    [ToolOutput("MatchCount", VariableKind.Single, VariableType.Int)]
+    [ToolOutput("Scores", VariableKind.Array, VariableType.Double, ElementClrType = typeof(double))]
+    [ToolOutput("Items", VariableKind.Array, VariableType.Object, ElementClrType = typeof(MatchResultItem),
+        Members = new[] { "Row", "Column", "Angle", "Score", "HomMat" })]
+    [ToolOutput("HomMats", VariableKind.Array, VariableType.Object, ElementClrType = typeof(HomMat2D))]
+    [ToolOutput("BestMatch", VariableKind.Object, VariableType.Object, ElementClrType = typeof(MatchResultItem))]
+    [ToolOutput("BestHomMat", VariableKind.Object, VariableType.Object, ElementClrType = typeof(HomMat2D))]
+    [ToolOutput("Contours", VariableKind.Object, VariableType.Object, ElementClrType = typeof(List<HObject>))]
+    [ToolOutput("ResultContour", VariableKind.Object, VariableType.Object, ElementClrType = typeof(HObject))]
+    [ToolOutput("Image", VariableKind.Object, VariableType.Object, ElementClrType = typeof(HalconImage))]
+    public sealed class HalconGrayMatchTool : HalconTemplateMatchToolBase
+    {
+        public double TeachAngleStart { get; set; } = -0.39;
+        public double TeachAngleExtent { get; set; } = 0.79;
+
+        public HalconGrayMatchTool(string moduleName) : base(moduleName)
+        {
+            SubPixel = "true";
+        }
+
+        public override NodeResult Run(FlowContext ctx)
+        {
+            if (ShapeModelData == null || ShapeModelData.Length == 0)
+            {
+                return NodeResult.Fail("灰度模板未创建");
+            }
+
+            HObject image = null;
+            HObject modelRegion = null;
+            HObject modelContour = null;
+            HObject resultContour = null;
+            HTuple modelId = null;
+            try
+            {
+                if (!TryLoadImage(ctx, out image, out string imageError))
+                {
+                    return NodeResult.Fail(imageError);
+                }
+
+                modelId = ShapeModelSerialization.DeserializeNcc(ShapeModelData);
+                HOperatorSet.GetNccModelRegion(out modelRegion, modelId);
+                HOperatorSet.GenContourRegionXld(modelRegion, out modelContour, "border");
+                HOperatorSet.FindNccModel(image, modelId, FindStartAngle, FindExtentAngle, MinScore,
+                    NumMatches, MaxOverlap, string.IsNullOrWhiteSpace(SubPixel) ? "true" : SubPixel, NumLevelsFind,
+                    out HTuple rows, out HTuple columns, out HTuple angles, out HTuple scores);
+
+                if (rows.Length == 0)
+                {
+                    return NodeResult.Fail("灰度匹配未匹配到任何目标");
+                }
+
+                var items = new List<MatchResultItem>();
+                var contours = new List<HObject>();
+                var homMats = new List<HomMat2D>();
+                HOperatorSet.GenEmptyObj(out resultContour);
+                for (int i = 0; i < rows.Length; i++)
+                {
+                    HOperatorSet.VectorAngleToRigid(0, 0, 0, rows[i], columns[i], angles[i], out HTuple contourMat);
+                    HOperatorSet.AffineTransContourXld(modelContour, out HObject matchContour, contourMat);
+                    HOperatorSet.ConcatObj(resultContour, matchContour, out HObject combined);
+                    resultContour.Dispose();
+                    resultContour = combined;
+
+                    HomMat2D followMat = HomMat2D.FromPoses(BaseRow, BaseColumn, BaseAngle, rows[i].D, columns[i].D, angles[i].D);
+                    homMats.Add(followMat);
+                    var item = new MatchResultItem
+                    {
+                        Index = i,
+                        Row = rows[i].D,
+                        Column = columns[i].D,
+                        Angle = angles[i].D,
+                        Score = scores[i].D,
+                        Contour = matchContour,
+                        ContourPointCount = CountContourPoints(matchContour),
+                        HomMat = followMat
+                    };
+                    items.Add(item);
+                    contours.Add(matchContour);
+                    ctx.AddLog(FlowLogLevel.Info, $"[灰度匹配] {item}");
+                }
+
+                SetMatchOutputs(ctx, image, items, homMats, contours, resultContour);
+                return NodeResult.Ok;
+            }
+            catch (Exception ex)
+            {
+                return NodeResult.Fail($"{ModuleName} 灰度匹配失败：{ex.Message}");
+            }
+            finally
+            {
+                modelRegion?.Dispose();
+                modelContour?.Dispose();
+                if (modelId != null)
+                {
+                    HOperatorSet.ClearNccModel(modelId);
+                }
+            }
+        }
+    }
+
+    [ToolOutput("MatchCount", VariableKind.Single, VariableType.Int)]
+    [ToolOutput("Scores", VariableKind.Array, VariableType.Double, ElementClrType = typeof(double))]
+    [ToolOutput("Items", VariableKind.Array, VariableType.Object, ElementClrType = typeof(MatchResultItem),
+        Members = new[] { "Row", "Column", "Angle", "Scale", "Score", "HomMat" })]
+    [ToolOutput("HomMats", VariableKind.Array, VariableType.Object, ElementClrType = typeof(HomMat2D))]
+    [ToolOutput("BestMatch", VariableKind.Object, VariableType.Object, ElementClrType = typeof(MatchResultItem))]
+    [ToolOutput("BestHomMat", VariableKind.Object, VariableType.Object, ElementClrType = typeof(HomMat2D))]
+    [ToolOutput("Contours", VariableKind.Object, VariableType.Object, ElementClrType = typeof(List<HObject>))]
+    [ToolOutput("ResultContour", VariableKind.Object, VariableType.Object, ElementClrType = typeof(HObject))]
+    [ToolOutput("Image", VariableKind.Object, VariableType.Object, ElementClrType = typeof(HalconImage))]
+    public sealed class HalconScaledShapeMatchTool : HalconTemplateMatchToolBase
+    {
+        public double ScaleMin { get; set; } = 0.9;
+        public double ScaleMax { get; set; } = 1.1;
+
+        public HalconScaledShapeMatchTool(string moduleName) : base(moduleName)
+        {
+        }
+
+        public override NodeResult Run(FlowContext ctx)
+        {
+            if (ShapeModelData == null || ShapeModelData.Length == 0)
+            {
+                return NodeResult.Fail("缩放形状模板未创建");
+            }
+
+            HObject image = null;
+            HObject modelContours = null;
+            HObject resultContour = null;
+            HTuple modelId = null;
+            try
+            {
+                if (!TryLoadImage(ctx, out image, out string imageError))
+                {
+                    return NodeResult.Fail(imageError);
+                }
+
+                modelId = ShapeModelSerialization.Deserialize(ShapeModelData);
+                HOperatorSet.GetShapeModelContours(out modelContours, modelId, 1);
+                HOperatorSet.FindScaledShapeModel(image, modelId, FindStartAngle, FindExtentAngle,
+                    ScaleMin, ScaleMax, MinScore, NumMatches, MaxOverlap, SubPixel, NumLevelsFind, Greediness,
+                    out HTuple rows, out HTuple columns, out HTuple angles, out HTuple scales, out HTuple scores);
+                if (rows.Length == 0)
+                {
+                    return NodeResult.Fail("缩放形状匹配未匹配到任何目标");
+                }
+
+                var items = new List<MatchResultItem>();
+                var contours = new List<HObject>();
+                var homMats = new List<HomMat2D>();
+                HOperatorSet.GenEmptyObj(out resultContour);
+                for (int i = 0; i < rows.Length; i++)
+                {
+                    HomMat2D followMat = HomMat2D.FromScaledPose(rows[i].D, columns[i].D, angles[i].D, scales[i].D);
+                    HOperatorSet.AffineTransContourXld(modelContours, out HObject matchContour, followMat.Data);
+                    HOperatorSet.ConcatObj(resultContour, matchContour, out HObject combined);
+                    resultContour.Dispose();
+                    resultContour = combined;
+                    homMats.Add(followMat);
+                    var item = new MatchResultItem
+                    {
+                        Index = i,
+                        Row = rows[i].D,
+                        Column = columns[i].D,
+                        Angle = angles[i].D,
+                        Scale = scales[i].D,
+                        ScaleRow = scales[i].D,
+                        ScaleColumn = scales[i].D,
+                        Score = scores[i].D,
+                        Contour = matchContour,
+                        ContourPointCount = CountContourPoints(matchContour),
+                        HomMat = followMat
+                    };
+                    items.Add(item);
+                    contours.Add(matchContour);
+                    ctx.AddLog(FlowLogLevel.Info, $"[缩放形状匹配] {item}");
+                }
+
+                SetMatchOutputs(ctx, image, items, homMats, contours, resultContour);
+                return NodeResult.Ok;
+            }
+            catch (Exception ex)
+            {
+                return NodeResult.Fail($"{ModuleName} 缩放形状匹配失败：{ex.Message}");
+            }
+            finally
+            {
+                modelContours?.Dispose();
+                if (modelId != null)
+                {
+                    HOperatorSet.ClearShapeModel(modelId);
+                }
+            }
+        }
+    }
+
+    [ToolOutput("MatchCount", VariableKind.Single, VariableType.Int)]
+    [ToolOutput("Scores", VariableKind.Array, VariableType.Double, ElementClrType = typeof(double))]
+    [ToolOutput("Items", VariableKind.Array, VariableType.Object, ElementClrType = typeof(MatchResultItem),
+        Members = new[] { "Row", "Column", "Score", "HomMat" })]
+    [ToolOutput("HomMats", VariableKind.Array, VariableType.Object, ElementClrType = typeof(HomMat2D))]
+    [ToolOutput("BestMatch", VariableKind.Object, VariableType.Object, ElementClrType = typeof(MatchResultItem))]
+    [ToolOutput("BestHomMat", VariableKind.Object, VariableType.Object, ElementClrType = typeof(HomMat2D))]
+    [ToolOutput("Contours", VariableKind.Object, VariableType.Object, ElementClrType = typeof(List<HObject>))]
+    [ToolOutput("ResultContour", VariableKind.Object, VariableType.Object, ElementClrType = typeof(HObject))]
+    [ToolOutput("Image", VariableKind.Object, VariableType.Object, ElementClrType = typeof(HalconImage))]
+    public sealed class HalconLocalDeformableMatchTool : HalconTemplateMatchToolBase
+    {
+        public double ScaleRowMin { get; set; } = 0.9;
+        public double ScaleRowMax { get; set; } = 1.1;
+        public double ScaleColumnMin { get; set; } = 0.9;
+        public double ScaleColumnMax { get; set; } = 1.1;
+        public string DeformationSmoothness { get; set; } = "11";
+
+        public HalconLocalDeformableMatchTool(string moduleName) : base(moduleName)
+        {
+        }
+
+        public override NodeResult Run(FlowContext ctx)
+        {
+            if (ShapeModelData == null || ShapeModelData.Length == 0)
+            {
+                return NodeResult.Fail("局部变形模板未创建");
+            }
+
+            HObject image = null;
+            HObject imageRectified = null;
+            HObject vectorField = null;
+            HObject deformedContours = null;
+            HObject resultContour = null;
+            HTuple modelId = null;
+            try
+            {
+                if (!TryLoadImage(ctx, out image, out string imageError))
+                {
+                    return NodeResult.Fail(imageError);
+                }
+
+                modelId = ShapeModelSerialization.DeserializeDeformable(ShapeModelData);
+                HTuple genNames = new HTuple();
+                HTuple genValues = new HTuple();
+                if (!string.IsNullOrWhiteSpace(DeformationSmoothness))
+                {
+                    genNames = genNames.TupleConcat("deformation_smoothness");
+                    genValues = genValues.TupleConcat(DeformationSmoothness);
+                }
+                HOperatorSet.FindLocalDeformableModel(image, out imageRectified, out vectorField, out deformedContours,
+                    modelId, FindStartAngle, FindExtentAngle, ScaleRowMin, ScaleRowMax, ScaleColumnMin, ScaleColumnMax,
+                    MinScore, NumMatches, MaxOverlap, NumLevelsFind, Greediness, "deformed_contours", genNames, genValues,
+                    out HTuple scores, out HTuple rows, out HTuple columns);
+                if (rows.Length == 0)
+                {
+                    return NodeResult.Fail("局部变形匹配未匹配到任何目标");
+                }
+
+                var items = new List<MatchResultItem>();
+                var contours = new List<HObject>();
+                var homMats = new List<HomMat2D>();
+                resultContour = deformedContours.Clone();
+                HOperatorSet.CountObj(deformedContours, out HTuple contourCount);
+                for (int i = 0; i < rows.Length; i++)
+                {
+                    HObject contour = null;
+                    if (i < contourCount.I)
+                    {
+                        HOperatorSet.SelectObj(deformedContours, out contour, i + 1);
+                    }
+                    else
+                    {
+                        HOperatorSet.GenEmptyObj(out contour);
+                    }
+                    HomMat2D followMat = HomMat2D.FromPoses(BaseRow, BaseColumn, BaseAngle, rows[i].D, columns[i].D, 0);
+                    homMats.Add(followMat);
+                    var item = new MatchResultItem
+                    {
+                        Index = i,
+                        Row = rows[i].D,
+                        Column = columns[i].D,
+                        Angle = 0,
+                        Score = scores[i].D,
+                        Contour = contour,
+                        ContourPointCount = CountContourPoints(contour),
+                        HomMat = followMat
+                    };
+                    items.Add(item);
+                    contours.Add(contour);
+                    ctx.AddLog(FlowLogLevel.Info, $"[局部变形匹配] {item}");
+                }
+
+                SetMatchOutputs(ctx, image, items, homMats, contours, resultContour);
+                return NodeResult.Ok;
+            }
+            catch (Exception ex)
+            {
+                return NodeResult.Fail($"{ModuleName} 局部变形匹配失败：{ex.Message}");
+            }
+            finally
+            {
+                imageRectified?.Dispose();
+                vectorField?.Dispose();
+                deformedContours?.Dispose();
+                if (modelId != null)
+                {
+                    HOperatorSet.ClearDeformableModel(modelId);
+                }
             }
         }
     }

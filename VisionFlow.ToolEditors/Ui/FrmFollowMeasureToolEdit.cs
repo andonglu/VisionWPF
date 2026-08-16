@@ -671,32 +671,12 @@ namespace VisionFlow.Ui
             var len2 = new HTuple();
             double ml1 = (double)_measureLength1.Value;
             double ml2 = (double)_measureLength2.Value;
+            double sigma = (double)_measureSigma.Value;
+            double threshold = (double)_measureThreshold.Value;
 
             if (roi is LineRoi line)
             {
-                double dr = line.Row2 - line.Row1;
-                double dc = line.Column2 - line.Column1;
-                double length = Math.Sqrt(dr * dr + dc * dc);
-                if (length < 1e-6)
-                {
-                    HOperatorSet.GenEmptyObj(out HObject empty);
-                    return empty;
-                }
-                double linePhi = Math.Atan2(dr, dc);
-                double measurePhi = linePhi + Math.PI / 2.0;
-                int count = Math.Max(3, (int)(length / Math.Max(8, ml2 * 4)));
-                for (int i = 0; i <= count; i++)
-                {
-                    double t = (double)i / count;
-                    AppendCaliper(ref rows, ref cols, ref phis, ref len1, ref len2,
-                        line.Row1 + dr * t, line.Column1 + dc * t, linePhi, ml1, ml2);
-                }
-                HOperatorSet.GenRectangle2(out HObject lineRectangles, rows, cols, phis, len1, len2);
-                HObject arrows = BuildDirectionArrows(rows, cols, measurePhi, ml1);
-                HOperatorSet.ConcatObj(lineRectangles, arrows, out HObject overlay);
-                lineRectangles.Dispose();
-                arrows.Dispose();
-                return overlay;
+                return BuildLineMeasurePreview(line.Row1, line.Column1, line.Row2, line.Column2, ml1, ml2, sigma, threshold);
             }
             else if (roi is Rectangle2Roi rect)
             {
@@ -740,6 +720,37 @@ namespace VisionFlow.Ui
             }
             HOperatorSet.GenRectangle2(out HObject rectangles, rows, cols, phis, len1, len2);
             return rectangles;
+        }
+
+        private static HObject BuildLineMeasurePreview(double row1, double column1, double row2, double column2,
+            double measureLength1, double measureLength2, double sigma, double threshold)
+        {
+            double deltaRow = row2 - row1;
+            double deltaColumn = column2 - column1;
+            if (Math.Sqrt(deltaRow * deltaRow + deltaColumn * deltaColumn) < 1e-6)
+            {
+                HOperatorSet.GenEmptyObj(out HObject empty);
+                return empty;
+            }
+
+            HOperatorSet.CreateMetrologyModel(out HTuple metrology);
+            HObject modelContour = null;
+            HObject measureContours = null;
+            try
+            {
+                HOperatorSet.AddMetrologyObjectLineMeasure(metrology, row1, column1, row2, column2,
+                    measureLength1, measureLength2, sigma, threshold, new HTuple(), new HTuple(), out HTuple _);
+                HOperatorSet.GetMetrologyObjectModelContour(out modelContour, metrology, "all", 1.5);
+                HOperatorSet.GetMetrologyObjectMeasures(out measureContours, metrology, "all", "all", out HTuple _, out HTuple _);
+                HOperatorSet.ConcatObj(measureContours, modelContour, out HObject overlay);
+                return overlay;
+            }
+            finally
+            {
+                modelContour?.Dispose();
+                measureContours?.Dispose();
+                HOperatorSet.ClearMetrologyModel(metrology);
+            }
         }
 
         private static HObject BuildDirectionArrows(HTuple rows, HTuple cols, double phi, double length)

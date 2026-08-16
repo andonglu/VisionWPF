@@ -27,6 +27,9 @@ namespace VisionFlow.Controls
         private int _activeHandle = -1;
         private RoiKind? _pendingRoiKind;
         private int _roiCounter;
+        private string _overlayDrawMode = "margin";
+        private double _overlayFillOpacity = 0.35;
+        private double _overlayLineWidth = 2.0;
 
         public RoiCollection Rois { get; } = new RoiCollection();
 
@@ -59,6 +62,39 @@ namespace VisionFlow.Controls
 
         [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
         public HObject ImageObject => _image;
+
+        [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+        public string OverlayDrawMode
+        {
+            get => _overlayDrawMode;
+            set
+            {
+                _overlayDrawMode = string.Equals(value, "fill", StringComparison.OrdinalIgnoreCase) ? "fill" : "margin";
+                Redraw();
+            }
+        }
+
+        [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+        public double OverlayFillOpacity
+        {
+            get => _overlayFillOpacity;
+            set
+            {
+                _overlayFillOpacity = Math.Max(0.0, Math.Min(1.0, value));
+                Redraw();
+            }
+        }
+
+        [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+        public double OverlayLineWidth
+        {
+            get => _overlayLineWidth;
+            set
+            {
+                _overlayLineWidth = Math.Max(1.0, value);
+                Redraw();
+            }
+        }
 
         public void ShowImage(HObject image)
         {
@@ -273,8 +309,7 @@ namespace VisionFlow.Controls
                 _window.HalconWindow.DispObj(_image);
                 if (_overlay != null && _overlay.IsInitialized())
                 {
-                    _window.HalconWindow.SetColor("cyan");
-                    _window.HalconWindow.SetDraw("margin");
+                    ApplyOverlayStyle();
                     _window.HalconWindow.DispObj(_overlay);
                 }
                 Rois.Draw(_window.HalconWindow);
@@ -282,6 +317,21 @@ namespace VisionFlow.Controls
             catch (HalconException)
             {
                 Debug.WriteLine("Halcon window redraw failed.");
+            }
+        }
+
+        private void ApplyOverlayStyle()
+        {
+            _window.HalconWindow.SetLineWidth(_overlayLineWidth);
+            _window.HalconWindow.SetDraw(_overlayDrawMode);
+            if (string.Equals(_overlayDrawMode, "fill", StringComparison.OrdinalIgnoreCase))
+            {
+                int alpha = (int)Math.Round(_overlayFillOpacity * 255.0);
+                _window.HalconWindow.SetRgba(0, 255, 255, alpha);
+            }
+            else
+            {
+                _window.HalconWindow.SetColor("cyan");
             }
         }
 

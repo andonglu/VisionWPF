@@ -62,6 +62,24 @@ namespace VisionFlow.Editing
                     ModelPath = RepoPaths.Find("src/Image/temp.shm"),
                     NumMatches = 10
                 })));
+            Register(new ToolboxItem("gray-match", "01 定位匹配", "灰度匹配", () =>
+                new ToolNode(new HalconGrayMatchTool(NextModuleName("灰度匹配"))
+                {
+                    ImagePath = "Input.Image",
+                    NumMatches = 10
+                })));
+            Register(new ToolboxItem("scaled-shape-match", "01 定位匹配", "缩放形状匹配", () =>
+                new ToolNode(new HalconScaledShapeMatchTool(NextModuleName("缩放匹配"))
+                {
+                    ImagePath = "Input.Image",
+                    NumMatches = 10
+                })));
+            Register(new ToolboxItem("deformable-match", "01 定位匹配", "局部变形匹配", () =>
+                new ToolNode(new HalconLocalDeformableMatchTool(NextModuleName("变形匹配"))
+                {
+                    ImagePath = "Input.Image",
+                    NumMatches = 10
+                })));
             Register(new ToolboxItem("measure", "05 几何测量", "椭圆测量", () =>
                 new ToolNode(new EllipseFollowMeasureTool(NextModuleName("椭圆测量")))));
             Register(new ToolboxItem("measureline", "05 几何测量", "直线测量", () =>
@@ -91,6 +109,31 @@ namespace VisionFlow.Editing
                 new ToolNode(new TransColorSpaceTool(NextModuleName("色彩转换")))));
             Register(new ToolboxItem("threshold", "03 区域处理", "二值化", () =>
                 new ToolNode(new ThresholdTool(NextModuleName("二值化"))
+                {
+                    ImagePath = "Input.Image"
+                })));
+            Register(new ToolboxItem("auto-threshold", "03 区域处理", "AutoThreshold 自动阈值", () =>
+                new ToolNode(new AutoThresholdTool(NextModuleName("自动阈值"))
+                {
+                    ImagePath = "Input.Image"
+                })));
+            Register(new ToolboxItem("binary-threshold", "03 区域处理", "BinaryThreshold 二值阈值", () =>
+                new ToolNode(new BinaryThresholdTool(NextModuleName("二值阈值"))
+                {
+                    ImagePath = "Input.Image"
+                })));
+            Register(new ToolboxItem("fast-threshold", "03 区域处理", "FastThreshold 快速阈值", () =>
+                new ToolNode(new FastThresholdTool(NextModuleName("快速阈值"))
+                {
+                    ImagePath = "Input.Image"
+                })));
+            Register(new ToolboxItem("char-threshold", "03 区域处理", "CharThreshold 字符阈值", () =>
+                new ToolNode(new CharThresholdTool(NextModuleName("字符阈值"))
+                {
+                    ImagePath = "Input.Image"
+                })));
+            Register(new ToolboxItem("var-threshold", "03 区域处理", "VarThreshold 局部阈值", () =>
+                new ToolNode(new VarThresholdTool(NextModuleName("局部阈值"))
                 {
                     ImagePath = "Input.Image"
                 })));

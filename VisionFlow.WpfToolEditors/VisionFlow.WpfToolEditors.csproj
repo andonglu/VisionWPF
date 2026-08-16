@@ -2,16 +2,10 @@
 
   <ItemGroup>
     <ProjectReference Include="..\VisionFlow.Base\VisionFlow.Base.csproj" />
+    <ProjectReference Include="..\VisionFlow.Controls\VisionFlow.Controls.csproj" />
     <ProjectReference Include="..\VisionFlow.EditorCore\VisionFlow.EditorCore.csproj" />
     <ProjectReference Include="..\VisionFlow.Tools\VisionFlow.Tools.csproj" />
     <ProjectReference Include="..\VisionFlow.ToolEditors\VisionFlow.ToolEditors.csproj" />
-    <ProjectReference Include="..\VisionFlow.Controls\VisionFlow.Controls.csproj" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <Content Include="Resources\*.png">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
   </ItemGroup>
 
   <ItemGroup>
@@ -22,10 +16,10 @@
   </ItemGroup>
 
   <PropertyGroup>
-    <OutputType>WinExe</OutputType>
     <TargetFramework>net9.0-windows</TargetFramework>
-    <Nullable>disable</Nullable>
+    <UseWPF>true</UseWPF>
     <UseWindowsForms>true</UseWindowsForms>
+    <Nullable>disable</Nullable>
     <ImplicitUsings>disable</ImplicitUsings>
     <LangVersion>latest</LangVersion>
   </PropertyGroup>

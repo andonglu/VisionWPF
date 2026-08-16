@@ -1,0 +1,54 @@
+<Window x:Class="VisionFlow.WpfToolEditors.Editors.WpfLoadImageToolEditWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:wfi="clr-namespace:System.Windows.Forms.Integration;assembly=WindowsFormsIntegration"
+        xmlns:vfc="clr-namespace:VisionFlow.Controls;assembly=VisionFlow.Controls"
+        Title="图像加载编辑"
+        Width="980"
+        Height="700"
+        MinWidth="860"
+        MinHeight="600"
+        WindowStartupLocation="CenterOwner">
+    <Grid Margin="16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="48" />
+        </Grid.RowDefinitions>
+
+        <Border Grid.Row="0" Style="{StaticResource EditorCardStyle}">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="72" />
+                    <ColumnDefinition Width="180" />
+                    <ColumnDefinition Width="72" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="40" />
+                    <ColumnDefinition Width="96" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0" Text="模块名" Style="{StaticResource EditorFieldLabelStyle}" />
+                <TextBox x:Name="ModuleNameText" Grid.Column="1" />
+                <TextBlock Grid.Column="2" Text="图像文件" Style="{StaticResource EditorFieldLabelStyle}" Margin="16,0,12,10" />
+                <TextBox x:Name="FilePathText" Grid.Column="3" />
+                <Button Grid.Column="4" Content="..." MinWidth="32" Width="32" Padding="0" Click="Browse_Click" />
+                <Button Grid.Column="5" Content="预览" Margin="8,0,0,10" Click="Preview_Click" />
+            </Grid>
+        </Border>
+
+        <Border Grid.Row="1"
+                Background="Black"
+                BorderBrush="{DynamicResource ControlStrokeColorSecondaryBrush}"
+                BorderThickness="1"
+                CornerRadius="4">
+            <wfi:WindowsFormsHost>
+                <vfc:HalconImageView x:Name="PreviewImageView" />
+            </wfi:WindowsFormsHost>
+        </Border>
+
+        <DockPanel Grid.Row="2" LastChildFill="False" Margin="0,12,0,0">
+            <TextBlock x:Name="StatusText" VerticalAlignment="Center" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+            <Button DockPanel.Dock="Right" Content="取消" MinWidth="96" Margin="8,0,0,0" Click="Cancel_Click" />
+            <Button DockPanel.Dock="Right" Content="确定" MinWidth="96" Style="{StaticResource AccentButtonStyle}" Click="Ok_Click" />
+        </DockPanel>
+    </Grid>
+</Window>

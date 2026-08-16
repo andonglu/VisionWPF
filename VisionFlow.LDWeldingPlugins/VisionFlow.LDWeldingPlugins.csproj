@@ -19,12 +19,16 @@
     <Nullable>disable</Nullable>
     <LangVersion>latest</LangVersion>
     <PluginOutputDir>..\VisionFlow.App\bin\$(Configuration)\net9.0-windows\plugins\LDWelding</PluginOutputDir>
+    <WpfPluginOutputDir>..\VisionFlow.WpfApp\bin\$(Configuration)\net9.0-windows\plugins\LDWelding</WpfPluginOutputDir>
   </PropertyGroup>
 
   <Target Name="CopyToVisionFlowPlugins" AfterTargets="Build">
     <MakeDir Directories="$(PluginOutputDir)" />
+    <MakeDir Directories="$(WpfPluginOutputDir)" />
     <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(PluginOutputDir)" />
     <Copy SourceFiles="$(TargetDir)$(TargetName).deps.json" DestinationFolder="$(PluginOutputDir)" Condition="Exists('$(TargetDir)$(TargetName).deps.json')" />
+    <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(WpfPluginOutputDir)" />
+    <Copy SourceFiles="$(TargetDir)$(TargetName).deps.json" DestinationFolder="$(WpfPluginOutputDir)" Condition="Exists('$(TargetDir)$(TargetName).deps.json')" />
   </Target>
 
 </Project>
