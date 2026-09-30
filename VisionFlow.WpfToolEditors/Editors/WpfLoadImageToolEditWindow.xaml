@@ -9,11 +9,11 @@
         MinWidth="860"
         MinHeight="600"
         WindowStartupLocation="CenterOwner">
-    <Grid Margin="16">
+    <Grid Margin="24">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
-            <RowDefinition Height="48" />
+            <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
         <Border Grid.Row="0" Style="{StaticResource EditorCardStyle}">
@@ -28,10 +28,10 @@
                 </Grid.ColumnDefinitions>
                 <TextBlock Grid.Column="0" Text="模块名" Style="{StaticResource EditorFieldLabelStyle}" />
                 <TextBox x:Name="ModuleNameText" Grid.Column="1" />
-                <TextBlock Grid.Column="2" Text="图像文件" Style="{StaticResource EditorFieldLabelStyle}" Margin="16,0,12,10" />
+                <TextBlock Grid.Column="2" Text="图像文件" Style="{StaticResource EditorFieldLabelStyle}" Margin="16,0,8,16" />
                 <TextBox x:Name="FilePathText" Grid.Column="3" />
                 <Button Grid.Column="4" Content="..." MinWidth="32" Width="32" Padding="0" Click="Browse_Click" />
-                <Button Grid.Column="5" Content="预览" Margin="8,0,0,10" Click="Preview_Click" />
+                <Button Grid.Column="5" Content="预览" Margin="8,0,0,16" Click="Preview_Click" />
             </Grid>
         </Border>
 
@@ -45,7 +45,7 @@
             </wfi:WindowsFormsHost>
         </Border>
 
-        <DockPanel Grid.Row="2" LastChildFill="False" Margin="0,12,0,0">
+        <DockPanel Grid.Row="2" LastChildFill="False" Margin="0,24,0,0">
             <TextBlock x:Name="StatusText" VerticalAlignment="Center" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
             <Button DockPanel.Dock="Right" Content="取消" MinWidth="96" Margin="8,0,0,0" Click="Cancel_Click" />
             <Button DockPanel.Dock="Right" Content="确定" MinWidth="96" Style="{StaticResource AccentButtonStyle}" Click="Ok_Click" />

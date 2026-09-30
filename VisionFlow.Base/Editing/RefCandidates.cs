@@ -11,7 +11,7 @@ namespace VisionFlow.Editing
     public sealed class RefCandidate
     {
         public string Path { get; set; }
-        /// <summary>值的 CLR 类型，用于按期望类型过滤。</summary>
+        /// <summary>值的 CLR 类型，用于按期望类型过滤。集合输出时为元素类型。</summary>
         public Type ClrType { get; set; }
         /// <summary>是否为集合输出（数组变量）。</summary>
         public bool IsCollection { get; set; }
@@ -24,33 +24,80 @@ namespace VisionFlow.Editing
         }
     }
 
+    /// <summary>目标节点的循环上下文。</summary>
+    public enum RefLoopMode
+    {
+        /// <summary>不在任何循环内。</summary>
+        None,
+        /// <summary>最内层是按次数循环：可用 Loop.Index / Loop.Count，没有 Loop.Current。</summary>
+        Count,
+        /// <summary>最内层是按集合循环：额外可用 Loop.Current 及其成员。</summary>
+        Each
+    }
+
+    /// <summary>
+    /// 引用作用域：目标节点可见的候选输出 + 循环上下文。
+    /// 声明级校验与编辑器下拉共用同一份作用域，保证两处语义一致。
+    /// </summary>
+    public sealed class RefScope
+    {
+        public List<RefCandidate> Candidates { get; private set; }
+        public RefLoopMode LoopMode { get; private set; }
+        /// <summary>Each 模式循环源的元素类型；无法静态确定时为 null（成员链留待运行期验证）。</summary>
+        public Type LoopCurrentElementType { get; private set; }
+
+        public RefScope(List<RefCandidate> candidates, RefLoopMode loopMode, Type loopCurrentElementType)
+        {
+            Candidates = candidates ?? new List<RefCandidate>();
+            LoopMode = loopMode;
+            LoopCurrentElementType = loopCurrentElementType;
+        }
+    }
+
     /// <summary>
     /// 引用候选服务：给定流程根与目标节点，按执行顺序枚举它"上游"的全部可引用输出，
     /// 并处理循环上下文（Loop.Index / Loop.Count / Loop.Current.成员）。
-    /// 编辑器用它把"手输引用字符串"变成"下拉选择"。
+    /// 编辑器用它把"手输引用字符串"变成"下拉选择"，校验器用它做作用域判断。
+    ///
+    /// 作用域规则（与运行时一致）：
+    /// - If / Else 分支内部工具的输出是分支私有的：对互斥分支和分支外均不可见；
+    /// - IfElse 对外只暴露显式配置的公共输出（嵌套 IfElse 同样适用）；
+    /// - 循环体内部输出对循环外不可见（零次执行时这些变量不存在）；
+    /// - Input.Image 等外部输入对所有节点可见。
     /// </summary>
     public static class RefCandidateService
     {
         /// <summary>目标节点可用的全部引用候选。</summary>
         public static List<RefCandidate> ForNode(FlowNode root, FlowNode target)
         {
+            return ScopeForNode(root, target).Candidates;
+        }
+
+        /// <summary>目标节点的完整引用作用域（候选 + 循环上下文）。</summary>
+        public static RefScope ScopeForNode(FlowNode root, FlowNode target)
+        {
             var candidates = new List<RefCandidate>();
             CollectUpstream(root, target, candidates);
+            AddExternalInputs(candidates);
 
             // 循环上下文：只为最内层循环生成 Loop.* 候选（框架语义即最内层）
+            RefLoopMode loopMode = RefLoopMode.None;
+            Type loopCurrentElementType = null;
             List<ForLoopNode> loopAncestors = FindLoopAncestors(root, target);
             ForLoopNode innermost = loopAncestors.LastOrDefault();
             if (innermost != null)
             {
+                loopMode = innermost.Mode == ForLoopMode.Each ? RefLoopMode.Each : RefLoopMode.Count;
                 candidates.Add(new RefCandidate { Path = "Loop.Index", ClrType = typeof(int) });
                 candidates.Add(new RefCandidate { Path = "Loop.Count", ClrType = typeof(int) });
 
                 if (innermost.Mode == ForLoopMode.Each && !string.IsNullOrEmpty(innermost.ItemsPath))
                 {
                     // 找到循环源声明，展开元素成员（如 Loop.Current.HomMat）
-                    RefCandidate source = candidates.FirstOrDefault(c => c.Path == innermost.ItemsPath && c.IsCollection);
+                    RefCandidate source = candidates.FirstOrDefault(c => SamePath(c.Path, innermost.ItemsPath) && c.IsCollection);
                     if (source != null)
                     {
+                        loopCurrentElementType = source.ClrType;
                         candidates.Add(new RefCandidate { Path = "Loop.Current", ClrType = source.ClrType });
                         foreach (string member in source.Members)
                         {
@@ -64,27 +111,45 @@ namespace VisionFlow.Editing
                     }
                 }
             }
-            return candidates;
+            return new RefScope(candidates, loopMode, loopCurrentElementType);
         }
 
         /// <summary>IfElse 公共输出配置可用的候选：外部上游 + 指定分支内部输出。</summary>
         public static List<RefCandidate> ForBranchOutput(FlowNode root, IfElseNode ifElse, IfBranch branch)
         {
-            var candidates = new List<RefCandidate>();
-            CollectUpstream(root, ifElse, candidates);
+            return ScopeForBranchOutput(root, ifElse, branch).Candidates;
+        }
+
+        /// <summary>IfElse 公共输出配置的完整作用域，保留分支所在的最内层循环上下文。</summary>
+        public static RefScope ScopeForBranchOutput(FlowNode root, IfElseNode ifElse, IfBranch branch)
+        {
+            RefScope scope = ScopeForNode(root, ifElse);
+            List<RefCandidate> candidates = scope.Candidates;
             IList<FlowNode> branchNodes = branch == IfBranch.If ? ifElse.IfBranch : ifElse.ElseBranch;
             foreach (FlowNode child in branchNodes)
             {
                 CollectSubtreeOutputs(child, candidates);
             }
-            return candidates;
+            return new RefScope(candidates, scope.LoopMode, scope.LoopCurrentElementType);
         }
 
         /// <summary>按期望类型过滤（如 HTuple → 只有变换矩阵候选）。</summary>
         public static List<RefCandidate> ForInput(FlowNode root, FlowNode target, Type expectedType)
         {
+            return ForInput(root, target, expectedType, false);
+        }
+
+        public static List<RefCandidate> ForInput(FlowNode root, FlowNode target, Type expectedType,
+            bool acceptsCollection)
+        {
             return ForNode(root, target)
-                .Where(c => !c.IsCollection && expectedType.IsAssignableFrom(c.ClrType))
+                .Where(c =>
+                {
+                    Type valueType = c.IsCollection ? c.ClrType.MakeArrayType() : c.ClrType;
+                    return expectedType.IsAssignableFrom(valueType)
+                        || (acceptsCollection && valueType.IsArray
+                            && expectedType.IsAssignableFrom(valueType.GetElementType()));
+                })
                 .ToList();
         }
 
@@ -116,9 +181,40 @@ namespace VisionFlow.Editing
                 return false;
             }
 
-            if (node is IfElseNode ifElse && !ContainsNode(ifElse, target))
+            if (node is IfElseNode ifElse)
             {
-                AddBranchOutputs(ifElse, candidates);
+                if (!ContainsNode(ifElse, target))
+                {
+                    // 分支外只暴露显式公共输出
+                    AddBranchOutputs(ifElse, candidates);
+                    return false;
+                }
+                // 目标在分支内：只收集所在分支的上游，互斥分支的私有输出不可见
+                IList<FlowNode> branch = ContainsNodeIn(ifElse.IfBranch, target) ? ifElse.IfBranch : ifElse.ElseBranch;
+                foreach (FlowNode child in branch)
+                {
+                    if (CollectUpstream(child, target, candidates))
+                    {
+                        return true;
+                    }
+                }
+                return false;
+            }
+
+            if (node is ForLoopNode loop)
+            {
+                if (!ContainsNode(loop, target))
+                {
+                    // 循环体内部输出对循环外不可见：零次执行时这些变量不存在
+                    return false;
+                }
+                foreach (FlowNode child in loop.Body)
+                {
+                    if (CollectUpstream(child, target, candidates))
+                    {
+                        return true;
+                    }
+                }
                 return false;
             }
 
@@ -137,19 +233,46 @@ namespace VisionFlow.Editing
             if (node is ToolNode toolNode)
             {
                 AddToolOutputs(toolNode, candidates);
+                return;
             }
-            else if (node is IfElseNode ifElse)
-            {
-                AddBranchOutputs(ifElse, candidates);
-            }
-            else if (node is FlowOutputNode outputNode)
+            if (node is FlowOutputNode outputNode)
             {
                 AddFlowOutputs(outputNode, candidates);
+                return;
             }
-
+            // 嵌套 IfElse 只暴露显式公共输出，不递归分支内部
+            if (node is IfElseNode ifElse)
+            {
+                AddBranchOutputs(ifElse, candidates);
+                return;
+            }
+            // 循环体内部输出对外不可见，不递归循环体
+            if (node is ForLoopNode)
+            {
+                return;
+            }
             foreach (FlowNode child in EnumerateChildren(node))
             {
                 CollectSubtreeOutputs(child, candidates);
+            }
+        }
+
+        /// <summary>外部输入对所有节点可见（来源：ExternalInputRegistry，含默认的 Input.Image）。</summary>
+        private static void AddExternalInputs(List<RefCandidate> candidates)
+        {
+            int insertAt = 0;
+            foreach (ExternalInputDef input in ExternalInputRegistry.Items)
+            {
+                if (candidates.Any(c => SamePath(c.Path, input.Path)))
+                {
+                    continue;
+                }
+                candidates.Insert(insertAt++, new RefCandidate
+                {
+                    Path = input.Path,
+                    ClrType = input.ClrType.IsArray ? input.ClrType.GetElementType() : input.ClrType,
+                    IsCollection = input.ClrType.IsArray
+                });
             }
         }
 
@@ -195,7 +318,12 @@ namespace VisionFlow.Editing
 
         private static bool ContainsNode(FlowNode node, FlowNode target)
         {
-            foreach (FlowNode child in EnumerateChildren(node))
+            return ContainsNodeIn(EnumerateChildren(node), target);
+        }
+
+        private static bool ContainsNodeIn(IEnumerable<FlowNode> nodes, FlowNode target)
+        {
+            foreach (FlowNode child in nodes)
             {
                 if (child == target || ContainsNode(child, target))
                 {
@@ -214,11 +342,11 @@ namespace VisionFlow.Editing
             return result;
         }
 
-        private static bool FindLoopAncestors(FlowNode node, FlowNode target, List<ForLoopNode> stack, List<ForLoopNode> result)
+        private static bool FindLoopAncestors(FlowNode node, FlowNode target, List<ForLoopNode> stack, List<ForLoopNode> path)
         {
             if (node == target)
             {
-                result.AddRange(stack);
+                path.AddRange(stack);
                 return true;
             }
             if (node is ForLoopNode loop)
@@ -227,7 +355,7 @@ namespace VisionFlow.Editing
             }
             foreach (FlowNode child in EnumerateChildren(node))
             {
-                if (FindLoopAncestors(child, target, stack, result))
+                if (FindLoopAncestors(child, target, stack, path))
                 {
                     return true;
                 }
@@ -256,9 +384,14 @@ namespace VisionFlow.Editing
             return Enumerable.Empty<FlowNode>();
         }
 
+        private static bool SamePath(string left, string right)
+        {
+            return string.Equals(left, right, StringComparison.OrdinalIgnoreCase);
+        }
+
         private static Type ClrTypeOf(ToolOutputDef def)
         {
-            if (def.Kind == VariableKind.Single)
+            if (def.Kind != VariableKind.Object)
             {
                 switch (def.Type)
                 {
@@ -274,7 +407,7 @@ namespace VisionFlow.Editing
 
         private static Type ClrTypeOf(BranchOutputDef def)
         {
-            if (def.Kind == VariableKind.Single)
+            if (def.Kind != VariableKind.Object)
             {
                 switch (def.Type)
                 {
@@ -293,7 +426,7 @@ namespace VisionFlow.Editing
 
         private static Type ClrTypeOf(FlowOutputDef def)
         {
-            if (def.Kind == VariableKind.Single)
+            if (def.Kind != VariableKind.Object)
             {
                 switch (def.Type)
                 {

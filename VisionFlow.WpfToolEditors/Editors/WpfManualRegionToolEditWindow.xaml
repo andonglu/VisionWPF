@@ -1,0 +1,49 @@
+<Window x:Class="VisionFlow.WpfToolEditors.Editors.WpfManualRegionToolEditWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="clr-namespace:VisionFlow.WpfToolEditors.Controls"
+        Title="手动 Region 编辑"
+        Width="1180"
+        Height="760"
+        MinWidth="1040"
+        MinHeight="680"
+        WindowStartupLocation="CenterOwner">
+    <Grid Margin="24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="320" />
+            <ColumnDefinition Width="*" />
+        </Grid.ColumnDefinitions>
+
+        <Border Grid.Row="0" Grid.Column="0" Style="{StaticResource EditorCardStyle}" Margin="0,0,24,0">
+            <StackPanel>
+                <TextBlock Text="基础" Style="{StaticResource EditorSectionTitleStyle}" />
+
+                <TextBlock Text="模块名" Style="{StaticResource EditorFieldLabelStyle}" />
+                <TextBox x:Name="ModuleNameText" Margin="0,0,0,16" />
+
+                <TextBlock Text="输出模式" Style="{StaticResource EditorFieldLabelStyle}" />
+                <ComboBox x:Name="OutputModeCombo" Margin="0,0,0,16" />
+
+                <Button Content="预览 Region" Margin="0,0,0,16" Click="PreviewRegion_Click" />
+
+                <TextBlock TextWrapping="Wrap"
+                           Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                           Text="绿色 ROI 为包含区域，黄色 ROI 为排除区域。UnionOne 输出一个合并 Region；Connection 会拆成多个连通 Region。RegionPose 前必须保证最终只有一个 Region。" />
+            </StackPanel>
+        </Border>
+
+        <Border Grid.Row="0" Grid.Column="1" Style="{StaticResource PanelBorderStyle}" Margin="0">
+            <controls:WpfRoiEditorControl x:Name="RoiEditor" />
+        </Border>
+
+        <DockPanel Grid.Row="1" Grid.ColumnSpan="2" LastChildFill="False" Margin="0,24,0,0">
+            <TextBlock x:Name="StatusText" VerticalAlignment="Center" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+            <Button DockPanel.Dock="Right" Content="取消" MinWidth="96" Margin="8,0,0,0" Click="Cancel_Click" />
+            <Button DockPanel.Dock="Right" Content="确定" MinWidth="96" Style="{StaticResource AccentButtonStyle}" Click="Ok_Click" />
+        </DockPanel>
+    </Grid>
+</Window>

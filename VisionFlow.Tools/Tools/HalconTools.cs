@@ -7,34 +7,54 @@ using VisionFlow.Variables;
 
 namespace VisionFlow.Tools
 {
-    /// <summary>定位解决方案根目录下的文件（以 VisionFlow.slnx 为根标志），与程序运行目录无关。</summary>
+    /// <summary>定位应用目录、当前目录及其上级目录中的资源文件；找不到时返回应用目录下的预期路径。</summary>
     public static class RepoPaths
     {
         public static string Find(string relativePath)
         {
-            var dir = new DirectoryInfo(AppContext.BaseDirectory);
-            while (dir != null)
+            if (string.IsNullOrWhiteSpace(relativePath))
             {
-                if (File.Exists(Path.Combine(dir.FullName, "VisionFlow.slnx")))
-                {
-                    string fullPath = Path.Combine(dir.FullName, relativePath);
-                    if (File.Exists(fullPath))
-                    {
-                        return fullPath;
-                    }
-                    throw new FileNotFoundException($"仓库中不存在文件：{relativePath}", fullPath);
-                }
-                dir = dir.Parent;
+                throw new ArgumentException("资源路径不能为空", nameof(relativePath));
             }
-            throw new DirectoryNotFoundException("向上未找到解决方案根目录（缺少 VisionFlow.slnx）");
+
+            if (Path.IsPathRooted(relativePath))
+            {
+                return relativePath;
+            }
+
+            foreach (string root in CandidateRoots())
+            {
+                string fullPath = Path.GetFullPath(Path.Combine(root, relativePath));
+                if (File.Exists(fullPath))
+                {
+                    return fullPath;
+                }
+            }
+
+            return Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, relativePath));
+        }
+
+        private static IEnumerable<string> CandidateRoots()
+        {
+            foreach (string start in new[] { AppContext.BaseDirectory, Environment.CurrentDirectory })
+            {
+                var dir = new DirectoryInfo(start);
+                while (dir != null)
+                {
+                    yield return dir.FullName;
+                    dir = dir.Parent;
+                }
+            }
         }
     }
 
     /// <summary>
     /// 单个匹配结果：位姿、分数、匹配后轮廓，
     /// 以及<b>相对于基准模板的刚体变换矩阵</b>（HomMat，6 元素），供下游工具做跟随。
+    /// 实现 <see cref="IHalconResourceContainer"/>：上下文释放时回收轮廓（按引用去重，
+    /// 与 Contours 列表中的同一对象不会重复释放）。
     /// </summary>
-    public sealed class MatchResultItem
+    public sealed class MatchResultItem : IHalconResourceContainer
     {
         public int Index { get; set; }
         public double Row { get; set; }
@@ -49,6 +69,18 @@ namespace VisionFlow.Tools
         public int ContourPointCount { get; set; }
         /// <summary>基准模板位姿 → 本匹配位姿 的变换矩阵（专门类型，非一般 HTuple）。</summary>
         public HomMat2D HomMat { get; set; }
+
+        /// <summary>该项持有的 HALCON 对象（归本次运行所有）。</summary>
+        public IEnumerable<HObject> OwnedHalconObjects
+        {
+            get
+            {
+                if (Contour != null)
+                {
+                    yield return Contour;
+                }
+            }
+        }
 
         public override string ToString()
         {
@@ -98,9 +130,14 @@ namespace VisionFlow.Tools
         {
         }
 
-        protected bool TryLoadImage(FlowContext ctx, out HObject image, out string error)
+        /// <summary>
+        /// 加载输入图像。ownsImage 为 true 表示图像是本次运行从文件读入的新对象
+        /// （归本次运行所有）；false 表示引用的上游/调用方对象（借用，不得释放）。
+        /// </summary>
+        protected bool TryLoadImage(FlowContext ctx, out HObject image, out bool ownsImage, out string error)
         {
             image = null;
+            ownsImage = false;
             error = null;
             if (string.IsNullOrWhiteSpace(ImagePath))
             {
@@ -110,6 +147,7 @@ namespace VisionFlow.Tools
             if (File.Exists(ImagePath))
             {
                 HOperatorSet.ReadImage(out image, ImagePath);
+                ownsImage = true;
                 return true;
             }
             try
@@ -124,7 +162,7 @@ namespace VisionFlow.Tools
             }
         }
 
-        protected void SetMatchOutputs(FlowContext ctx, HObject image, List<MatchResultItem> items,
+        protected void SetMatchOutputs(FlowContext ctx, HObject image, bool ownsImage, List<MatchResultItem> items,
             List<HomMat2D> homMats, List<HObject> contours, HObject resultContour)
         {
             SetOutput(ctx, Variable.Single(ModuleName, "MatchCount", VariableType.Int, items.Count));
@@ -135,7 +173,16 @@ namespace VisionFlow.Tools
             SetOutput(ctx, Variable.Object(ModuleName, "BestHomMat", homMats[0], 1));
             SetOutput(ctx, Variable.Object(ModuleName, "Contours", contours, contours.Count));
             SetOutput(ctx, Variable.Object(ModuleName, "ResultContour", resultContour, items.Count));
-            SetOutput(ctx, Variable.Object(ModuleName, "Image", new HalconImage(image), 1));
+            // 图像输出：本次运行读入的归运行所有；引用的上游图像保持借用，不得随上下文释放（VF-04）
+            Variable imageVariable = Variable.Object(ModuleName, "Image", new HalconImage(image), 1);
+            if (ownsImage)
+            {
+                SetOutput(ctx, imageVariable);
+            }
+            else
+            {
+                SetBorrowedOutput(ctx, imageVariable);
+            }
         }
 
         protected static double[] ToScores(List<MatchResultItem> items)
@@ -242,10 +289,14 @@ namespace VisionFlow.Tools
 
         public override NodeResult Run(FlowContext ctx)
         {
+            // VF-04 建议 5：先测量每次运行的模型加载耗时，用数据决定是否引入缓存
+            var modelLoadWatch = System.Diagnostics.Stopwatch.StartNew();
             if (!TryLoadModel(out HTuple modelId, out string modelError))
             {
                 return NodeResult.Fail(modelError);
             }
+            modelLoadWatch.Stop();
+            ctx.AddLog(FlowLogLevel.Info, $"[匹配] 模型加载耗时 {modelLoadWatch.ElapsedMilliseconds} ms（每次运行重新加载）");
 
             HObject image = null;
             bool ownsImage = false;
@@ -310,7 +361,9 @@ namespace VisionFlow.Tools
                     };
                     items.Add(item);
                     contours.Add(matchContour);
-                    HOperatorSet.ConcatObj(resultContour, matchContour, out resultContour);
+                    HOperatorSet.ConcatObj(resultContour, matchContour, out HObject combinedContour);
+                    resultContour.Dispose();
+                    resultContour = combinedContour;
                     ctx.AddLog(FlowLogLevel.Info, $"[匹配] {item}");
                 }
 
@@ -322,7 +375,16 @@ namespace VisionFlow.Tools
                 SetOutput(ctx, Variable.Object(ModuleName, "BestHomMat", homMats[0], 1));
                 SetOutput(ctx, Variable.Object(ModuleName, "Contours", contours, contours.Count));
                 SetOutput(ctx, Variable.Object(ModuleName, "ResultContour", resultContour, count));
-                SetOutput(ctx, Variable.Object(ModuleName, "Image", new HalconImage(image), 1));
+                // 图像输出：本次运行读入的归运行所有；引用的上游图像保持借用，不得随上下文释放（VF-04）
+                Variable imageVariable = Variable.Object(ModuleName, "Image", new HalconImage(image), 1);
+                if (ownsImage)
+                {
+                    SetOutput(ctx, imageVariable);
+                }
+                else
+                {
+                    SetBorrowedOutput(ctx, imageVariable);
+                }
                 return NodeResult.Ok;
             }
             catch (Exception ex)
@@ -366,6 +428,10 @@ namespace VisionFlow.Tools
             return false;
         }
 
+        /// <summary>
+        /// 加载输入图像。ownsImage 为 true 表示图像是本次运行从文件读入的新对象
+        /// （归本次运行所有）；false 表示引用的上游/调用方对象（借用，不得释放）。
+        /// </summary>
         private bool TryLoadImage(FlowContext ctx, out HObject image, out bool ownsImage, out string error)
         {
             image = null;
@@ -426,13 +492,14 @@ namespace VisionFlow.Tools
             }
 
             HObject image = null;
+            bool ownsImage = false;
             HObject modelRegion = null;
             HObject modelContour = null;
             HObject resultContour = null;
             HTuple modelId = null;
             try
             {
-                if (!TryLoadImage(ctx, out image, out string imageError))
+                if (!TryLoadImage(ctx, out image, out ownsImage, out string imageError))
                 {
                     return NodeResult.Fail(imageError);
                 }
@@ -479,7 +546,7 @@ namespace VisionFlow.Tools
                     ctx.AddLog(FlowLogLevel.Info, $"[灰度匹配] {item}");
                 }
 
-                SetMatchOutputs(ctx, image, items, homMats, contours, resultContour);
+                SetMatchOutputs(ctx, image, ownsImage, items, homMats, contours, resultContour);
                 return NodeResult.Ok;
             }
             catch (Exception ex)
@@ -525,12 +592,13 @@ namespace VisionFlow.Tools
             }
 
             HObject image = null;
+            bool ownsImage = false;
             HObject modelContours = null;
             HObject resultContour = null;
             HTuple modelId = null;
             try
             {
-                if (!TryLoadImage(ctx, out image, out string imageError))
+                if (!TryLoadImage(ctx, out image, out ownsImage, out string imageError))
                 {
                     return NodeResult.Fail(imageError);
                 }
@@ -576,7 +644,7 @@ namespace VisionFlow.Tools
                     ctx.AddLog(FlowLogLevel.Info, $"[缩放形状匹配] {item}");
                 }
 
-                SetMatchOutputs(ctx, image, items, homMats, contours, resultContour);
+                SetMatchOutputs(ctx, image, ownsImage, items, homMats, contours, resultContour);
                 return NodeResult.Ok;
             }
             catch (Exception ex)
@@ -624,6 +692,7 @@ namespace VisionFlow.Tools
             }
 
             HObject image = null;
+            bool ownsImage = false;
             HObject imageRectified = null;
             HObject vectorField = null;
             HObject deformedContours = null;
@@ -631,7 +700,7 @@ namespace VisionFlow.Tools
             HTuple modelId = null;
             try
             {
-                if (!TryLoadImage(ctx, out image, out string imageError))
+                if (!TryLoadImage(ctx, out image, out ownsImage, out string imageError))
                 {
                     return NodeResult.Fail(imageError);
                 }
@@ -687,7 +756,7 @@ namespace VisionFlow.Tools
                     ctx.AddLog(FlowLogLevel.Info, $"[局部变形匹配] {item}");
                 }
 
-                SetMatchOutputs(ctx, image, items, homMats, contours, resultContour);
+                SetMatchOutputs(ctx, image, ownsImage, items, homMats, contours, resultContour);
                 return NodeResult.Ok;
             }
             catch (Exception ex)
@@ -728,7 +797,7 @@ namespace VisionFlow.Tools
     /// <summary>
     /// 椭圆测量工具：只持有自己的初始测量位置（图像坐标），与匹配工具完全解耦。
     /// MatrixPath 配置了变换矩阵引用时：按矩阵对初始位置做仿射变换后测量（跟随模式）；
-    /// 未配置或引用不可解析时：直接在初始位置测量（固定模式）。
+    /// 未配置时：直接在初始位置测量（固定模式）；已配置但解析失败时仅显式允许的预览可降级。
     /// 测量结果累积到 "模块名.Results" 变量（List&lt;EllipseMeasureResult&gt;），循环结束后即为全部结果。
     /// </summary>
     [ToolOutput("Row", VariableKind.Single, VariableType.Double)]
@@ -759,9 +828,10 @@ namespace VisionFlow.Tools
 
         /// <summary>
         /// 变换矩阵变量引用（可选），如 "Loop.Current.HomMat" 或 "匹配2.Items[3].HomMat"。
-        /// 期望类型是专门的 HomMat2D（不是一般 HTuple）；为空或解析失败时按固定位置测量。
+        /// 期望类型是专门的 HomMat2D（不是一般 HTuple）；为空时按固定位置测量；
+        /// 也支持矩阵集合，全部解析成功后逐项测量；解析失败时仅显式允许的预览可降级。
         /// </summary>
-        [InputRef("变换矩阵", typeof(HomMat2D), Optional = true)]
+        [InputRef("变换矩阵", typeof(HomMat2D), Optional = true, AcceptsCollection = true)]
         public string MatrixPath { get; set; }
 
         /// <summary>结果序号来源（可选，仅用于标记结果属于哪次迭代）。</summary>
@@ -774,31 +844,40 @@ namespace VisionFlow.Tools
 
         public override NodeResult Run(FlowContext ctx)
         {
+            if (!FollowMatrixResolver.TryResolve(ctx, ModuleName, MatrixPath,
+                out List<HomMat2D> matrices, out string matrixError))
+            {
+                return NodeResult.Fail(matrixError);
+            }
             HObject image = Input<HalconImage>(ctx, ImagePath).Object;
+            int successCount = 0;
+            string lastError = null;
+            foreach (HomMat2D matrix in matrices)
+            {
+                NodeResult result = MeasureOne(ctx, image, matrix, matrices.Count > 1 ? successCount : -1);
+                if (result.IsSuccess)
+                {
+                    successCount++;
+                }
+                else
+                {
+                    lastError = result.Message;
+                }
+            }
+            return successCount > 0 ? NodeResult.Ok : NodeResult.Fail(lastError ?? "椭圆测量失败：未找到有效结果");
+        }
 
+        private NodeResult MeasureOne(FlowContext ctx, HObject image, HomMat2D matrix, int resultIndex)
+        {
             double row = EllipseRow;
             double column = EllipseColumn;
             double phi = EllipseAngle;
             bool followed = false;
-            int index = -1;
+            int index = resultIndex;
 
-            if (!string.IsNullOrEmpty(IndexPath))
+            if (!string.IsNullOrWhiteSpace(IndexPath))
             {
                 index = VariableReference.Parse(IndexPath).Resolve<int>(ctx);
-            }
-
-            // 可选的变换矩阵：有则跟随，无则固定
-            HomMat2D matrix = null;
-            if (!string.IsNullOrEmpty(MatrixPath))
-            {
-                try
-                {
-                    matrix = VariableReference.Parse(MatrixPath).Resolve<HomMat2D>(ctx);
-                }
-                catch (Exception ex)
-                {
-                    ctx.AddLog(FlowLogLevel.Warning, $"[测量] 矩阵引用 '{MatrixPath}' 解析失败（{ex.Message}），按固定位置测量");
-                }
             }
 
             if (matrix != null)

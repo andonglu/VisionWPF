@@ -25,8 +25,18 @@ namespace VisionFlow.Core
             return VariableReference.Parse(path).Resolve<T>(ctx);
         }
 
-        /// <summary>写入一个输出变量。</summary>
+        /// <summary>
+        /// 写入一个输出变量。输出归本次运行所有（VF-04）：值中的 HALCON 包装对象
+        /// 会被标记为拥有（上下文 Dispose 时回收）。直接透传上游输入对象时请改用
+        /// <see cref="SetBorrowedOutput"/>，避免调用方/上游的对象被提前释放。
+        /// </summary>
         protected void SetOutput(FlowContext ctx, Variable variable)
+        {
+            ctx.SetOwnedVariable(variable);
+        }
+
+        /// <summary>写入借用语义的输出（如直接透传的上游输入对象），上下文释放时不处置。</summary>
+        protected void SetBorrowedOutput(FlowContext ctx, Variable variable)
         {
             ctx.SetVariable(variable);
         }

@@ -8,10 +8,10 @@
         MinWidth="980"
         MinHeight="640"
         WindowStartupLocation="CenterOwner">
-    <Grid Margin="16">
+    <Grid Margin="24">
         <Grid.RowDefinitions>
             <RowDefinition Height="*" />
-            <RowDefinition Height="48" />
+            <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
         <TabControl TabStripPlacement="Right">
@@ -24,11 +24,11 @@
                     <Border Grid.Column="0" Style="{StaticResource EditorCardStyle}">
                         <controls:WpfRoiEditorControl x:Name="TeachRoiEditor" />
                     </Border>
-                    <ScrollViewer Grid.Column="1" Margin="12,0,0,0" VerticalScrollBarVisibility="Auto">
+                    <ScrollViewer Grid.Column="1" Margin="24,0,0,0" VerticalScrollBarVisibility="Auto">
                         <StackPanel>
                             <Border Style="{StaticResource EditorCardStyle}">
                                 <StackPanel>
-                                    <TextBlock Text="示教设置" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,12" />
+                                    <TextBlock Text="示教设置" Style="{StaticResource EditorSectionTitleStyle}" />
                                     <TextBlock Text="模块名" Style="{StaticResource EditorFieldLabelStyle}" />
                                     <TextBox x:Name="ModuleNameText" />
                                     <TextBlock Text="示教图像" Style="{StaticResource EditorFieldLabelStyle}" />
@@ -37,17 +37,17 @@
                                     <ComboBox x:Name="TeachModeCombo" SelectionChanged="TeachModeCombo_SelectionChanged" />
                                     <TextBlock Text="当前姿态" Style="{StaticResource EditorFieldLabelStyle}" />
                                     <ComboBox x:Name="TeachPosePathCombo" IsEditable="True" SelectionChanged="TeachPosePathCombo_SelectionChanged" />
-                                    <Button x:Name="DrawRoiButton" Margin="0,4,0,8" Height="32" Click="DrawRoi_Click" />
-                                    <Button Content="保存示教基准" Height="32" Style="{StaticResource AccentButtonStyle}" Click="SaveTeach_Click" />
+                                    <Button x:Name="DrawRoiButton" Margin="0,8,0,16" Click="DrawRoi_Click" />
+                                    <Button Content="保存示教基准" Style="{StaticResource AccentButtonStyle}" Click="SaveTeach_Click" />
                                     <TextBlock Text="基准图像示教会直接保存 ROI；当前图像示教会使用当前姿态的逆矩阵反算回基准 ROI。"
-                                               Margin="0,12,0,0"
+                                               Margin="0,16,0,0"
                                                Foreground="{DynamicResource TextFillColorSecondaryBrush}"
                                                TextWrapping="Wrap" />
                                 </StackPanel>
                             </Border>
                             <Border Style="{StaticResource EditorCardStyle}">
                                 <StackPanel x:Name="RunSettingsPanel">
-                                    <TextBlock Text="运行/卡尺设置" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,12" />
+                                    <TextBlock Text="运行/卡尺设置" Style="{StaticResource EditorSectionTitleStyle}" />
                                     <TextBlock Text="运行跟随矩阵" Style="{StaticResource EditorFieldLabelStyle}" />
                                     <ComboBox x:Name="MatrixPathCombo" IsEditable="True" />
                                     <TextBlock Text="结果序号" Style="{StaticResource EditorFieldLabelStyle}" />
@@ -65,7 +65,7 @@
                                     <TextBlock Text="边缘选择" Style="{StaticResource EditorFieldLabelStyle}" />
                                     <ComboBox x:Name="SelectCombo" IsEditable="True" />
                                     <StackPanel x:Name="ArcSettingsPanel" />
-                                    <Button Content="执行测试" Height="32" Style="{StaticResource AccentButtonStyle}" Margin="0,8,0,0" Click="RunTest_Click" />
+                                    <Button Content="执行测试" Style="{StaticResource AccentButtonStyle}" Margin="0,16,0,0" Click="RunTest_Click" />
                                 </StackPanel>
                             </Border>
                         </StackPanel>
@@ -78,7 +78,6 @@
                     <DataGrid x:Name="ResultGrid"
                               AutoGenerateColumns="True"
                               IsReadOnly="True"
-                              RowHeight="30"
                               HeadersVisibility="Column"
                               CanUserAddRows="False"
                               CanUserDeleteRows="False" />
@@ -86,7 +85,7 @@
             </TabItem>
         </TabControl>
 
-        <DockPanel Grid.Row="1" LastChildFill="False" Margin="0,12,0,0">
+        <DockPanel Grid.Row="1" LastChildFill="False" Margin="0,24,0,0">
             <TextBlock x:Name="StatusText" VerticalAlignment="Center" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
             <Button DockPanel.Dock="Right" Content="取消" MinWidth="96" Margin="8,0,0,0" Click="Cancel_Click" />
             <Button DockPanel.Dock="Right" Content="确定" MinWidth="96" Style="{StaticResource AccentButtonStyle}" Click="Ok_Click" />

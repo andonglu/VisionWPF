@@ -1,0 +1,77 @@
+using System.Windows;
+using VisionFlow.Core;
+using VisionFlow.Tools;
+using VisionFlow.Ui;
+using VisionFlow.WpfToolEditors.Editors;
+
+namespace VisionFlow.WpfToolEditors
+{
+    /// <summary>
+    /// WPF 工具编辑器路由（VF-08 从 MainWindow 平移）：注册编辑器（插件）→ 内置专用窗口 →
+    /// 视觉预览窗口 → 通用编辑器。新增普通工具无需修改任何路由分支，自动落通用编辑器。
+    /// 所有路由只接收编辑事务的工作副本。
+    /// </summary>
+    public static class WpfToolEditorRouter
+    {
+        public static Window Create(ToolBase tool, ToolEditContext context)
+        {
+            if (WpfToolEditorRegistry.TryCreate(tool, context, out Window registeredWindow))
+            {
+                return registeredWindow;
+            }
+            if (tool is IHalconTemplateMatchTool matchTool)
+            {
+                return new WpfMatchToolEditWindow(matchTool, context);
+            }
+            if (tool is LoadImageTool loadImageTool)
+            {
+                return new WpfLoadImageToolEditWindow(loadImageTool);
+            }
+            if (tool is FollowMeasureToolBase followMeasureTool)
+            {
+                return new WpfFollowMeasureToolEditWindow(followMeasureTool, context);
+            }
+            if (tool is ManualRegionTool manualRegionTool)
+            {
+                return new WpfManualRegionToolEditWindow(manualRegionTool, context);
+            }
+            if (tool is EllipseFollowMeasureTool ellipseMeasureTool)
+            {
+                return new WpfEllipseMeasureToolEditWindow(ellipseMeasureTool, context);
+            }
+            return IsVisualPreviewTool(tool)
+                ? (Window)new WpfVisualToolEditWindow(tool, context)
+                : new WpfGenericToolEditWindow(tool, context);
+        }
+
+        private static bool IsVisualPreviewTool(ToolBase tool)
+        {
+            return tool is MeanImageTool
+                || tool is AffineTransformImageTool
+                || tool is ReduceDomainTool
+                || tool is AddSubImageTool
+                || tool is DecomposeChannelsTool
+                || tool is Compose3ImageTool
+                || tool is TransColorSpaceTool
+                || tool is ThresholdTool
+                || tool is RegionProcessTool
+                || tool is ManualRegionTool
+                || tool is RegionDifferenceTool
+                || tool is RegionUnion2Tool
+                || tool is RegionIntersectionTool
+                || tool is RegionShapeTransTool
+                || tool is RegionUnion1Tool
+                || tool is MorphologyTool
+                || tool is RegionFeaturesTool
+                || tool is RegionMinMaxGrayTool
+                || tool is SelectRegionTool
+                || tool is RegionPoseTool
+                || tool is XldToolBase
+                || tool is XldFeaturesTool
+                || tool is FitLineTool
+                || tool is FitCircleTool
+                || tool is IntersectionLinesTool
+                || tool is AffinePointTool;
+        }
+    }
+}

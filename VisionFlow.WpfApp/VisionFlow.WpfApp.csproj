@@ -1,10 +1,13 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
+    <PackageReference Include="HandyControl" Version="3.5.1" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\VisionFlow.Base\VisionFlow.Base.csproj" />
     <ProjectReference Include="..\VisionFlow.EditorCore\VisionFlow.EditorCore.csproj" />
     <ProjectReference Include="..\VisionFlow.Tools\VisionFlow.Tools.csproj" />
-    <ProjectReference Include="..\VisionFlow.ToolEditors\VisionFlow.ToolEditors.csproj" />
     <ProjectReference Include="..\VisionFlow.Controls\VisionFlow.Controls.csproj" />
     <ProjectReference Include="..\VisionFlow.WpfToolEditors\VisionFlow.WpfToolEditors.csproj" />
   </ItemGroup>

@@ -9,17 +9,17 @@
         MinWidth="1040"
         MinHeight="680"
         WindowStartupLocation="CenterOwner">
-    <Grid Margin="16">
+    <Grid Margin="24">
         <Grid.RowDefinitions>
             <RowDefinition Height="*" />
-            <RowDefinition Height="48" />
+            <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="380" />
             <ColumnDefinition Width="*" />
         </Grid.ColumnDefinitions>
 
-        <ScrollViewer Grid.Row="0" Grid.Column="0" VerticalScrollBarVisibility="Auto" Margin="0,0,12,0">
+        <ScrollViewer Grid.Row="0" Grid.Column="0" VerticalScrollBarVisibility="Auto" Margin="0,0,24,0">
             <StackPanel>
                 <Border Style="{StaticResource EditorCardStyle}">
                     <StackPanel>
@@ -53,7 +53,7 @@
 
         <Border Grid.Row="0" Grid.Column="1" Style="{StaticResource PanelBorderStyle}" Margin="0">
             <DockPanel>
-                <Grid DockPanel.Dock="Top" Margin="0,0,0,8">
+                <Grid DockPanel.Dock="Top" Margin="0,0,0,16">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="72" />
                         <ColumnDefinition Width="*" />
@@ -63,7 +63,7 @@
                     <TextBlock Text="查看内容" VerticalAlignment="Center" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
                     <ComboBox x:Name="ViewTargetCombo" Grid.Column="1" SelectionChanged="ViewTargetCombo_SelectionChanged" />
                     <Button Grid.Column="2" Content="运行/刷新预览" Margin="8,0,0,0" Click="RunPreview_Click" />
-                    <Button Grid.Column="3" Content="适应" MinWidth="72" Margin="8,0,0,0" Click="Fit_Click" />
+                    <Button Grid.Column="3" Content="适应" Margin="8,0,0,0" Click="Fit_Click" />
                 </Grid>
 
                 <Grid>
@@ -76,7 +76,7 @@
                             <vfc:HalconImageView x:Name="PreviewImageView" />
                         </wfi:WindowsFormsHost>
                     </Border>
-                    <DataGrid x:Name="StatsGrid" Grid.Row="1" Margin="0,8,0,0" AutoGenerateColumns="False" IsReadOnly="True">
+                    <DataGrid x:Name="StatsGrid" Grid.Row="1" Margin="0,16,0,0" AutoGenerateColumns="False" IsReadOnly="True">
                         <DataGrid.Columns>
                             <DataGridTextColumn Header="项目" Binding="{Binding Name}" Width="*" />
                             <DataGridTextColumn Header="值" Binding="{Binding Value}" Width="2*" />
@@ -86,7 +86,7 @@
             </DockPanel>
         </Border>
 
-        <DockPanel Grid.Row="1" Grid.ColumnSpan="2" LastChildFill="False" Margin="0,12,0,0">
+        <DockPanel Grid.Row="1" Grid.ColumnSpan="2" LastChildFill="False" Margin="0,24,0,0">
             <TextBlock x:Name="StatusText" VerticalAlignment="Center" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
             <Button DockPanel.Dock="Right" Content="取消" MinWidth="96" Margin="8,0,0,0" Click="Cancel_Click" />
             <Button DockPanel.Dock="Right" Content="确定" MinWidth="96" Style="{StaticResource AccentButtonStyle}" Click="Ok_Click" />

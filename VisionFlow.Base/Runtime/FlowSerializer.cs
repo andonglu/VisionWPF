@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using System.Text.Json;
 using VisionFlow.Conditions;
 using VisionFlow.Core;
@@ -10,27 +11,52 @@ using VisionFlow.Variables;
 
 namespace VisionFlow.Editing
 {
-    /// <summary>流程 JSON 保存/加载。保存的是声明和参数，不保存运行期变量值。</summary>
+    /// <summary>
+    /// 流程 JSON 保存/加载。保存的是声明和参数，不保存运行期变量值。
+    ///
+    /// 兼容性约定：
+    /// - 文件携带 FormatVersion（当前为 1）；高于当前支持的版本明确失败，不静默降级。
+    /// - 工具优先按显式注册的稳定标识（或 ToolboxToolAttribute.Id / 类型全名）解析，
+    ///   解析失败再退回旧版 TypeName；历史类型名、程序集限定名可注册为别名。
+    /// - 文件中出现当前工具类型不存在的参数时产生警告（Load/LoadNode 的 warnings 参数），不静默丢失。
+    /// </summary>
     public static class FlowSerializer
     {
+        /// <summary>当前流程文件格式版本。</summary>
+        public const int CurrentFormatVersion = 1;
+
         private static readonly JsonSerializerOptions Options = new JsonSerializerOptions
         {
             WriteIndented = true
         };
 
+        private static readonly Dictionary<string, Type> _toolIdentities =
+            new Dictionary<string, Type>(StringComparer.OrdinalIgnoreCase);
+        private static readonly Dictionary<Type, string> _stableToolIds = new Dictionary<Type, string>();
+        private static readonly HashSet<Assembly> _scannedAssemblies = new HashSet<Assembly>();
+
         public static string Save(SequenceNode root)
         {
-            return JsonSerializer.Serialize(ToDto(root), Options);
+            NodeDto dto = ToDto(root);
+            dto.FormatVersion = CurrentFormatVersion;
+            return JsonSerializer.Serialize(dto, Options);
         }
 
         public static SequenceNode Load(string json)
+        {
+            return Load(json, null);
+        }
+
+        /// <summary>加载流程。warnings 非空时收集兼容性警告（未知参数、枚举回退等）。</summary>
+        public static SequenceNode Load(string json, IList<string> warnings)
         {
             NodeDto dto = JsonSerializer.Deserialize<NodeDto>(json, Options);
             if (dto == null)
             {
                 throw new InvalidOperationException("流程文件为空或格式错误。");
             }
-            FlowNode node = FromDto(dto);
+            CheckFormatVersion(dto);
+            FlowNode node = FromDto(dto, warnings);
             if (node is SequenceNode sequence)
             {
                 return sequence;
@@ -44,22 +70,203 @@ namespace VisionFlow.Editing
             {
                 throw new ArgumentNullException(nameof(node));
             }
-            return JsonSerializer.Serialize(ToDto(node), Options);
+            NodeDto dto = ToDto(node);
+            dto.FormatVersion = CurrentFormatVersion;
+            return JsonSerializer.Serialize(dto, Options);
         }
 
         public static FlowNode LoadNode(string json, bool regenerateIds = false)
+        {
+            return LoadNode(json, regenerateIds, null);
+        }
+
+        /// <summary>加载单个节点（剪贴板路径）。warnings 非空时收集兼容性警告。</summary>
+        public static FlowNode LoadNode(string json, bool regenerateIds, IList<string> warnings)
         {
             NodeDto dto = JsonSerializer.Deserialize<NodeDto>(json, Options);
             if (dto == null)
             {
                 throw new InvalidOperationException("节点数据为空或格式错误。");
             }
-            FlowNode node = FromDto(dto);
+            CheckFormatVersion(dto);
+            FlowNode node = FromDto(dto, warnings);
             if (regenerateIds)
             {
                 RegenerateIds(node);
             }
             return node;
+        }
+
+        /// <summary>注册工具类型的持久化身份（稳定 ID / 全名 / 程序集限定名），供按稳定 ID 加载。</summary>
+        public static void RegisterToolType(Type toolType)
+        {
+            if (toolType == null || !typeof(ToolBase).IsAssignableFrom(toolType) || toolType.IsAbstract)
+            {
+                return;
+            }
+            RegisterToolIdentities(toolType, null, Array.Empty<string>());
+        }
+
+        /// <summary>
+        /// 注册与 CLR 类型名无关的持久化 ID。类型或程序集迁移时，将旧 ToolId、FullName、
+        /// AssemblyQualifiedName 作为 aliases 注册；身份冲突明确失败，不覆盖已有映射。
+        /// </summary>
+        public static void RegisterToolType(Type toolType, string stableId, params string[] aliases)
+        {
+            ArgumentNullException.ThrowIfNull(toolType);
+            if (!typeof(ToolBase).IsAssignableFrom(toolType) || toolType.IsAbstract)
+            {
+                throw new ArgumentException("工具类型必须是非抽象的 ToolBase 派生类。", nameof(toolType));
+            }
+            ArgumentException.ThrowIfNullOrWhiteSpace(stableId);
+            foreach (string alias in aliases ?? Array.Empty<string>())
+            {
+                if (string.IsNullOrWhiteSpace(alias))
+                {
+                    throw new ArgumentException("工具身份别名不能为空。", nameof(aliases));
+                }
+            }
+            RegisterToolIdentities(toolType, stableId, aliases ?? Array.Empty<string>());
+        }
+
+        private static void RegisterToolIdentities(Type toolType, string explicitId, string[] aliases)
+        {
+            lock (_toolIdentities)
+            {
+                if (explicitId != null && _stableToolIds.TryGetValue(toolType, out string registeredId)
+                    && !string.Equals(registeredId, explicitId, StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new InvalidOperationException(
+                        $"工具类型 '{toolType.FullName}' 已注册稳定标识 '{registeredId}'，不能改为 '{explicitId}'。");
+                }
+                var identities = new HashSet<string>(aliases, StringComparer.OrdinalIgnoreCase)
+                {
+                    explicitId ?? StableToolId(toolType),
+                    DefaultToolId(toolType),
+                    toolType.FullName,
+                    toolType.AssemblyQualifiedName,
+                    $"{toolType.FullName}, {toolType.Assembly.GetName().Name}"
+                };
+                foreach (string identity in identities)
+                {
+                    if (_toolIdentities.TryGetValue(identity, out Type registeredType) && registeredType != toolType)
+                    {
+                        throw new InvalidOperationException(
+                            $"工具身份 '{identity}' 冲突：已注册 '{registeredType.AssemblyQualifiedName}'，" +
+                            $"不能注册 '{toolType.AssemblyQualifiedName}'。");
+                    }
+                }
+                foreach (string identity in identities)
+                {
+                    _toolIdentities[identity] = toolType;
+                }
+                if (explicitId != null)
+                {
+                    _stableToolIds[toolType] = explicitId;
+                }
+            }
+        }
+
+        private static void CheckFormatVersion(NodeDto dto)
+        {
+            if (dto.FormatVersion.HasValue && dto.FormatVersion.Value > CurrentFormatVersion)
+            {
+                throw new NotSupportedException(
+                    $"流程文件版本 {dto.FormatVersion.Value} 高于当前支持的版本 {CurrentFormatVersion}，请使用更新版本的编辑器打开。");
+            }
+        }
+
+        /// <summary>显式稳定 ID 优先；自动扫描和旧版注册不会将其还原成 CLR 类型名。</summary>
+        private static string StableToolId(Type toolType)
+        {
+            lock (_toolIdentities)
+            {
+                return _stableToolIds.TryGetValue(toolType, out string stableId) ? stableId : DefaultToolId(toolType);
+            }
+        }
+
+        private static string DefaultToolId(Type toolType)
+        {
+            var attribute = toolType.GetCustomAttribute<ToolboxToolAttribute>(inherit: false);
+            return attribute != null && !string.IsNullOrWhiteSpace(attribute.Id)
+                ? attribute.Id
+                : toolType.FullName;
+        }
+
+        private static Type ResolveToolType(ToolDto dto)
+        {
+            EnsureToolIdentities();
+            lock (_toolIdentities)
+            {
+                if (!string.IsNullOrWhiteSpace(dto.ToolId)
+                    && _toolIdentities.TryGetValue(dto.ToolId, out Type byId))
+                {
+                    return byId;
+                }
+                if (!string.IsNullOrWhiteSpace(dto.TypeName)
+                    && _toolIdentities.TryGetValue(dto.TypeName, out Type byName))
+                {
+                    return byName;
+                }
+            }
+            if (!string.IsNullOrWhiteSpace(dto.TypeName))
+            {
+                try
+                {
+                    Type type = Type.GetType(dto.TypeName, throwOnError: true);
+                    RegisterToolType(type);
+                    return type;
+                }
+                catch (Exception ex)
+                {
+                    throw new InvalidOperationException(
+                        $"无法加载工具（ToolId: {dto.ToolId ?? "-"}，TypeName: {dto.TypeName}）。" +
+                        $"请确认对应工具库已加载或插件已注册。原因：{ex.Message}", ex);
+                }
+            }
+            throw new InvalidOperationException($"工具节点缺少工具类型（ToolId: {dto.ToolId ?? "-"}）。");
+        }
+
+        /// <summary>按需扫描已加载程序集，建立稳定 ID → 类型的映射（宿主也可提前 RegisterToolType）。</summary>
+        private static void EnsureToolIdentities()
+        {
+            foreach (Assembly assembly in AppDomain.CurrentDomain.GetAssemblies())
+            {
+                lock (_toolIdentities)
+                {
+                    if (assembly.IsDynamic || _scannedAssemblies.Contains(assembly))
+                    {
+                        continue;
+                    }
+                }
+                Type[] types;
+                try
+                {
+                    types = assembly.GetTypes();
+                }
+                catch (ReflectionTypeLoadException ex)
+                {
+                    types = ex.Types.Where(t => t != null).ToArray();
+                }
+                catch
+                {
+                    continue;
+                }
+                Type[] toolTypes = types.Where(t => !t.IsAbstract && typeof(ToolBase).IsAssignableFrom(t)).ToArray();
+                // 仅加载 DLL 尚不保证模块初始化器已运行。先初始化工具模块，且不持有登记锁。
+                foreach (Module module in toolTypes.Select(t => t.Module).Distinct())
+                {
+                    RuntimeHelpers.RunModuleConstructor(module.ModuleHandle);
+                }
+                foreach (Type type in toolTypes)
+                {
+                    RegisterToolType(type);
+                }
+                lock (_toolIdentities)
+                {
+                    _scannedAssemblies.Add(assembly);
+                }
+            }
         }
 
         private static NodeDto ToDto(FlowNode node)
@@ -112,26 +319,26 @@ namespace VisionFlow.Editing
             return dto;
         }
 
-        private static FlowNode FromDto(NodeDto dto)
+        private static FlowNode FromDto(NodeDto dto, IList<string> warnings)
         {
             FlowNode node;
             switch (dto.Kind)
             {
                 case "Sequence":
                     var sequence = new SequenceNode(dto.Name ?? "顺序");
-                    AddChildren(sequence.Children, dto.Children);
+                    AddChildren(sequence.Children, dto.Children, warnings);
                     node = sequence;
                     break;
                 case "Tool":
-                    node = new ToolNode(FromToolDto(dto.Tool), dto.Name);
+                    node = new ToolNode(FromToolDto(dto.Tool, warnings), dto.Name);
                     break;
                 case "IfElse":
-                    var ifElse = new IfElseNode(dto.Name ?? "条件分支", FromConditionDto(dto.Condition));
-                    AddChildren(ifElse.IfBranch, dto.IfBranch);
-                    AddChildren(ifElse.ElseBranch, dto.ElseBranch);
+                    var ifElse = new IfElseNode(dto.Name ?? "条件分支", FromConditionDto(dto.Condition, warnings));
+                    AddChildren(ifElse.IfBranch, dto.IfBranch, warnings);
+                    AddChildren(ifElse.ElseBranch, dto.ElseBranch, warnings);
                     foreach (BranchOutputDto output in dto.Outputs ?? new List<BranchOutputDto>())
                     {
-                        ifElse.Outputs.Add(FromBranchOutputDto(output));
+                        ifElse.Outputs.Add(FromBranchOutputDto(output, warnings));
                     }
                     node = ifElse;
                     break;
@@ -140,18 +347,18 @@ namespace VisionFlow.Editing
                     {
                         throw new InvalidOperationException("ForLoop 节点缺少循环配置。");
                     }
-                    ForLoopMode mode = ParseEnum<ForLoopMode>(dto.Loop.Mode, ForLoopMode.Count);
+                    ForLoopMode mode = ParseEnum<ForLoopMode>(dto.Loop.Mode, ForLoopMode.Count, warnings, "循环模式");
                     var loop = mode == ForLoopMode.Each
                         ? ForLoopNode.Each(dto.Name ?? "遍历循环", dto.Loop.ItemsPath)
                         : ForLoopNode.Count(dto.Name ?? "按次数循环", FromOperandDto(dto.Loop.CountSource));
-                    AddChildren(loop.Body, dto.Children);
+                    AddChildren(loop.Body, dto.Children, warnings);
                     node = loop;
                     break;
                 case "FlowOutput":
                     var outputNode = new FlowOutputNode(dto.Name ?? "流程输出");
                     foreach (FlowOutputDto output in dto.FlowOutputs ?? new List<FlowOutputDto>())
                     {
-                        outputNode.Outputs.Add(FromFlowOutputDto(output));
+                        outputNode.Outputs.Add(FromFlowOutputDto(output, warnings));
                     }
                     node = outputNode;
                     break;
@@ -166,11 +373,11 @@ namespace VisionFlow.Editing
             return node;
         }
 
-        private static void AddChildren(IList<FlowNode> target, List<NodeDto> children)
+        private static void AddChildren(IList<FlowNode> target, List<NodeDto> children, IList<string> warnings)
         {
             foreach (NodeDto child in children ?? new List<NodeDto>())
             {
-                target.Add(FromDto(child));
+                target.Add(FromDto(child, warnings));
             }
         }
 
@@ -202,33 +409,47 @@ namespace VisionFlow.Editing
 
         private static ToolDto ToToolDto(ToolBase tool)
         {
+            Type type = tool.GetType();
+            RegisterToolType(type);
             var dto = new ToolDto
             {
-                TypeName = tool.GetType().AssemblyQualifiedName,
+                ToolId = StableToolId(type),
+                TypeName = type.AssemblyQualifiedName,
                 ModuleName = tool.ModuleName,
                 Properties = new Dictionary<string, JsonElement>()
             };
-            foreach (PropertyInfo property in SerializableProperties(tool.GetType()))
+            foreach (PropertyInfo property in SerializableProperties(type))
             {
                 dto.Properties[property.Name] = JsonSerializer.SerializeToElement(property.GetValue(tool), property.PropertyType, Options);
             }
             return dto;
         }
 
-        private static ToolBase FromToolDto(ToolDto dto)
+        private static ToolBase FromToolDto(ToolDto dto, IList<string> warnings)
         {
-            if (dto == null || string.IsNullOrWhiteSpace(dto.TypeName))
+            if (dto == null || (string.IsNullOrWhiteSpace(dto.ToolId) && string.IsNullOrWhiteSpace(dto.TypeName)))
             {
                 throw new InvalidOperationException("工具节点缺少工具类型。");
             }
-            Type type = Type.GetType(dto.TypeName, throwOnError: true);
+            Type type = ResolveToolType(dto);
             var tool = Activator.CreateInstance(type, dto.ModuleName) as ToolBase;
             if (tool == null)
             {
-                throw new InvalidOperationException($"工具类型 {dto.TypeName} 不能通过 string moduleName 构造。");
+                throw new InvalidOperationException($"工具类型 {type.FullName} 不能通过 string moduleName 构造。");
             }
 
-            foreach (PropertyInfo property in SerializableProperties(type))
+            List<PropertyInfo> known = SerializableProperties(type).ToList();
+            if (dto.Properties != null)
+            {
+                foreach (string key in dto.Properties.Keys)
+                {
+                    if (!known.Any(p => p.Name == key))
+                    {
+                        warnings?.Add($"工具 '{dto.ModuleName}'（{type.Name}）的参数 '{key}' 在当前版本中不存在，已忽略。");
+                    }
+                }
+            }
+            foreach (PropertyInfo property in known)
             {
                 if (dto.Properties != null && dto.Properties.TryGetValue(property.Name, out JsonElement element))
                 {
@@ -302,7 +523,7 @@ namespace VisionFlow.Editing
             };
         }
 
-        private static ComparisonCondition FromConditionDto(ConditionDto dto)
+        private static ComparisonCondition FromConditionDto(ConditionDto dto, IList<string> warnings)
         {
             if (dto == null)
             {
@@ -311,7 +532,7 @@ namespace VisionFlow.Editing
             return new ComparisonCondition
             {
                 Left = FromOperandDto(dto.Left),
-                Operator = ParseEnum<ComparisonOperator>(dto.Operator, ComparisonOperator.Equal),
+                Operator = ParseEnum<ComparisonOperator>(dto.Operator, ComparisonOperator.Equal, warnings, "条件运算符"),
                 Right = FromOperandDto(dto.Right)
             };
         }
@@ -329,13 +550,13 @@ namespace VisionFlow.Editing
             };
         }
 
-        private static BranchOutputDef FromBranchOutputDto(BranchOutputDto dto)
+        private static BranchOutputDef FromBranchOutputDto(BranchOutputDto dto, IList<string> warnings)
         {
             return new BranchOutputDef
             {
                 Name = dto.Name,
-                Kind = ParseEnum<VariableKind>(dto.Kind, VariableKind.Single),
-                Type = ParseEnum<VariableType>(dto.Type, VariableType.Object),
+                Kind = ParseEnum<VariableKind>(dto.Kind, VariableKind.Single, warnings, $"分支输出 '{dto.Name}' 的形态"),
+                Type = ParseEnum<VariableType>(dto.Type, VariableType.Object, warnings, $"分支输出 '{dto.Name}' 的类型"),
                 ClrTypeName = dto.ClrTypeName,
                 IfValue = FromOperandDto(dto.IfValue),
                 ElseValue = FromOperandDto(dto.ElseValue)
@@ -354,13 +575,13 @@ namespace VisionFlow.Editing
             };
         }
 
-        private static FlowOutputDef FromFlowOutputDto(FlowOutputDto dto)
+        private static FlowOutputDef FromFlowOutputDto(FlowOutputDto dto, IList<string> warnings)
         {
             return new FlowOutputDef
             {
                 Name = dto.Name,
-                Kind = ParseEnum<VariableKind>(dto.Kind, VariableKind.Single),
-                Type = ParseEnum<VariableType>(dto.Type, VariableType.Object),
+                Kind = ParseEnum<VariableKind>(dto.Kind, VariableKind.Single, warnings, $"流程输出 '{dto.Name}' 的形态"),
+                Type = ParseEnum<VariableType>(dto.Type, VariableType.Object, warnings, $"流程输出 '{dto.Name}' 的类型"),
                 ClrTypeName = dto.ClrTypeName,
                 Value = FromOperandDto(dto.Value)
             };
@@ -417,17 +638,22 @@ namespace VisionFlow.Editing
             return value;
         }
 
-        private static T ParseEnum<T>(string value, T fallback) where T : struct
+        private static T ParseEnum<T>(string value, T fallback, IList<string> warnings, string what) where T : struct
         {
-            if (!string.IsNullOrWhiteSpace(value) && Enum.TryParse(value, true, out T parsed))
+            if (!string.IsNullOrWhiteSpace(value))
             {
-                return parsed;
+                if (Enum.TryParse(value, true, out T parsed))
+                {
+                    return parsed;
+                }
+                warnings?.Add($"{what} '{value}' 无法识别，已回退为 {fallback}。");
             }
             return fallback;
         }
 
         private sealed class NodeDto
         {
+            public int? FormatVersion { get; set; }
             public string Id { get; set; }
             public string Kind { get; set; }
             public string Name { get; set; }
@@ -443,6 +669,7 @@ namespace VisionFlow.Editing
 
         private sealed class ToolDto
         {
+            public string ToolId { get; set; }
             public string TypeName { get; set; }
             public string ModuleName { get; set; }
             public Dictionary<string, JsonElement> Properties { get; set; }

@@ -28,7 +28,7 @@ namespace VisionFlow.WpfToolEditors.Editors
         {
             ModuleNameText.Text = _tool.ModuleName;
             FillRefs(ImagePathCombo, typeof(HalconImage), _tool.ImagePath, optional: false);
-            FillRefs(MatrixPathCombo, typeof(HomMat2D), _tool.MatrixPath, optional: true);
+            FillRefs(MatrixPathCombo, typeof(HomMat2D), _tool.MatrixPath, optional: true, acceptsCollection: true);
             FillRefs(IndexPathCombo, typeof(int), _tool.IndexPath, optional: true);
             EllipseRowText.Text = Format(_tool.EllipseRow);
             EllipseColumnText.Text = Format(_tool.EllipseColumn);
@@ -40,7 +40,7 @@ namespace VisionFlow.WpfToolEditors.Editors
             MeasureThresholdText.Text = Format(_tool.MeasureThreshold);
         }
 
-        private void FillRefs(ComboBox combo, Type expectedType, string current, bool optional)
+        private void FillRefs(ComboBox combo, Type expectedType, string current, bool optional, bool acceptsCollection = false)
         {
             if (optional)
             {
@@ -52,7 +52,7 @@ namespace VisionFlow.WpfToolEditors.Editors
             }
             if (_context.Root != null && _context.Node != null)
             {
-                foreach (RefCandidate candidate in RefCandidateService.ForInput(_context.Root, _context.Node, expectedType))
+                foreach (RefCandidate candidate in RefCandidateService.ForInput(_context.Root, _context.Node, expectedType, acceptsCollection))
                 {
                     combo.Items.Add(candidate.Path);
                 }

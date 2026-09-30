@@ -116,7 +116,7 @@ namespace VisionFlow.Validation
                     continue;
                 }
 
-                ValidateReference(root, node, path.Trim(), def.ExpectedType, def.DisplayName, result);
+                ValidateReference(root, node, path.Trim(), def.ExpectedType, def.DisplayName, result, def.AcceptsCollection);
             }
         }
 
@@ -220,19 +220,18 @@ namespace VisionFlow.Validation
                 return;
             }
 
-            List<RefCandidate> candidates = RefCandidateService.ForBranchOutput(root, node, branch);
-            AddInputImage(candidates);
-            RefCandidate candidate = candidates.FirstOrDefault(c => SamePath(c.Path, operand.Reference.ToString()));
-            if (candidate == null)
+            RefScope scope = RefCandidateService.ScopeForBranchOutput(root, node, branch);
+            RefTypeCheckResult check = ReferenceSemantics.Check(operand.Reference, scope);
+            if (!check.Success)
             {
                 result.Add(new FlowValidationIssue(FlowValidationSeverity.Error, node, output.Name,
-                    $"{branchName} 分支引用 '{operand.Reference}' 不存在、顺序不合法或不在该分支作用域内"));
+                    $"{branchName} 分支{check.Error}"));
                 return;
             }
-            if (expected != null && expected != typeof(object) && !expected.IsAssignableFrom(candidate.ClrType))
+            if (!IsTypeCompatible(expected, check))
             {
                 result.Add(new FlowValidationIssue(FlowValidationSeverity.Error, node, output.Name,
-                    $"{branchName} 分支引用 '{operand.Reference}' 类型为 {candidate.ClrType.Name}，不能作为 {expected.Name} 输出"));
+                    $"{branchName} 分支引用 '{operand.Reference}' 类型为 {check.ClrType.Name}，不能作为 {expected.Name} 输出"));
             }
         }
 
@@ -251,11 +250,12 @@ namespace VisionFlow.Validation
         }
 
         private static void ValidateReference(FlowNode root, FlowNode node, string path, Type expectedType,
-            string parameter, FlowValidationResult result)
+            string parameter, FlowValidationResult result, bool acceptsCollection = false)
         {
+            VariableReference reference;
             try
             {
-                VariableReference.Parse(path);
+                reference = VariableReference.Parse(path);
             }
             catch (Exception ex)
             {
@@ -264,20 +264,36 @@ namespace VisionFlow.Validation
                 return;
             }
 
-            List<RefCandidate> candidates = RefCandidateService.ForNode(root, node);
-            AddInputImage(candidates);
-            RefCandidate candidate = candidates.FirstOrDefault(c => SamePath(c.Path, path));
-            if (candidate == null)
+            RefScope scope = RefCandidateService.ScopeForNode(root, node);
+            RefTypeCheckResult check = ReferenceSemantics.Check(reference, scope);
+            if (!check.Success)
             {
-                result.Add(new FlowValidationIssue(FlowValidationSeverity.Error, node, parameter,
-                    $"引用 '{path}' 不存在、顺序不合法，或引用了 If/Else 分支内部私有输出"));
+                result.Add(new FlowValidationIssue(FlowValidationSeverity.Error, node, parameter, check.Error));
                 return;
             }
-            if (expectedType != null && !expectedType.IsAssignableFrom(candidate.ClrType))
+            if (!IsTypeCompatible(expectedType, check, acceptsCollection))
             {
                 result.Add(new FlowValidationIssue(FlowValidationSeverity.Error, node, parameter,
-                    $"引用 '{path}' 类型为 {candidate.ClrType.Name}，不能赋给 {expectedType.Name}"));
+                    $"引用 '{path}' 类型为 {check.ClrType.Name}，不能赋给 {expectedType.Name}"));
             }
+        }
+
+        /// <summary>
+        /// 期望类型与引用推导类型的兼容判断。
+        /// 推导类型未知（object）时留待运行期；集合仅在输入元数据显式允许时按元素类型消费。
+        /// </summary>
+        private static bool IsTypeCompatible(Type expected, RefTypeCheckResult check, bool acceptsCollection = false)
+        {
+            if (expected == null || expected == typeof(object) || check.ClrType == typeof(object))
+            {
+                return true;
+            }
+            if (expected.IsAssignableFrom(check.ClrType))
+            {
+                return true;
+            }
+            return acceptsCollection && check.IsCollectionValue && check.ClrType.IsArray
+                && expected.IsAssignableFrom(check.ClrType.GetElementType());
         }
 
         private static void ValidateDuplicateNamespaces(FlowNode root, FlowValidationResult result)
@@ -348,14 +364,6 @@ namespace VisionFlow.Validation
             return Enumerable.Empty<FlowNode>();
         }
 
-        private static void AddInputImage(List<RefCandidate> candidates)
-        {
-            if (!candidates.Any(c => SamePath(c.Path, "Input.Image")))
-            {
-                candidates.Insert(0, new RefCandidate { Path = "Input.Image", ClrType = typeof(HalconImage) });
-            }
-        }
-
         private static bool SamePath(string left, string right)
         {
             return string.Equals(left, right, StringComparison.OrdinalIgnoreCase);
@@ -363,40 +371,32 @@ namespace VisionFlow.Validation
 
         private static Type ClrTypeOf(BranchOutputDef def)
         {
-            if (def.Kind == VariableKind.Single)
-            {
-                switch (def.Type)
-                {
-                    case VariableType.Int: return typeof(int);
-                    case VariableType.Double: return typeof(double);
-                    case VariableType.String: return typeof(string);
-                    case VariableType.Bool: return typeof(bool);
-                }
-            }
-            if (!string.IsNullOrWhiteSpace(def.ClrTypeName))
-            {
-                return Type.GetType(def.ClrTypeName, throwOnError: false) ?? typeof(object);
-            }
-            return typeof(object);
+            return ClrTypeOf(def.Kind, def.Type, def.ClrTypeName);
         }
 
         private static Type ClrTypeOf(FlowOutputDef def)
         {
-            if (def.Kind == VariableKind.Single)
+            return ClrTypeOf(def.Kind, def.Type, def.ClrTypeName);
+        }
+
+        private static Type ClrTypeOf(VariableKind kind, VariableType type, string clrTypeName)
+        {
+            Type valueType = typeof(object);
+            if (kind != VariableKind.Object)
             {
-                switch (def.Type)
+                switch (type)
                 {
-                    case VariableType.Int: return typeof(int);
-                    case VariableType.Double: return typeof(double);
-                    case VariableType.String: return typeof(string);
-                    case VariableType.Bool: return typeof(bool);
+                    case VariableType.Int: valueType = typeof(int); break;
+                    case VariableType.Double: valueType = typeof(double); break;
+                    case VariableType.String: valueType = typeof(string); break;
+                    case VariableType.Bool: valueType = typeof(bool); break;
                 }
             }
-            if (!string.IsNullOrWhiteSpace(def.ClrTypeName))
+            if (valueType == typeof(object) && !string.IsNullOrWhiteSpace(clrTypeName))
             {
-                return Type.GetType(def.ClrTypeName, throwOnError: false) ?? typeof(object);
+                valueType = Type.GetType(clrTypeName, throwOnError: false) ?? typeof(object);
             }
-            return typeof(object);
+            return kind == VariableKind.Array ? valueType.MakeArrayType() : valueType;
         }
     }
 }

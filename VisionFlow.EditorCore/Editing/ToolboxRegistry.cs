@@ -99,6 +99,10 @@ namespace VisionFlow.Editing
                 })));
             Register(new ToolboxItem("mean-image", "02 图像处理", "均值滤波", () =>
                 new ToolNode(new MeanImageTool(NextModuleName("均值滤波")))));
+            Register(new ToolboxItem("affine-trans-image", "02 图像处理", "图像仿射变换", () =>
+                new ToolNode(new AffineTransformImageTool(NextModuleName("图像仿射")))));
+            Register(new ToolboxItem("reduce-domain", "02 图像处理", "ReduceDomain 限定图像域", () =>
+                new ToolNode(new ReduceDomainTool(NextModuleName("限定图像域")))));
             Register(new ToolboxItem("add-sub-image", "02 图像处理", "图像加减", () =>
                 new ToolNode(new AddSubImageTool(NextModuleName("图像加减")))));
             Register(new ToolboxItem("decompose-channels", "02 图像处理", "通道分解", () =>
@@ -107,52 +111,31 @@ namespace VisionFlow.Editing
                 new ToolNode(new Compose3ImageTool(NextModuleName("三通道合成")))));
             Register(new ToolboxItem("trans-color-space", "02 图像处理", "RGB 色彩空间转换", () =>
                 new ToolNode(new TransColorSpaceTool(NextModuleName("色彩转换")))));
-            Register(new ToolboxItem("threshold", "03 区域处理", "二值化", () =>
-                new ToolNode(new ThresholdTool(NextModuleName("二值化"))
-                {
-                    ImagePath = "Input.Image"
-                })));
-            Register(new ToolboxItem("auto-threshold", "03 区域处理", "AutoThreshold 自动阈值", () =>
-                new ToolNode(new AutoThresholdTool(NextModuleName("自动阈值"))
-                {
-                    ImagePath = "Input.Image"
-                })));
-            Register(new ToolboxItem("binary-threshold", "03 区域处理", "BinaryThreshold 二值阈值", () =>
-                new ToolNode(new BinaryThresholdTool(NextModuleName("二值阈值"))
-                {
-                    ImagePath = "Input.Image"
-                })));
-            Register(new ToolboxItem("fast-threshold", "03 区域处理", "FastThreshold 快速阈值", () =>
-                new ToolNode(new FastThresholdTool(NextModuleName("快速阈值"))
-                {
-                    ImagePath = "Input.Image"
-                })));
-            Register(new ToolboxItem("char-threshold", "03 区域处理", "CharThreshold 字符阈值", () =>
-                new ToolNode(new CharThresholdTool(NextModuleName("字符阈值"))
-                {
-                    ImagePath = "Input.Image"
-                })));
-            Register(new ToolboxItem("var-threshold", "03 区域处理", "VarThreshold 局部阈值", () =>
-                new ToolNode(new VarThresholdTool(NextModuleName("局部阈值"))
+            Register(new ToolboxItem("threshold", "03 区域处理", "阈值分割", () =>
+                new ToolNode(new ThresholdTool(NextModuleName("阈值分割"))
                 {
                     ImagePath = "Input.Image"
                 })));
             Register(new ToolboxItem("regionprocess", "03 区域处理", "区域处理", () =>
                 new ToolNode(new RegionProcessTool(NextModuleName("区域处理")))));
+            Register(new ToolboxItem("manual-region", "03 区域处理", "手动 Region", () =>
+                new ToolNode(new ManualRegionTool(NextModuleName("手动Region")))));
             Register(new ToolboxItem("region-difference", "03 区域处理", "Region 相减", () =>
                 new ToolNode(new RegionDifferenceTool(NextModuleName("Region相减")))));
             Register(new ToolboxItem("region-union2", "03 区域处理", "Region 合并", () =>
                 new ToolNode(new RegionUnion2Tool(NextModuleName("Region合并")))));
+            Register(new ToolboxItem("region-intersection", "03 区域处理", "Region 交集", () =>
+                new ToolNode(new RegionIntersectionTool(NextModuleName("Region交集")))));
             Register(new ToolboxItem("region-shape-trans", "03 区域处理", "Region 形状转换", () =>
                 new ToolNode(new RegionShapeTransTool(NextModuleName("形状转换")))));
             Register(new ToolboxItem("region-union1", "03 区域处理", "Region Union1", () =>
                 new ToolNode(new RegionUnion1Tool(NextModuleName("RegionUnion1")))));
-            Register(new ToolboxItem("morphology-rect", "03 区域处理", "矩形形态学", () =>
-                new ToolNode(new MorphologyRectTool(NextModuleName("矩形形态学")))));
-            Register(new ToolboxItem("morphology-circle", "03 区域处理", "圆形形态学", () =>
-                new ToolNode(new MorphologyCircleTool(NextModuleName("圆形形态学")))));
+            Register(new ToolboxItem("morphology", "03 区域处理", "形态学", () =>
+                new ToolNode(new MorphologyTool(NextModuleName("形态学")))));
             Register(new ToolboxItem("region-features", "03 区域处理", "Region 特征值", () =>
                 new ToolNode(new RegionFeaturesTool(NextModuleName("Region特征")))));
+            Register(new ToolboxItem("region-min-max-gray", "03 区域处理", "MinMaxGray 灰度统计", () =>
+                new ToolNode(new RegionMinMaxGrayTool(NextModuleName("灰度统计")))));
             Register(new ToolboxItem("selectregion", "03 区域处理", "区域筛选", () =>
                 new ToolNode(new SelectRegionTool(NextModuleName("区域筛选")))));
             Register(new ToolboxItem("regionpose", "01 定位匹配", "区域定位", () =>
@@ -175,6 +158,8 @@ namespace VisionFlow.Editing
                 new ToolNode(new IntersectionLinesTool(NextModuleName("线线交点")))));
             Register(new ToolboxItem("affine-point", "05 几何测量", "图像坐标转世界坐标", () =>
                 new ToolNode(new AffinePointTool(NextModuleName("坐标转换")))));
+            Register(new ToolboxItem("barcode1d", "06 识别工具", "一维码", () =>
+                new ToolNode(new Barcode1DTool(NextModuleName("一维码")))));
             Register(new ToolboxItem("ifelse", "逻辑控制", "IfElse 分支", () =>
                 new IfElseNode("条件分支")));
             Register(new ToolboxItem("forcount", "逻辑控制", "For 循环(次数)", () =>

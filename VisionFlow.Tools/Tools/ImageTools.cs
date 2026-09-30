@@ -19,6 +19,13 @@ namespace VisionFlow.Tools
         i1i2i3
     }
 
+    public enum ImageInterpolationMode
+    {
+        constant,
+        nearest_neighbor,
+        bilinear
+    }
+
     [ToolOutput("Image", VariableKind.Object, VariableType.Object, ElementClrType = typeof(HalconImage))]
     public sealed class MeanImageTool : ToolBase
     {
@@ -43,6 +50,60 @@ namespace VisionFlow.Tools
             HOperatorSet.MeanImage(image, out HObject output, Width, Height);
             SetOutput(ctx, Variable.Object(ModuleName, "Image", new HalconImage(output), 1));
             ctx.AddLog(FlowLogLevel.Info, $"[均值滤波] Width={Width}, Height={Height}");
+            return NodeResult.Ok;
+        }
+    }
+
+    [ToolOutput("Image", VariableKind.Object, VariableType.Object, ElementClrType = typeof(HalconImage))]
+    public sealed class AffineTransformImageTool : ToolBase
+    {
+        [InputRef("图像", typeof(HalconImage))]
+        public string ImagePath { get; set; } = "Input.Image";
+
+        [InputRef("变换矩阵", typeof(HomMat2D))]
+        public string MatrixPath { get; set; }
+
+        public ImageInterpolationMode Interpolation { get; set; } = ImageInterpolationMode.constant;
+        public bool AdaptImageSize { get; set; }
+
+        public AffineTransformImageTool(string moduleName) : base(moduleName)
+        {
+        }
+
+        public override NodeResult Run(FlowContext ctx)
+        {
+            HObject image = Input<HalconImage>(ctx, ImagePath).Object;
+            HomMat2D matrix = VariableReference.Parse(MatrixPath).Resolve<HomMat2D>(ctx);
+            HOperatorSet.AffineTransImage(image, out HObject output, matrix.Data, Interpolation.ToString(),
+                AdaptImageSize ? "true" : "false");
+
+            SetOutput(ctx, Variable.Object(ModuleName, "Image", new HalconImage(output), 1));
+            ctx.AddLog(FlowLogLevel.Info, $"[图像仿射变换] Interpolation={Interpolation}, AdaptImageSize={AdaptImageSize}");
+            return NodeResult.Ok;
+        }
+    }
+
+    [ToolOutput("Image", VariableKind.Object, VariableType.Object, ElementClrType = typeof(HalconImage))]
+    public sealed class ReduceDomainTool : ToolBase
+    {
+        [InputRef("图像", typeof(HalconImage))]
+        public string ImagePath { get; set; } = "Input.Image";
+
+        [InputRef("区域", typeof(HalconRegion))]
+        public string RegionPath { get; set; }
+
+        public ReduceDomainTool(string moduleName) : base(moduleName)
+        {
+        }
+
+        public override NodeResult Run(FlowContext ctx)
+        {
+            HObject image = Input<HalconImage>(ctx, ImagePath).Object;
+            HObject region = Input<HalconRegion>(ctx, RegionPath).Object;
+            HOperatorSet.ReduceDomain(image, region, out HObject output);
+
+            SetOutput(ctx, Variable.Object(ModuleName, "Image", new HalconImage(output), 1));
+            ctx.AddLog(FlowLogLevel.Info, "[ReduceDomain] 已按 Region 限定图像域");
             return NodeResult.Ok;
         }
     }

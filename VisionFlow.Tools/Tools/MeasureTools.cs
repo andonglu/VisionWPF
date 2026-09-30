@@ -73,7 +73,7 @@ namespace VisionFlow.Tools
         [InputRef("图像", typeof(HalconImage))]
         public string ImagePath { get; set; } = "Input.Image";
 
-        [InputRef("变换矩阵", typeof(HomMat2D), Optional = true)]
+        [InputRef("变换矩阵", typeof(HomMat2D), Optional = true, AcceptsCollection = true)]
         public string MatrixPath { get; set; }
 
         [InputRef("结果序号", typeof(int), Optional = true)]
@@ -104,61 +104,14 @@ namespace VisionFlow.Tools
             return VariableReference.Parse(IndexPath).Resolve<int>(ctx);
         }
 
-        protected HomMat2D GetMatrixOrNull(FlowContext ctx)
+        /// <summary>
+        /// 解析定位矩阵引用。
+        /// 未配置 MatrixPath：返回 [null]，即固定位置测量（正常使用方式）。
+        /// 已配置但解析失败：返回失败；仅显式允许降级的预览上下文可退回固定位置。
+        /// </summary>
+        protected bool TryGetMatrices(FlowContext ctx, out List<HomMat2D> matrices, out string error)
         {
-            if (string.IsNullOrWhiteSpace(MatrixPath))
-            {
-                return null;
-            }
-
-            try
-            {
-                return VariableReference.Parse(MatrixPath).Resolve<HomMat2D>(ctx);
-            }
-            catch (Exception ex)
-            {
-                ctx.AddLog(FlowLogLevel.Warning, $"[测量] 矩阵引用 '{MatrixPath}' 解析失败（{ex.Message}），按固定位置测量");
-                return null;
-            }
-        }
-
-        protected List<HomMat2D> GetMatrices(FlowContext ctx)
-        {
-            var matrices = new List<HomMat2D>();
-            if (string.IsNullOrWhiteSpace(MatrixPath))
-            {
-                matrices.Add(null);
-                return matrices;
-            }
-
-            try
-            {
-                object value = VariableReference.Parse(MatrixPath).Resolve(ctx);
-                if (value is HomMat2D single)
-                {
-                    matrices.Add(single);
-                }
-                else if (value is IEnumerable<HomMat2D> many)
-                {
-                    matrices.AddRange(many);
-                }
-                else
-                {
-                    ctx.AddLog(FlowLogLevel.Warning, $"[测量] 矩阵引用 '{MatrixPath}' 不是 HomMat2D 或 HomMat2D 集合，按固定位置测量");
-                    matrices.Add(null);
-                }
-            }
-            catch (Exception ex)
-            {
-                ctx.AddLog(FlowLogLevel.Warning, $"[测量] 矩阵引用 '{MatrixPath}' 解析失败（{ex.Message}），按固定位置测量");
-                matrices.Add(null);
-            }
-
-            if (matrices.Count == 0)
-            {
-                matrices.Add(null);
-            }
-            return matrices;
+            return FollowMatrixResolver.TryResolve(ctx, ModuleName, MatrixPath, out matrices, out error);
         }
 
         protected static void AddResult<T>(FlowContext ctx, string moduleName, T result)
@@ -183,6 +136,113 @@ namespace VisionFlow.Tools
         }
     }
 
+    internal static class FollowMatrixResolver
+    {
+        public static bool TryResolve(FlowContext ctx, string moduleName, string matrixPath,
+            out List<HomMat2D> matrices, out string error)
+        {
+            if (string.IsNullOrWhiteSpace(matrixPath))
+            {
+                matrices = new List<HomMat2D> { null };
+                error = null;
+                return true;
+            }
+
+            try
+            {
+                object value = VariableReference.Parse(matrixPath).Resolve(ctx);
+                List<HomMat2D> resolved;
+                if (value is HomMat2D single)
+                {
+                    resolved = new List<HomMat2D> { single };
+                }
+                else if (value is System.Collections.IEnumerable many && !(value is string))
+                {
+                    resolved = new List<HomMat2D>();
+                    foreach (object item in many)
+                    {
+                        if (item != null && !(item is HomMat2D))
+                        {
+                            throw new InvalidOperationException(
+                                $"矩阵集合第 {resolved.Count} 项类型为 {item.GetType().Name}，不是 HomMat2D");
+                        }
+                        resolved.Add((HomMat2D)item);
+                    }
+                }
+                else
+                {
+                    throw new InvalidOperationException(
+                        $"引用值类型为 {value?.GetType().Name ?? "null"}，不是 HomMat2D 或 HomMat2D 集合");
+                }
+
+                if (resolved.Count == 0)
+                {
+                    throw new InvalidOperationException("矩阵集合为空（上游定位没有任何结果）");
+                }
+                for (int i = 0; i < resolved.Count; i++)
+                {
+                    HomMat2D matrix = resolved[i];
+                    if (matrix == null)
+                    {
+                        throw new InvalidOperationException($"矩阵集合第 {i} 项为 null");
+                    }
+                    try
+                    {
+                        if (matrix.Data == null || matrix.Data.Length != 6)
+                        {
+                            throw new InvalidOperationException("变换矩阵必须包含 6 个数值");
+                        }
+                        var data = new double[6];
+                        for (int j = 0; j < data.Length; j++)
+                        {
+                            data[j] = matrix.Data[j].D;
+                            if (!double.IsFinite(data[j]))
+                            {
+                                throw new InvalidOperationException("变换矩阵包含非有限数值");
+                            }
+                        }
+                        double determinant = data[0] * data[4] - data[1] * data[3];
+                        if (!double.IsFinite(determinant) || determinant == 0)
+                        {
+                            throw new InvalidOperationException("变换矩阵不可逆或超出数值范围");
+                        }
+                    }
+                    catch (Exception ex) when (ex is HalconException || ex is InvalidOperationException)
+                    {
+                        throw new InvalidOperationException($"矩阵集合第 {i} 项无效：{ex.Message}", ex);
+                    }
+                }
+                matrices = resolved;
+                error = null;
+                return true;
+            }
+            catch (Exception ex) when (ex is ArgumentException || ex is FormatException
+                || ex is OverflowException || ex is InvalidCastException
+                || ex is InvalidOperationException || ex is KeyNotFoundException
+                || ex is HalconException)
+            {
+                return ResolutionFailed(ctx, moduleName, matrixPath, $"解析失败：{ex.Message}", out matrices, out error);
+            }
+        }
+
+        private static bool ResolutionFailed(FlowContext ctx, string moduleName, string matrixPath, string reason,
+            out List<HomMat2D> matrices, out string error)
+        {
+            if (ctx.IsPreview && ctx.AllowMatrixFallback)
+            {
+                ctx.AddLog(FlowLogLevel.Warning,
+                    $"[测量] {moduleName}：定位矩阵引用 '{matrixPath}' {reason}，按固定位置测量（预览已显式允许降级）");
+                matrices = new List<HomMat2D> { null };
+                error = null;
+                return true;
+            }
+            matrices = null;
+            error = $"{moduleName} 定位矩阵引用 '{matrixPath}' {reason}。" +
+                    "已配置定位跟随但解析失败，不会退回固定位置测量；如确需预览降级请创建显式允许降级的预览上下文";
+            return false;
+        }
+    }
+
     [ToolOutput("Row1", VariableKind.Single, VariableType.Double)]
     [ToolOutput("Column1", VariableKind.Single, VariableType.Double)]
     [ToolOutput("Row2", VariableKind.Single, VariableType.Double)]
@@ -202,12 +262,16 @@ namespace VisionFlow.Tools
 
         public override NodeResult Run(FlowContext ctx)
         {
+            if (!TryGetMatrices(ctx, out List<HomMat2D> matrices, out string matrixError))
+            {
+                return NodeResult.Fail(matrixError);
+            }
             HObject image = GetImage(ctx);
             HOperatorSet.GenEmptyObj(out HObject allContours);
             int successCount = 0;
             string lastError = null;
 
-            foreach (HomMat2D matrix in GetMatrices(ctx))
+            foreach (HomMat2D matrix in matrices)
             {
                 NodeResult result = MeasureOne(ctx, image, matrix, successCount, allContours, out HObject newContours);
                 if (!ReferenceEquals(allContours, newContours))
@@ -307,12 +371,16 @@ namespace VisionFlow.Tools
 
         public override NodeResult Run(FlowContext ctx)
         {
+            if (!TryGetMatrices(ctx, out List<HomMat2D> matrices, out string matrixError))
+            {
+                return NodeResult.Fail(matrixError);
+            }
             HObject image = GetImage(ctx);
             HOperatorSet.GenEmptyObj(out HObject allContours);
             int successCount = 0;
             string lastError = null;
 
-            foreach (HomMat2D matrix in GetMatrices(ctx))
+            foreach (HomMat2D matrix in matrices)
             {
                 NodeResult result = MeasureOne(ctx, image, matrix, successCount, allContours, out HObject newContours);
                 if (!ReferenceEquals(allContours, newContours))
@@ -410,12 +478,16 @@ namespace VisionFlow.Tools
 
         public override NodeResult Run(FlowContext ctx)
         {
+            if (!TryGetMatrices(ctx, out List<HomMat2D> matrices, out string matrixError))
+            {
+                return NodeResult.Fail(matrixError);
+            }
             HObject image = GetImage(ctx);
             HOperatorSet.GenEmptyObj(out HObject allContours);
             int successCount = 0;
             string lastError = null;
 
-            foreach (HomMat2D matrix in GetMatrices(ctx))
+            foreach (HomMat2D matrix in matrices)
             {
                 NodeResult result = MeasureOne(ctx, image, matrix, successCount, allContours, out HObject newContours);
                 if (!ReferenceEquals(allContours, newContours))
@@ -516,6 +588,10 @@ namespace VisionFlow.Tools
 
             public override NodeResult Run(FlowContext ctx)
             {
+                if (!TryGetMatrices(ctx, out List<HomMat2D> matrices, out string matrixError))
+                {
+                    return NodeResult.Fail(matrixError);
+                }
                 HObject image = GetImage(ctx);
                 HOperatorSet.GenEmptyObj(out HObject allContours);
                 var allRows = new List<double>();
@@ -525,7 +601,7 @@ namespace VisionFlow.Tools
                 int successCount = 0;
                 string lastError = null;
 
-                foreach (HomMat2D matrix in GetMatrices(ctx))
+                foreach (HomMat2D matrix in matrices)
                 {
                     NodeResult result = MeasureOne(ctx, image, matrix, successCount, allContours,
                         allRows, allColumns, allAmplitudes, allDistances, out HObject newContours);
@@ -662,6 +738,10 @@ namespace VisionFlow.Tools
 
         public override NodeResult Run(FlowContext ctx)
         {
+            if (!TryGetMatrices(ctx, out List<HomMat2D> matrices, out string matrixError))
+            {
+                return NodeResult.Fail(matrixError);
+            }
             HObject image = GetImage(ctx);
             HOperatorSet.GenEmptyObj(out HObject allContours);
             var allRows = new List<double>();
@@ -671,7 +751,7 @@ namespace VisionFlow.Tools
             int successCount = 0;
             string lastError = null;
 
-            foreach (HomMat2D matrix in GetMatrices(ctx))
+            foreach (HomMat2D matrix in matrices)
             {
                 NodeResult result = MeasureOne(ctx, image, matrix, successCount, allContours,
                     allRows, allColumns, allAmplitudes, allDistances, out HObject newContours);

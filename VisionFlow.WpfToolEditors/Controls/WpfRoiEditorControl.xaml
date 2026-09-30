@@ -5,8 +5,8 @@
              xmlns:vfc="clr-namespace:VisionFlow.Controls;assembly=VisionFlow.Controls">
     <DockPanel>
         <ToolBar DockPanel.Dock="Top"
-                 Padding="4,2"
-                 Background="{DynamicResource SolidBackgroundFillColorQuarternaryBrush}">
+                 Padding="8"
+                 Background="{DynamicResource SurfaceBrush}">
             <Button ToolTip="打开图像" Style="{DynamicResource ToolBarIconButtonStyle}" Click="OpenImage_Click">
                 <Viewbox Width="18" Height="18">
                     <Path Data="M3,5 L21,5 L21,19 L3,19 Z M5,17 L10,12 L13,15 L15,13 L20,18 M16,8 L18,8 L18,10 L16,10 Z"
@@ -99,20 +99,20 @@
         <Grid>
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="180" />
+                <ColumnDefinition Width="200" />
             </Grid.ColumnDefinitions>
             <wfi:WindowsFormsHost Grid.Column="0">
                 <vfc:HalconImageView x:Name="ImageView" />
             </wfi:WindowsFormsHost>
             <Border Grid.Column="1"
-                    Margin="8,0,0,0"
-                    Padding="8"
+                    Margin="16,0,0,0"
+                    Padding="16"
                     BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
                     BorderThickness="1"
-                    CornerRadius="4"
+                    CornerRadius="8"
                     Background="{DynamicResource LayerFillColorDefaultBrush}">
                 <DockPanel>
-                    <TextBlock DockPanel.Dock="Top" Text="ROI 列表" FontWeight="SemiBold" Margin="0,0,0,8" />
+                    <TextBlock DockPanel.Dock="Top" Text="ROI 列表" Style="{StaticResource EditorSectionTitleStyle}" />
                     <ListBox x:Name="RoiList" SelectionChanged="RoiList_SelectionChanged" />
                 </DockPanel>
             </Border>

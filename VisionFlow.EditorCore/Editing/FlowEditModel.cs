@@ -16,19 +16,49 @@ namespace VisionFlow.Editing
     /// <summary>
     /// 流程编辑模型：UI 无关的流程结构编辑操作（增、删、移动、嵌套）。
     /// 窗体与无头测试都通过它修改流程，保证两种入口行为一致。
+    ///
+    /// 脏状态约定（VF-10）：结构编辑触发 <see cref="StructureChanged"/> 并置脏；
+    /// 参数修改由 UI 层调用 <see cref="MarkDirty"/>；保存成功调 <see cref="MarkSaved"/>；
+    /// 新建/打开（<see cref="ReplaceRoot"/>）重置为未脏。预览结果、日志、选择状态不算修改。
     /// </summary>
     public sealed class FlowEditModel
     {
         public SequenceNode Root { get; private set; }
+
+        /// <summary>结构编辑（增删移动）后触发。</summary>
+        public event EventHandler StructureChanged;
+
+        /// <summary>文档是否有未保存的修改。</summary>
+        public bool IsDirty { get; private set; }
 
         public FlowEditModel()
         {
             Root = new SequenceNode("主流程");
         }
 
+        /// <summary>替换整个流程根（新建/打开）。替换后视为未修改。</summary>
         public void ReplaceRoot(SequenceNode root)
         {
             Root = root ?? throw new ArgumentNullException(nameof(root));
+            IsDirty = false;
+        }
+
+        /// <summary>标记文档已修改（参数修改等非结构变更由 UI 层调用）。</summary>
+        public void MarkDirty()
+        {
+            IsDirty = true;
+        }
+
+        /// <summary>保存成功后清除脏标记；保存失败不得调用。</summary>
+        public void MarkSaved()
+        {
+            IsDirty = false;
+        }
+
+        private void OnStructureChanged()
+        {
+            IsDirty = true;
+            StructureChanged?.Invoke(this, EventArgs.Empty);
         }
 
         /// <summary>
@@ -51,6 +81,7 @@ namespace VisionFlow.Editing
                 throw new InvalidOperationException("无法解析节点插入位置。");
             }
             list.Insert(index, node);
+            OnStructureChanged();
             return node;
         }
 
@@ -72,6 +103,7 @@ namespace VisionFlow.Editing
                 newIndex--;
             }
             targetList.Insert(newIndex, node);
+            OnStructureChanged();
             return true;
         }
 
@@ -96,7 +128,12 @@ namespace VisionFlow.Editing
                 return false;
             }
             IList<FlowNode> parentList = GetParentList(node);
-            return parentList != null && parentList.Remove(node);
+            if (parentList == null || !parentList.Remove(node))
+            {
+                return false;
+            }
+            OnStructureChanged();
+            return true;
         }
 
         public bool InsertExistingNode(FlowNode node, FlowNode target = null, IfBranch branch = IfBranch.If,
@@ -111,6 +148,7 @@ namespace VisionFlow.Editing
                 return false;
             }
             list.Insert(index, node);
+            OnStructureChanged();
             return true;
         }
 
@@ -130,6 +168,7 @@ namespace VisionFlow.Editing
             }
             parentList.RemoveAt(index);
             parentList.Insert(newIndex, node);
+            OnStructureChanged();
             return true;
         }
 

@@ -5,7 +5,6 @@
     <ProjectReference Include="..\VisionFlow.Controls\VisionFlow.Controls.csproj" />
     <ProjectReference Include="..\VisionFlow.EditorCore\VisionFlow.EditorCore.csproj" />
     <ProjectReference Include="..\VisionFlow.Tools\VisionFlow.Tools.csproj" />
-    <ProjectReference Include="..\VisionFlow.ToolEditors\VisionFlow.ToolEditors.csproj" />
   </ItemGroup>
 
   <ItemGroup>

@@ -21,6 +21,9 @@ namespace VisionFlow.Variables
         /// <summary>是否可选（可选引用允许留空）。</summary>
         public bool Optional { get; set; }
 
+        /// <summary>是否同时接受期望类型的单值和集合；默认仅接受声明的类型。</summary>
+        public bool AcceptsCollection { get; set; }
+
         public InputRefAttribute(string displayName, Type expectedType)
         {
             DisplayName = displayName;
@@ -70,6 +73,7 @@ namespace VisionFlow.Variables
         public string DisplayName { get; set; }
         public Type ExpectedType { get; set; }
         public bool Optional { get; set; }
+        public bool AcceptsCollection { get; set; }
         public PropertyInfo Property { get; set; }
     }
 
@@ -116,6 +120,7 @@ namespace VisionFlow.Variables
                             DisplayName = x.Attribute.DisplayName,
                             ExpectedType = x.Attribute.ExpectedType,
                             Optional = x.Attribute.Optional,
+                            AcceptsCollection = x.Attribute.AcceptsCollection,
                             Property = x.Property
                         })
                         .ToArray();

@@ -28,14 +28,11 @@ VisionFlow 当前不定位为：
 | 项目 | 说明 |
 |---|---|
 | `VisionFlow.Base` | 流程核心、节点、运行上下文、变量、校验、序列化、运行时接口 |
-| `VisionFlow.EditorCore` | WinForms/WPF 编辑器共用的流程编辑模型、工具箱注册表、插件加载 |
+| `VisionFlow.EditorCore` | 与 UI 无关的流程编辑模型、工具箱注册表、插件加载 |
 | `VisionFlow.Tools` | 内置 HALCON 视觉工具 |
-| `VisionFlow.Controls` | 图像显示、ROI 绘制和基础视觉控件 |
-| `VisionFlow.ToolEditors` | 内置工具的专用参数编辑页面 |
-| `VisionFlow.LDWeldingPlugins` | LDWelding 相关插件工具 |
-| `VisionFlow.App` | WinForms 流程编辑器应用 |
+| `VisionFlow.Controls` | 图像显示、ROI 绘制和基础视觉控件（WinForms 控件，经 WindowsFormsHost 嵌入 WPF） |
 | `VisionFlow.WpfApp` | WPF 流程编辑器应用，复用现有流程核心、工具和专用工具编辑窗体 |
-| `VisionFlow.WpfToolEditors` | WPF 专用工具编辑页面，和 WinForms 编辑页分离 |
+| `VisionFlow.WpfToolEditors` | WPF 专用工具编辑页面 |
 
 ## 已提供的流程能力
 
@@ -58,22 +55,15 @@ VisionFlow 支持以下流程节点：
 | 图像采集 | 图像加载 |
 | 图像处理 | 均值滤波、图像加减、通道分解、三通道合成、RGB 色彩空间转换 |
 | 定位匹配 | 模板匹配、区域定位 |
-| 区域处理 | 二值化、区域处理、区域筛选、Region 相减、Region 合并、Region 形状转换、Region Union1、矩形形态学、圆形形态学、Region 特征值 |
+| 区域处理 | 阈值分割（手动/自动/二值/快速/字符/局部，工具内选择）、区域处理、区域筛选、Region 相减、Region 合并、Region 形状转换、Region Union1、形态学（矩形/圆形，工具内选择）、Region 特征值 |
 | XLD 轮廓 | 边缘提取、边缘选择、边缘合并、XLD 分割、XLD 特征值 |
 | 几何测量 | 椭圆测量、直线测量、一维卡尺测量、一维圆弧卡尺测量、矩形测量、圆形测量、拟合直线、拟合圆、线线交点、图像坐标转世界坐标 |
+| 识别工具 | 一维码 |
 | 逻辑控制 | IfElse 分支、For 循环、流程输出 |
 
-### LDWelding 插件工具
+### 插件工具
 
-| 分类 | 工具 |
-|---|---|
-| 图像处理 | 均值滤波、图像加减、通道分解、三通道合成、RGB 色彩空间转换 |
-| 区域处理 | Region 相减、Region 合并、Region 形状转换、Region Union1、矩形形态学、圆形形态学、Region 特征值 |
-| XLD 轮廓 | 边缘提取、边缘选择、边缘合并、XLD 分割、XLD 特征值 |
-| 几何测量 | 拟合直线、拟合圆、线线交点、图像坐标转世界坐标 |
-| 识别工具 | 一维码 |
-
-插件工具通过特性注册到工具箱，运行时由 `VisionFlow.App` 扫描 `plugins` 目录加载。与内置工具同名的插件工具会按工具箱显示名去重，避免重复显示。
+第三方插件工具通过 `[ToolboxTool]` 特性注册到工具箱，由 WPF 宿主扫描输出目录下的 `plugins` 文件夹加载。与内置工具同名的插件工具会按工具箱显示名去重，避免重复显示。专用编辑器应匹配宿主 UI 技术；没有可用专用页面时使用通用编辑器。
 
 ## 标准示例流程
 
@@ -88,7 +78,7 @@ VisionFlow 支持以下流程节点：
 
 ## 如何编辑视觉流程
 
-1. 启动 `VisionFlow.WpfApp`（推荐）或旧版 `VisionFlow.App`。
+1. 启动 `VisionFlow.WpfApp`。
 2. 从左侧工具箱中双击或拖拽工具到流程树。
 3. 在流程树中调整节点顺序，或将节点放入 IfElse 分支、For 循环体中。
 4. 选中节点后，在参数面板中配置输入引用。
@@ -133,8 +123,10 @@ VisionFlow 支持以下流程节点：
 需要注意：
 
 - 流程中使用的工具类型必须在当前程序或插件目录中可用。
-- 插件工具对应的 DLL 需要放在 `VisionFlow.App` 输出目录的 `plugins` 子目录下。
+- 插件工具对应的 DLL 需要放在 `VisionFlow.WpfApp` 输出目录的 `plugins` 子目录下。
 - 如果流程引用了外部文件路径，例如图像、模型、标定文件，上层项目需要保证这些文件路径有效，或在集成时重新配置。
+
+流程文件和单节点数据均携带 `FormatVersion`；内置工具使用与 CLR 类名无关的固定 `ToolId`。工具重命名或程序集迁移时，可通过 `FlowSerializer.RegisterToolType(type, stableId, aliases)` 显式登记历史身份，重复身份会报错而非覆盖。旧版仅带 `TypeName` 的文件仍可读取。
 
 ## 与上层项目的职责边界
 
@@ -157,11 +149,35 @@ VisionFlow 输出的是视觉流程能力，上层项目负责设备与业务闭
 
 上层项目可以加载 VisionFlow 保存的流程文件，并在自己的采集、触发和通信逻辑中调用流程运行接口，将图像或输入变量传入流程，再读取流程输出结果。
 
+### 运行资源与预览约定
+
+- 每次生产运行推荐使用独立的 `FlowContext`；执行成功与产品判定合格是不同概念，合格状态应读取流程业务输出。
+- 调用方图像通过默认借用包装（如 `new HalconImage(image)`）注入，仍由调用方释放。工具新输出归运行上下文所有。
+- 结果仍在显示或被下游使用时，不得释放上下文。消费结束后调用 `FlowContext.Dispose()`，统一回收该次运行的自有资源，包括被同名变量覆盖的旧输出。
+- 预览通过 `CreatePreviewContext()` 派生，集合数据独立，源 HALCON 资源保持借用；源上下文必须晚于预览释放。自定义引用类型结果应保持只读或实现 `ICloneable`。
+- 已配置定位矩阵但引用无效时，正式运行明确失败，不退回固定位置。仅显式创建的降级预览 `CreatePreviewContext(allowMatrixFallback: true)` 可以使用固定位置，权限不会写入流程文件。
+
+项目不提供撤销/重做；参数取消、未保存修改提示和保存失败保护属于文档安全功能，不受此范围约束影响。
+
+### 回归入口
+
+`VisionFlow.Tests` 使用 xUnit，覆盖引用、流程文件、输入契约、编辑状态与 HALCON 资源等行为：
+
+```powershell
+dotnet test .\VisionFlow.Tests\VisionFlow.Tests.csproj --configuration Debug --no-restore
+```
+
+HALCON 资源与示例图像用例需要本机原生运行库和授权；每个相关用例独立检查环境，缺失时明确失败，不会早退后被计为通过。
+示例基线用于回归，不代表现场精度、节拍或工况覆盖已经达标。
+
+默认回归包含两个样例各 100 次的持续运行冒烟，CSV 保存到 `TestResults\soak`。
+用 `--filter "Category=Soak"` 可单独运行；次数、采样间隔和资源/耗时阈值可通过环境变量配置。
+未配置阈值时只报告功能回归，不宣称性能验收。命令、指标口径和现场/UI 记录模板见 `docs\VF11-ACCEPTANCE.md`。
+
 ## 暂不包含的内容
 
 以下内容等 VisionFlow 项目更完善、工具更丰富后再开发：
 
-- 完整自动化测试项目。
 - 大规模工具回归测试。
 - 完整用户手册。
 - 更完整的生产运行界面。

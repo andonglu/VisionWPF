@@ -72,6 +72,12 @@ namespace VisionFlow.Variables
             return (T)Value;
         }
 
+        internal Variable CopyForPreview(System.Collections.Generic.Dictionary<object, object> copies)
+        {
+            return new Variable(ModuleName, Name, Kind, Type,
+                PreviewValueCopy.Copy(Value, copies), Count);
+        }
+
         /// <summary>取数组变量的第 index 个元素。</summary>
         public object GetElement(int index)
         {

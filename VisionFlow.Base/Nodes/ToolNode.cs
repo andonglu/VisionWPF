@@ -1,3 +1,4 @@
+using System;
 using VisionFlow.Core;
 
 namespace VisionFlow.Nodes
@@ -12,6 +13,12 @@ namespace VisionFlow.Nodes
         public ToolNode(ToolBase tool, string name = null)
             : base(name ?? tool.ModuleName)
         {
+            Tool = tool;
+        }
+
+        public void ReplaceTool(ToolBase tool)
+        {
+            ArgumentNullException.ThrowIfNull(tool);
             Tool = tool;
         }
 

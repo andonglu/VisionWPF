@@ -6,8 +6,6 @@ WPF 编辑器项目：`VisionFlow.WpfApp`
 
 WPF 工具编辑页项目：`VisionFlow.WpfToolEditors`
 
-WinForms 编辑器项目：`VisionFlow.App`
-
 共用编辑核心项目：`VisionFlow.EditorCore`
 
 ## 编辑页布局规范

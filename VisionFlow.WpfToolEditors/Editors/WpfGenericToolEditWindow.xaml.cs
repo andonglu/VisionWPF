@@ -58,6 +58,7 @@ namespace VisionFlow.WpfToolEditors.Editors
             ModuleNameText.Text = _tool.ModuleName;
             BuildInputFields();
             BuildScalarFields();
+            BuildToolActions();
             RunPreview();
         }
 
@@ -83,7 +84,7 @@ namespace VisionFlow.WpfToolEditors.Editors
                 }
                 if (_context.Root != null && _context.Node != null)
                 {
-                    foreach (RefCandidate candidate in RefCandidateService.ForInput(_context.Root, _context.Node, input.ExpectedType))
+                    foreach (RefCandidate candidate in RefCandidateService.ForInput(_context.Root, _context.Node, input.ExpectedType, input.AcceptsCollection))
                     {
                         if (!combo.Items.Contains(candidate.Path))
                         {
@@ -125,7 +126,7 @@ namespace VisionFlow.WpfToolEditors.Editors
                 {
                     Content = property.Name,
                     IsChecked = (bool)property.GetValue(_tool),
-                    Margin = new Thickness(0, 0, 0, 10)
+                    Margin = new Thickness(0, 0, 0, 16)
                 };
                 ScalarPanel.Children.Add(check);
                 _bindings.Add(new FieldBinding { Property = property, Editor = check, PropertyType = type });
@@ -154,10 +155,24 @@ namespace VisionFlow.WpfToolEditors.Editors
             _bindings.Add(new FieldBinding { Property = property, Editor = text, PropertyType = type });
         }
 
+        private void BuildToolActions()
+        {
+            if (_tool is RegionPoseTool)
+            {
+                var button = new Button
+                {
+                    Content = "使用当前输入 Region 设为基准",
+                    Margin = new Thickness(0, 0, 0, 16)
+                };
+                button.Click += SetRegionPoseBase_Click;
+                ScalarPanel.Children.Add(button);
+            }
+        }
+
         private void AddFilePathField(PropertyInfo property)
         {
             AddLabel(property.Name, ScalarPanel);
-            var grid = new Grid { Margin = new Thickness(0, 0, 0, 10) };
+            var grid = new Grid { Margin = new Thickness(0, 0, 0, 16) };
             grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(40) });
             var text = new TextBox { Text = property.GetValue(_tool) as string ?? string.Empty, Margin = new Thickness(0) };
@@ -199,7 +214,7 @@ namespace VisionFlow.WpfToolEditors.Editors
             {
                 Text = text,
                 TextWrapping = TextWrapping.Wrap,
-                Margin = new Thickness(0, 0, 0, 10)
+                Margin = new Thickness(0, 0, 0, 16)
             };
         }
 
@@ -209,13 +224,14 @@ namespace VisionFlow.WpfToolEditors.Editors
             {
                 return;
             }
-            target.Children.Add(new TextBlock
+            var textBlock = new TextBlock
             {
                 Tag = label,
                 Text = label,
-                Foreground = System.Windows.Media.Brushes.DimGray,
-                Margin = new Thickness(0, 0, 0, 4)
-            });
+                Margin = new Thickness(0, 0, 0, 8)
+            };
+            textBlock.SetResourceReference(TextBlock.ForegroundProperty, "TextFillColorSecondaryBrush");
+            target.Children.Add(textBlock);
         }
 
         private void BrowsePath(TextBox text)
@@ -235,6 +251,29 @@ namespace VisionFlow.WpfToolEditors.Editors
             RunPreview();
         }
 
+        private void SetRegionPoseBase_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                CommitFields();
+                if (!(_tool is RegionPoseTool poseTool))
+                {
+                    return;
+                }
+
+                using FlowContext ctx = BuildPreviewContext();
+                HalconRegion region = VariableReference.Parse(poseTool.RegionPath).Resolve<HalconRegion>(ctx);
+                poseTool.SetBaseFromRegion(region.Object);
+                SyncFieldsFromTool();
+                RunPreview();
+                StatusText.Text = $"已设置基准：Row={poseTool.BaseRow:F3}, Column={poseTool.BaseColumn:F3}, Angle={poseTool.BaseAngle:F5}";
+            }
+            catch (Exception ex)
+            {
+                StatusText.Text = "设置基准失败：" + ex.Message;
+            }
+        }
+
         private void Fit_Click(object sender, RoutedEventArgs e)
         {
             PreviewImageView.FitToWindow();
@@ -247,6 +286,7 @@ namespace VisionFlow.WpfToolEditors.Editors
 
         private void RunPreview()
         {
+            FlowContext previousPreview = _previewContext;
             try
             {
                 CommitFields();
@@ -257,22 +297,34 @@ namespace VisionFlow.WpfToolEditors.Editors
             }
             catch (Exception ex)
             {
+                if (!ReferenceEquals(_previewContext, previousPreview))
+                {
+                    _previewContext?.Dispose();
+                }
                 _previewContext = BuildPreviewContextWithoutThrow();
                 RefreshViewTargets(false);
                 StatusText.Text = "预览失败：" + ex.Message;
             }
+            finally
+            {
+                if (!ReferenceEquals(_previewContext, previousPreview))
+                {
+                    previousPreview?.Dispose();
+                }
+            }
+        }
+
+        protected override void OnClosed(EventArgs e)
+        {
+            _previewContext?.Dispose();
+            _previewContext = null;
+            base.OnClosed(e);
         }
 
         private FlowContext BuildPreviewContext()
         {
-            var ctx = new FlowContext();
-            if (_context.LastRunContext != null)
-            {
-                foreach (Variable variable in _context.LastRunContext.GetAllVariables())
-                {
-                    ctx.SetVariable(variable);
-                }
-            }
+            // 派生上下文：共享主窗口变量（借用），释放时只回收本窗口新写入的输出（VF-04）
+            FlowContext ctx = (_context.LastRunContext ?? new FlowContext()).CreatePreviewContext();
             if (_context.InputImage != null && _context.InputImage.IsInitialized())
             {
                 ctx.SetVariable(Variable.Object("Input", "Image", new HalconImage(_context.InputImage), 1));
@@ -288,7 +340,7 @@ namespace VisionFlow.WpfToolEditors.Editors
             }
             catch
             {
-                return new FlowContext();
+                return new FlowContext().CreatePreviewContext();
             }
         }
 
@@ -390,11 +442,32 @@ namespace VisionFlow.WpfToolEditors.Editors
 
         private void CommitFields()
         {
+            object[] values = _bindings.Select(ReadValue).ToArray();
             _tool.ModuleName = (ModuleNameText.Text ?? string.Empty).Trim();
+            for (int i = 0; i < _bindings.Count; i++)
+            {
+                _bindings[i].Property.SetValue(_tool, values[i]);
+            }
+        }
+
+        private void SyncFieldsFromTool()
+        {
+            ModuleNameText.Text = _tool.ModuleName;
             foreach (FieldBinding binding in _bindings)
             {
-                object value = ReadValue(binding);
-                binding.Property.SetValue(_tool, value);
+                object value = binding.Property.GetValue(_tool);
+                if (binding.Editor is TextBox text)
+                {
+                    text.Text = Convert.ToString(value, CultureInfo.CurrentCulture);
+                }
+                else if (binding.Editor is ComboBox combo)
+                {
+                    combo.Text = Convert.ToString(value, CultureInfo.CurrentCulture);
+                }
+                else if (binding.Editor is CheckBox check && value is bool boolValue)
+                {
+                    check.IsChecked = boolValue;
+                }
             }
         }
 

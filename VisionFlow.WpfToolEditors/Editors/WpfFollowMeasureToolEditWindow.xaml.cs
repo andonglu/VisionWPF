@@ -27,6 +27,10 @@ namespace VisionFlow.WpfToolEditors.Editors
 
         private readonly FollowMeasureToolBase _tool;
         private readonly ToolEditContext _context;
+        private readonly FlowContext _sourceRunContext;
+        // 本窗口创建的预览上下文：替换或关闭时回收其 HALCON 资源（VF-04）。
+        // 注意不得处置 _context.LastRunContext 的初始值——它属于主窗口的上次运行。
+        private FlowContext _previewContext;
         private readonly ExtraTextBox _startPhi = new ExtraTextBox();
         private readonly ExtraTextBox _endPhi = new ExtraTextBox();
         private readonly ExtraTextBox _caliperCount = new ExtraTextBox();
@@ -35,6 +39,7 @@ namespace VisionFlow.WpfToolEditors.Editors
         {
             _tool = tool ?? throw new ArgumentNullException(nameof(tool));
             _context = context ?? new ToolEditContext();
+            _sourceRunContext = _context.LastRunContext;
             InitializeComponent();
             Title = GetTitle(tool) + " - " + tool.ModuleName;
             DrawRoiButton.Content = "绘制/重绘" + GetShapeName(tool) + "基准";
@@ -223,6 +228,8 @@ namespace VisionFlow.WpfToolEditors.Editors
 
         private void RunTest_Click(object sender, RoutedEventArgs e)
         {
+            FlowContext previousPreview = _previewContext;
+            FlowContext ctx = null;
             try
             {
                 if (!SaveBaseRoi())
@@ -231,10 +238,11 @@ namespace VisionFlow.WpfToolEditors.Editors
                     return;
                 }
                 ApplySettings();
-                FlowContext ctx = BuildRunContext();
+                ctx = BuildRunContext();
                 ClearMeasureResults(ctx);
                 NodeResult result = _tool.Run(ctx);
                 _context.LastRunContext = ctx;
+                _previewContext = ctx;
                 ShowLastRunResult();
                 StatusText.Text = result.IsSuccess ? "测试完成。" : "测试失败：" + result.Message;
             }
@@ -242,17 +250,38 @@ namespace VisionFlow.WpfToolEditors.Editors
             {
                 StatusText.Text = "测试失败：" + ex.Message;
             }
+            finally
+            {
+                if (!ReferenceEquals(ctx, _previewContext))
+                {
+                    ctx?.Dispose();
+                }
+                if (!ReferenceEquals(previousPreview, _previewContext))
+                {
+                    previousPreview?.Dispose();
+                }
+            }
         }
 
         private FlowContext BuildRunContext()
         {
-            FlowContext ctx = _context.LastRunContext ?? new FlowContext();
+            // 预览在派生上下文上运行：借用上次运行的变量（含 Input.Image），
+            // 日志/报告/轨迹独立，不污染主窗口的上次运行结果
+            FlowContext ctx = (_sourceRunContext ?? new FlowContext()).CreatePreviewContext();
             if (_context.InputImage != null && _context.InputImage.IsInitialized()
                 && !ctx.TryGetVariable("Input", "Image", out _))
             {
                 ctx.SetVariable(Variable.Object("Input", "Image", new HalconImage(_context.InputImage), 1));
             }
             return ctx;
+        }
+
+        protected override void OnClosed(EventArgs e)
+        {
+            // 窗口关闭：回收本窗口预览产生的 HALCON 资源（共享变量不受影响）
+            _previewContext?.Dispose();
+            _previewContext = null;
+            base.OnClosed(e);
         }
 
         private void TryShowTeachImage()

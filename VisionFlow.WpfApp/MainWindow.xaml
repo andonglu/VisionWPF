@@ -9,40 +9,69 @@
         MinWidth="1280"
         MinHeight="760"
         WindowStartupLocation="CenterScreen">
-    <Grid>
+    <Grid Background="{DynamicResource SolidBackgroundFillColorBaseBrush}">
         <Grid.RowDefinitions>
             <RowDefinition Height="48" />
             <RowDefinition Height="*" />
-            <RowDefinition Height="26" />
+            <RowDefinition Height="28" />
         </Grid.RowDefinitions>
 
-        <Grid Grid.Row="0" Background="{DynamicResource SolidBackgroundFillColorQuarternaryBrush}">
-            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
-                <Button ToolTip="打开图像" Style="{StaticResource ToolBarIconButtonStyle}" Click="OpenImage_Click">
+        <Grid Grid.Row="0"
+              Background="{DynamicResource ToolBarBackgroundBrush}"
+              Effect="{DynamicResource ToolBarShadowEffect}">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <TextBlock Margin="24,0"
+                       VerticalAlignment="Center"
+                       FontSize="20"
+                       FontWeight="Medium"
+                       Foreground="{DynamicResource PrimaryBrush}"
+                       Text="VisionFlow" />
+            <StackPanel Grid.ColumnSpan="3"
+                        Panel.ZIndex="1"
+                        Orientation="Horizontal"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center">
+                <Button x:Name="NewFlowButton" ToolTip="新建流程" Style="{StaticResource ToolBarIconButtonStyle}" Click="NewFlow_Click">
                     <Viewbox Width="18" Height="18">
-                        <Path Data="M3,5 L21,5 L21,19 L3,19 Z M5,17 L10,12 L13,15 L15,13 L20,18 M16,8 L18,8 L18,10 L16,10 Z"
-                              Stroke="{DynamicResource TextFillColorPrimaryBrush}" StrokeThickness="1.8" StrokeLineJoin="Round" Fill="Transparent" />
+                        <Path Data="M12,4 L12,20 M4,12 L20,12"
+                              Stroke="{DynamicResource TextFillColorPrimaryBrush}" StrokeThickness="2" StrokeLineJoin="Round" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Fill="Transparent" />
                     </Viewbox>
                 </Button>
-                <Button ToolTip="加载流程" Style="{StaticResource ToolBarIconButtonStyle}" Click="LoadFlow_Click">
+                <Button x:Name="LoadFlowButton" ToolTip="打开流程" Style="{StaticResource ToolBarIconButtonStyle}" Click="LoadFlow_Click">
                     <Viewbox Width="18" Height="18">
                         <Path Data="M4,6 L10,6 L12,8 L20,8 L20,19 L4,19 Z M8,13 L12,17 L16,13 M12,17 L12,10"
                               Stroke="{DynamicResource TextFillColorPrimaryBrush}" StrokeThickness="1.8" StrokeLineJoin="Round" Fill="Transparent" />
                     </Viewbox>
                 </Button>
-                <Button ToolTip="保存流程" Style="{StaticResource ToolBarIconButtonStyle}" Click="SaveFlow_Click">
+                <Button x:Name="SaveFlowButton" ToolTip="保存流程（覆盖当前文件）" Style="{StaticResource ToolBarIconButtonStyle}" Click="SaveFlow_Click">
                     <Viewbox Width="18" Height="18">
                         <Path Data="M5,4 L17,4 L20,7 L20,20 L4,20 L4,4 Z M8,4 L8,10 L16,10 L16,4 M8,20 L8,14 L16,14 L16,20"
                               Stroke="{DynamicResource TextFillColorPrimaryBrush}" StrokeThickness="1.8" StrokeLineJoin="Round" Fill="Transparent" />
                     </Viewbox>
                 </Button>
-                <Button ToolTip="校验流程" Style="{StaticResource ToolBarIconButtonStyle}" Click="Validate_Click">
+                <Button x:Name="SaveFlowAsButton" ToolTip="流程另存为" Style="{StaticResource ToolBarIconButtonStyle}" Click="SaveFlowAs_Click">
+                    <Viewbox Width="18" Height="18">
+                        <Path Data="M5,4 L17,4 L20,7 L20,20 L4,20 L4,4 Z M8,4 L8,10 L16,10 L16,4 M8,20 L8,14 L16,14 L16,20 M16,12 L20,12 M18,10 L18,14"
+                              Stroke="{DynamicResource TextFillColorPrimaryBrush}" StrokeThickness="1.8" StrokeLineJoin="Round" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Fill="Transparent" />
+                    </Viewbox>
+                </Button>
+                <Button x:Name="OpenImageButton" ToolTip="打开图像" Style="{StaticResource ToolBarIconButtonStyle}" Click="OpenImage_Click">
+                    <Viewbox Width="18" Height="18">
+                        <Path Data="M3,5 L21,5 L21,19 L3,19 Z M5,17 L10,12 L13,15 L15,13 L20,18 M16,8 L18,8 L18,10 L16,10 Z"
+                              Stroke="{DynamicResource TextFillColorPrimaryBrush}" StrokeThickness="1.8" StrokeLineJoin="Round" Fill="Transparent" />
+                    </Viewbox>
+                </Button>
+                <Button x:Name="ValidateButton" ToolTip="校验流程" Style="{StaticResource ToolBarIconButtonStyle}" Click="Validate_Click">
                     <Viewbox Width="18" Height="18">
                         <Path Data="M12,3 L20,7 L20,12 C20,17 16,20 12,21 C8,20 4,17 4,12 L4,7 Z M8,12 L11,15 L17,9"
                               Stroke="{DynamicResource TextFillColorPrimaryBrush}" StrokeThickness="1.8" StrokeLineJoin="Round" Fill="Transparent" />
                     </Viewbox>
                 </Button>
-                <Button ToolTip="运行流程" Style="{StaticResource ToolBarIconButtonStyle}" Click="Run_Click">
+                <Button x:Name="RunButton" ToolTip="运行流程" Style="{StaticResource ToolBarIconButtonStyle}" Click="Run_Click">
                     <Viewbox Width="18" Height="18">
                         <Path Data="M7,5 L19,12 L7,19 Z" Fill="{DynamicResource AccentFillColorDefaultBrush}" />
                     </Viewbox>
@@ -60,52 +89,62 @@
                 </Button>
             </StackPanel>
             <TextBlock x:Name="TitleStatusText"
-                       Margin="16,0"
+                       Grid.Column="2"
+                       Panel.ZIndex="2"
+                       Width="360"
+                       Margin="24,0"
                        HorizontalAlignment="Right"
                        VerticalAlignment="Center"
                        Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                       TextAlignment="Right"
+                       TextTrimming="CharacterEllipsis"
                        Text="就绪" />
         </Grid>
 
-        <Grid Grid.Row="1">
+        <Grid Grid.Row="1" Margin="24">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="280" />
-                <ColumnDefinition Width="420" />
+                <ColumnDefinition Width="240" />
+                <ColumnDefinition Width="360" />
                 <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
 
-            <Border Grid.Column="0" Style="{StaticResource PanelBorderStyle}">
+            <Border Grid.Column="0" Margin="0,0,24,0" Style="{StaticResource PanelBorderStyle}">
                 <DockPanel>
-                    <TextBlock DockPanel.Dock="Top" Text="工具箱" FontWeight="SemiBold" Margin="0,0,0,8" />
+                    <TextBlock DockPanel.Dock="Top" Text="工具箱" Style="{StaticResource EditorSectionTitleStyle}" />
                     <TextBlock DockPanel.Dock="Bottom"
                                Text="点击图标添加到当前流程节点后；逻辑容器选中后会加入容器内部。鼠标悬停可查看工具名称。"
                                TextWrapping="Wrap"
                                Foreground="{DynamicResource TextFillColorSecondaryBrush}"
-                               Margin="0,8,0,0" />
-                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                               Margin="0,16,0,0" />
+                    <ScrollViewer Margin="0,0,-12,0"
+                                  VerticalScrollBarVisibility="Auto"
+                                  HorizontalScrollBarVisibility="Disabled">
+                        <ScrollViewer.Resources>
+                            <Style TargetType="{x:Type ScrollBar}" BasedOn="{StaticResource ThinVerticalScrollBarStyle}" />
+                        </ScrollViewer.Resources>
                         <StackPanel x:Name="ToolboxPanel" />
                     </ScrollViewer>
                 </DockPanel>
             </Border>
 
-            <Grid Grid.Column="1">
+            <Grid Grid.Column="1" Margin="0,0,24,0">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="*" />
                     <RowDefinition Height="260" />
                 </Grid.RowDefinitions>
 
-                <Border Grid.Row="0" Style="{StaticResource PanelBorderStyle}">
+                <Border Grid.Row="0" Margin="0,0,0,24" Style="{StaticResource PanelBorderStyle}">
                     <DockPanel>
-                        <Grid DockPanel.Dock="Top" Margin="0,0,0,8">
+                        <Grid DockPanel.Dock="Top" Margin="0,0,0,16">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
-                            <TextBlock Text="流程树" FontWeight="SemiBold" VerticalAlignment="Center" />
+                            <TextBlock Text="流程树" Style="{StaticResource EditorSectionTitleStyle}" Margin="0" VerticalAlignment="Center" />
                             <StackPanel Grid.Column="1" Orientation="Horizontal">
-                                <Button Content="上移" MinWidth="56" Click="MoveUp_Click" />
-                                <Button Content="下移" MinWidth="56" Click="MoveDown_Click" />
-                                <Button Content="删除" MinWidth="56" Click="Delete_Click" />
+                                <Button x:Name="MoveUpButton" Content="上移" Click="MoveUp_Click" />
+                                <Button x:Name="MoveDownButton" Content="下移" Click="MoveDown_Click" />
+                                <Button x:Name="DeleteButton" Content="删除" Click="Delete_Click" />
                             </StackPanel>
                         </Grid>
                         <TreeView x:Name="FlowTree"
@@ -116,7 +155,7 @@
 
                 <Border Grid.Row="1" Style="{StaticResource PanelBorderStyle}">
                     <DockPanel>
-                        <TextBlock DockPanel.Dock="Top" Text="参数" FontWeight="SemiBold" Margin="0,0,0,8" />
+                        <TextBlock DockPanel.Dock="Top" Text="参数" Style="{StaticResource EditorSectionTitleStyle}" />
                         <ScrollViewer VerticalScrollBarVisibility="Auto">
                             <StackPanel x:Name="ParameterPanel" />
                         </ScrollViewer>
@@ -130,22 +169,22 @@
                     <RowDefinition Height="2*" />
                 </Grid.RowDefinitions>
 
-                <Border Grid.Row="0" Style="{StaticResource PanelBorderStyle}">
+                <Border Grid.Row="0" Margin="0,0,0,24" Style="{StaticResource PanelBorderStyle}">
                     <DockPanel>
-                        <Grid DockPanel.Dock="Top" Margin="0,0,0,8">
+                        <Grid DockPanel.Dock="Top" Margin="0,0,0,16">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto" />
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
-                            <TextBlock Text="图像显示" FontWeight="SemiBold" VerticalAlignment="Center" />
+                            <TextBlock Text="图像显示" Style="{StaticResource EditorSectionTitleStyle}" Margin="0" VerticalAlignment="Center" />
                             <ComboBox x:Name="OutputDisplayCombo"
                                       Grid.Column="1"
                                       MinWidth="260"
-                                      Margin="12,0,8,0"
+                                      Margin="16,0,8,0"
                                       SelectionChanged="OutputDisplayCombo_SelectionChanged"
                                       ToolTip="选择要显示的工具输出图像、区域或轮廓变量" />
-                            <Button Grid.Column="2" Content="显示输入" MinWidth="76" Click="ShowInputImage_Click" />
+                            <Button Grid.Column="2" Content="显示输入" Click="ShowInputImage_Click" />
                         </Grid>
                         <Border Background="Black"
                                 BorderBrush="{DynamicResource ControlStrokeColorSecondaryBrush}"
@@ -161,13 +200,13 @@
 
                 <Border Grid.Row="1" Style="{StaticResource PanelBorderStyle}">
                     <DockPanel>
-                        <TextBlock DockPanel.Dock="Top" Text="运行结果" FontWeight="SemiBold" Margin="0,0,0,8" />
+                        <TextBlock DockPanel.Dock="Top" Text="运行结果" Style="{StaticResource EditorSectionTitleStyle}" />
                         <Grid>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="*" />
                             </Grid.ColumnDefinitions>
-                            <GroupBox Header="变量" Margin="0,0,6,0">
+                            <GroupBox Header="变量" Margin="0,0,8,0">
                                 <DataGrid x:Name="VariablesGrid"
                                           AutoGenerateColumns="False"
                                           IsReadOnly="True">
@@ -179,7 +218,7 @@
                                     </DataGrid.Columns>
                                 </DataGrid>
                             </GroupBox>
-                            <GroupBox Grid.Column="1" Header="日志" Margin="6,0,0,0">
+                            <GroupBox Grid.Column="1" Header="日志" Margin="8,0,0,0">
                                 <DataGrid x:Name="LogGrid"
                                           AutoGenerateColumns="False"
                                           IsReadOnly="True">
@@ -198,7 +237,7 @@
 
         <DockPanel Grid.Row="2" Background="{DynamicResource SolidBackgroundFillColorSecondaryBrush}">
             <TextBlock x:Name="StatusText"
-                       Margin="12,0"
+                       Margin="8,0"
                        VerticalAlignment="Center"
                        Foreground="{DynamicResource TextFillColorSecondaryBrush}"
                        Text="就绪" />

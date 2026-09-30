@@ -5,7 +5,6 @@ using System.Linq;
 using System.Reflection;
 using System.Runtime.Loader;
 using VisionFlow.Core;
-using VisionFlow.Ui;
 
 namespace VisionFlow.Editing
 {
@@ -17,11 +16,20 @@ namespace VisionFlow.Editing
         public List<string> Errors { get; } = new List<string>();
     }
 
-    /// <summary>扫描 plugins 文件夹中的 DLL，并按特性自动注册工具和编辑页。</summary>
+    /// <summary>
+    /// 扫描 plugins 文件夹中的 DLL，并按特性自动注册工具和编辑页。
+    /// 工具执行注册（工具箱、持久化身份）与平台相关编辑器注册分离：
+    /// 编辑器注册通过 <see cref="EditorRegistrars"/> 由宿主接入
+    /// （WinForms 宿主接入 ToolEditPageRegistry.RegisterEditor，
+    /// WPF 宿主接入 WpfToolEditorRegistry.RegisterEditor）。
+    /// </summary>
     public static class VisionFlowPluginLoader
     {
         private static readonly HashSet<string> _probeDirectories = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         private static bool _resolverRegistered;
+
+        /// <summary>平台相关的编辑器注册入口：输入候选编辑器类型，返回是否注册成功。</summary>
+        public static IList<Func<Type, bool>> EditorRegistrars { get; } = new List<Func<Type, bool>>();
 
         public static IReadOnlyList<PluginLoadResult> LoadFromDefaultDirectory()
         {
@@ -86,6 +94,8 @@ namespace VisionFlow.Editing
                 {
                     if (!type.IsAbstract && typeof(ToolBase).IsAssignableFrom(type))
                     {
+                        // 注册持久化身份（稳定 ID），与是否进入工具箱无关
+                        FlowSerializer.RegisterToolType(type);
                         ToolboxToolAttribute attribute = type.GetCustomAttribute<ToolboxToolAttribute>(inherit: false);
                         if (attribute != null && ToolboxRegistry.RegisterTool(type, attribute))
                         {
@@ -93,7 +103,19 @@ namespace VisionFlow.Editing
                         }
                     }
 
-                    if (!type.IsAbstract && ToolEditPageRegistry.RegisterEditor(type))
+                    bool editorRegistered = false;
+                    foreach (Func<Type, bool> registrar in EditorRegistrars)
+                    {
+                        try
+                        {
+                            editorRegistered |= registrar(type);
+                        }
+                        catch (Exception ex)
+                        {
+                            result.Errors.Add($"编辑器注册失败 {type.FullName}: {ex.Message}");
+                        }
+                    }
+                    if (editorRegistered)
                     {
                         result.EditorCount++;
                     }

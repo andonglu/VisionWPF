@@ -3,12 +3,17 @@
   <ItemGroup>
     <ProjectReference Include="..\VisionFlow.Base\VisionFlow.Base.csproj" />
     <ProjectReference Include="..\VisionFlow.Tools\VisionFlow.Tools.csproj" />
-    <ProjectReference Include="..\VisionFlow.ToolEditors\VisionFlow.ToolEditors.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="halcondotnet">
+      <HintPath>..\lib\halcon\halcondotnet.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
   </ItemGroup>
 
   <PropertyGroup>
-    <TargetFramework>net9.0-windows</TargetFramework>
-    <UseWindowsForms>true</UseWindowsForms>
+    <TargetFramework>net9.0</TargetFramework>
     <Nullable>disable</Nullable>
     <ImplicitUsings>disable</ImplicitUsings>
     <LangVersion>latest</LangVersion>
