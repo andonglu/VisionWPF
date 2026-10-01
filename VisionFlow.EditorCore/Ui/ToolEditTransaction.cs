@@ -5,11 +5,16 @@ using System.Reflection;
 using HalconDotNet;
 using VisionFlow.Core;
 using VisionFlow.Nodes;
+using VisionFlow.Runtime;
 
 namespace VisionFlow.Ui
 {
-    /// <summary>工具编辑和预览只操作配置副本；确认时发布重新校验后的配置。</summary>
-    public sealed class ToolEditTransaction
+    /// <summary>
+    /// 工具编辑和预览只操作配置副本；确认时发布重新校验后的配置。
+    /// 工作副本在预览/测试运行中可能缓存资源（如模型句柄），编辑结束（确认或取消）后须 Dispose 释放；
+    /// 确认替换时，被替换下来的原工具资源同时释放。
+    /// </summary>
+    public sealed class ToolEditTransaction : IDisposable
     {
         private readonly ToolNode _target;
         private bool _committed;
@@ -54,9 +59,17 @@ namespace VisionFlow.Ui
             HasCommittedChanges = !SameConfiguration(_target.Tool, configuration);
             if (HasCommittedChanges)
             {
+                ToolBase replaced = _target.Tool;
                 _target.ReplaceTool(configuration);
+                FlowResources.Release(replaced);
             }
             _committed = true;
+        }
+
+        /// <summary>释放工作副本在预览/测试运行中缓存的资源。可重复调用。</summary>
+        public void Dispose()
+        {
+            FlowResources.Release(WorkingCopy);
         }
 
         public static ToolBase CopyConfiguration(ToolBase source)

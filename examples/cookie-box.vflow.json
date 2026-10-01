@@ -1,0 +1,334 @@
+{
+  "FormatVersion": 1,
+  "Id": "8bf16f89b6f14eb3ba2b08c6d08c0a90",
+  "Kind": "Sequence",
+  "Name": "\u997C\u5E72\u76D2\u591A\u6A21\u578B\u5B9A\u4F4D\u793A\u4F8B",
+  "Tool": null,
+  "Condition": null,
+  "Loop": null,
+  "Outputs": null,
+  "FlowOutputs": null,
+  "Children": [
+    {
+      "FormatVersion": null,
+      "Id": "8c30e9acd81f48a2b01e1b0dcf66ea4a",
+      "Kind": "Tool",
+      "Name": "\u97621\u5339\u914D",
+      "Tool": {
+        "ToolId": "descriptor-match",
+        "TypeName": "VisionFlow.Tools.DescriptorMatchTool, VisionFlow.Tools, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null",
+        "ModuleName": "\u97621\u5339\u914D",
+        "Properties": {
+          "TemplateData": null,
+          "TemplateRow1": 224,
+          "TemplateColumn1": 122,
+          "TemplateRow2": 406,
+          "TemplateColumn2": 550,
+          "TemplateCropRow": 0,
+          "TemplateCropColumn": 0,
+          "DetectorType": "harris_binomial",
+          "Depth": 11,
+          "NumberFerns": 30,
+          "PatchSize": 17,
+          "MinScale": 0.4,
+          "MaxScale": 1.2,
+          "Seed": 42,
+          "ScoreType": "num_points",
+          "UseModelFileCache": true,
+          "ImagePath": "Input.Image",
+          "MinScore": 0.25,
+          "NumMatches": 1,
+          "FailWhenNotFound": false
+        }
+      },
+      "Condition": null,
+      "Loop": null,
+      "Outputs": null,
+      "FlowOutputs": null,
+      "Children": null,
+      "IfBranch": null,
+      "ElseBranch": null
+    },
+    {
+      "FormatVersion": null,
+      "Id": "52df16f8f1f4420cb8f57b2d4eaa89f3",
+      "Kind": "Tool",
+      "Name": "\u97621\u59FF\u6001",
+      "Tool": {
+        "ToolId": "range-classify",
+        "TypeName": "VisionFlow.Tools.RangeClassifyTool, VisionFlow.Tools, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null",
+        "ModuleName": "\u97621\u59FF\u6001",
+        "Properties": {
+          "ValuePath": "\u97621\u5339\u914D.Angle",
+          "ValueMode": 1,
+          "Rules": "\u4FA7\u653E=45~135;\u4FA7\u653E=225~315;\u5012\u653E=135~225",
+          "DefaultLabel": "\u6B63\u653E",
+          "InvalidLabel": "\u672A\u627E\u5230"
+        }
+      },
+      "Condition": null,
+      "Loop": null,
+      "Outputs": null,
+      "FlowOutputs": null,
+      "Children": null,
+      "IfBranch": null,
+      "ElseBranch": null
+    },
+    {
+      "FormatVersion": null,
+      "Id": "7b87650284f14da0ba654b5b1362e4b3",
+      "Kind": "Tool",
+      "Name": "\u97622\u5339\u914D",
+      "Tool": {
+        "ToolId": "descriptor-match",
+        "TypeName": "VisionFlow.Tools.DescriptorMatchTool, VisionFlow.Tools, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null",
+        "ModuleName": "\u97622\u5339\u914D",
+        "Properties": {
+          "TemplateData": null,
+          "TemplateRow1": 224,
+          "TemplateColumn1": 112,
+          "TemplateRow2": 406,
+          "TemplateColumn2": 540,
+          "TemplateCropRow": 0,
+          "TemplateCropColumn": 0,
+          "DetectorType": "harris_binomial",
+          "Depth": 11,
+          "NumberFerns": 30,
+          "PatchSize": 17,
+          "MinScale": 0.4,
+          "MaxScale": 1.2,
+          "Seed": 42,
+          "ScoreType": "num_points",
+          "UseModelFileCache": true,
+          "ImagePath": "Input.Image",
+          "MinScore": 0.25,
+          "NumMatches": 1,
+          "FailWhenNotFound": false
+        }
+      },
+      "Condition": null,
+      "Loop": null,
+      "Outputs": null,
+      "FlowOutputs": null,
+      "Children": null,
+      "IfBranch": null,
+      "ElseBranch": null
+    },
+    {
+      "FormatVersion": null,
+      "Id": "27225fe248c44ff3a2d46ea43138c213",
+      "Kind": "Tool",
+      "Name": "\u97622\u59FF\u6001",
+      "Tool": {
+        "ToolId": "range-classify",
+        "TypeName": "VisionFlow.Tools.RangeClassifyTool, VisionFlow.Tools, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null",
+        "ModuleName": "\u97622\u59FF\u6001",
+        "Properties": {
+          "ValuePath": "\u97622\u5339\u914D.Angle",
+          "ValueMode": 1,
+          "Rules": "\u4FA7\u653E=45~135;\u4FA7\u653E=225~315;\u5012\u653E=135~225",
+          "DefaultLabel": "\u6B63\u653E",
+          "InvalidLabel": "\u672A\u627E\u5230"
+        }
+      },
+      "Condition": null,
+      "Loop": null,
+      "Outputs": null,
+      "FlowOutputs": null,
+      "Children": null,
+      "IfBranch": null,
+      "ElseBranch": null
+    },
+    {
+      "FormatVersion": null,
+      "Id": "400fa32388ff42fab225e1301d017f69",
+      "Kind": "Tool",
+      "Name": "\u97623\u5339\u914D",
+      "Tool": {
+        "ToolId": "descriptor-match",
+        "TypeName": "VisionFlow.Tools.DescriptorMatchTool, VisionFlow.Tools, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null",
+        "ModuleName": "\u97623\u5339\u914D",
+        "Properties": {
+          "TemplateData": null,
+          "TemplateRow1": 224,
+          "TemplateColumn1": 218,
+          "TemplateRow2": 410,
+          "TemplateColumn2": 497,
+          "TemplateCropRow": 0,
+          "TemplateCropColumn": 0,
+          "DetectorType": "harris_binomial",
+          "Depth": 11,
+          "NumberFerns": 30,
+          "PatchSize": 17,
+          "MinScale": 0.4,
+          "MaxScale": 1.2,
+          "Seed": 42,
+          "ScoreType": "num_points",
+          "UseModelFileCache": true,
+          "ImagePath": "Input.Image",
+          "MinScore": 0.25,
+          "NumMatches": 1,
+          "FailWhenNotFound": false
+        }
+      },
+      "Condition": null,
+      "Loop": null,
+      "Outputs": null,
+      "FlowOutputs": null,
+      "Children": null,
+      "IfBranch": null,
+      "ElseBranch": null
+    },
+    {
+      "FormatVersion": null,
+      "Id": "e33e49c1a8744e3d99328d23dabc63e5",
+      "Kind": "Tool",
+      "Name": "\u97623\u59FF\u6001",
+      "Tool": {
+        "ToolId": "range-classify",
+        "TypeName": "VisionFlow.Tools.RangeClassifyTool, VisionFlow.Tools, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null",
+        "ModuleName": "\u97623\u59FF\u6001",
+        "Properties": {
+          "ValuePath": "\u97623\u5339\u914D.Angle",
+          "ValueMode": 1,
+          "Rules": "\u4FA7\u653E=45~135;\u4FA7\u653E=225~315;\u5012\u653E=135~225",
+          "DefaultLabel": "\u6B63\u653E",
+          "InvalidLabel": "\u672A\u627E\u5230"
+        }
+      },
+      "Condition": null,
+      "Loop": null,
+      "Outputs": null,
+      "FlowOutputs": null,
+      "Children": null,
+      "IfBranch": null,
+      "ElseBranch": null
+    },
+    {
+      "FormatVersion": null,
+      "Id": "1440951cecb54d0a996879ec053287f7",
+      "Kind": "Tool",
+      "Name": "\u97624\u5339\u914D",
+      "Tool": {
+        "ToolId": "descriptor-match",
+        "TypeName": "VisionFlow.Tools.DescriptorMatchTool, VisionFlow.Tools, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null",
+        "ModuleName": "\u97624\u5339\u914D",
+        "Properties": {
+          "TemplateData": null,
+          "TemplateRow1": 128,
+          "TemplateColumn1": 130,
+          "TemplateRow2": 406,
+          "TemplateColumn2": 556,
+          "TemplateCropRow": 0,
+          "TemplateCropColumn": 0,
+          "DetectorType": "harris_binomial",
+          "Depth": 11,
+          "NumberFerns": 30,
+          "PatchSize": 17,
+          "MinScale": 0.4,
+          "MaxScale": 1.2,
+          "Seed": 42,
+          "ScoreType": "num_points",
+          "UseModelFileCache": true,
+          "ImagePath": "Input.Image",
+          "MinScore": 0.25,
+          "NumMatches": 1,
+          "FailWhenNotFound": false
+        }
+      },
+      "Condition": null,
+      "Loop": null,
+      "Outputs": null,
+      "FlowOutputs": null,
+      "Children": null,
+      "IfBranch": null,
+      "ElseBranch": null
+    },
+    {
+      "FormatVersion": null,
+      "Id": "f6390a6adb0b4eb191e12466c37915aa",
+      "Kind": "Tool",
+      "Name": "\u97624\u59FF\u6001",
+      "Tool": {
+        "ToolId": "range-classify",
+        "TypeName": "VisionFlow.Tools.RangeClassifyTool, VisionFlow.Tools, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null",
+        "ModuleName": "\u97624\u59FF\u6001",
+        "Properties": {
+          "ValuePath": "\u97624\u5339\u914D.Angle",
+          "ValueMode": 1,
+          "Rules": "\u4FA7\u653E=45~135;\u4FA7\u653E=225~315;\u5012\u653E=135~225",
+          "DefaultLabel": "\u6B63\u653E",
+          "InvalidLabel": "\u672A\u627E\u5230"
+        }
+      },
+      "Condition": null,
+      "Loop": null,
+      "Outputs": null,
+      "FlowOutputs": null,
+      "Children": null,
+      "IfBranch": null,
+      "ElseBranch": null
+    },
+    {
+      "FormatVersion": null,
+      "Id": "50b7336612e1452ab294f81ca82b19eb",
+      "Kind": "FlowOutput",
+      "Name": "\u6D41\u7A0B\u8F93\u51FA1",
+      "Tool": null,
+      "Condition": null,
+      "Loop": null,
+      "Outputs": null,
+      "FlowOutputs": [
+        {
+          "Name": "Face1",
+          "Kind": "Single",
+          "Type": "String",
+          "ClrTypeName": null,
+          "Value": {
+            "IsConstant": false,
+            "Reference": "\u97621\u59FF\u6001.Label",
+            "Constant": null
+          }
+        },
+        {
+          "Name": "Face2",
+          "Kind": "Single",
+          "Type": "String",
+          "ClrTypeName": null,
+          "Value": {
+            "IsConstant": false,
+            "Reference": "\u97622\u59FF\u6001.Label",
+            "Constant": null
+          }
+        },
+        {
+          "Name": "Face3",
+          "Kind": "Single",
+          "Type": "String",
+          "ClrTypeName": null,
+          "Value": {
+            "IsConstant": false,
+            "Reference": "\u97623\u59FF\u6001.Label",
+            "Constant": null
+          }
+        },
+        {
+          "Name": "Face4",
+          "Kind": "Single",
+          "Type": "String",
+          "ClrTypeName": null,
+          "Value": {
+            "IsConstant": false,
+            "Reference": "\u97624\u59FF\u6001.Label",
+            "Constant": null
+          }
+        }
+      ],
+      "Children": null,
+      "IfBranch": null,
+      "ElseBranch": null
+    }
+  ],
+  "IfBranch": null,
+  "ElseBranch": null
+}

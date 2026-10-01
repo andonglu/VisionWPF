@@ -13,6 +13,7 @@ internal sealed class ExampleImageBaseline : IDisposable
 {
     internal const string RegionExample = "threshold-region.vflow.json";
     internal const string LineExample = "xld-line.vflow.json";
+    internal const string RegionMeasureExample = "region-measure.vflow.json";
 
     private readonly FlowEngine _engine = new();
     private readonly SequenceNode _root;
@@ -25,7 +26,7 @@ internal sealed class ExampleImageBaseline : IDisposable
     public ExampleImageBaseline(string exampleName)
     {
         HalconRuntimeAvailabilityTests.RequireAvailable();
-        if (exampleName != RegionExample && exampleName != LineExample)
+        if (exampleName != RegionExample && exampleName != LineExample && exampleName != RegionMeasureExample)
         {
             throw new ArgumentException("Unknown image baseline: " + exampleName, nameof(exampleName));
         }
@@ -57,6 +58,16 @@ internal sealed class ExampleImageBaseline : IDisposable
             Assert.True(firstArea > 9027 && firstArea < 9977,
                 $"FirstArea outside sample regression range (9027, 9977): {firstArea}");
             Assert.Equal(true, context.GetVariable("流程输出1", "Ok").Value);
+        }
+        else if (ExampleName == RegionMeasureExample)
+        {
+            // 12 片完整刀片按区域形状测出；贴图像右边缘被截断的 1 片测量失败并计入 FailedCount
+            Assert.Equal(true, context.GetVariable("流程输出1", "Ok").Value);
+            Assert.Equal(12, context.GetVariable("流程输出1", "MeasuredCount").Value);
+            Assert.Equal(1, context.GetVariable("流程输出1", "FailedCount").Value);
+            double length2 = Assert.IsType<double>(context.GetVariable("流程输出1", "LastLength2").Value);
+            Assert.True(Math.Abs(length2 - 21.0) < 0.3,
+                $"LastLength2 outside sample regression range (21.0 +/- 0.3): {length2}");
         }
         else
         {

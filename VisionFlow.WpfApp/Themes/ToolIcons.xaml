@@ -543,6 +543,61 @@
         </Canvas>
     </Viewbox>
 
+    <!-- 手工追加：分区检测（3×2 检测格，一格缺失） -->
+    <Viewbox x:Key="ToolIcon.zone-inspect" x:Shared="False" Width="24" Height="24" Stretch="Uniform">
+        <Canvas Width="24" Height="24">
+            <Rectangle Canvas.Left="3" Canvas.Top="5" Width="5" Height="6" RadiusX="1" RadiusY="1" Stroke="{DynamicResource TextFillColorPrimaryBrush}" StrokeThickness="1.6" Fill="#B23366CC" />
+            <Rectangle Canvas.Left="9.5" Canvas.Top="5" Width="5" Height="6" RadiusX="1" RadiusY="1" Stroke="{DynamicResource TextFillColorPrimaryBrush}" StrokeThickness="1.6" Fill="#B23366CC" />
+            <Rectangle Canvas.Left="16" Canvas.Top="5" Width="5" Height="6" RadiusX="1" RadiusY="1" Stroke="{DynamicResource TextFillColorPrimaryBrush}" StrokeThickness="1.6" Fill="#B23366CC" />
+            <Rectangle Canvas.Left="3" Canvas.Top="13" Width="5" Height="6" RadiusX="1" RadiusY="1" Stroke="{DynamicResource TextFillColorPrimaryBrush}" StrokeThickness="1.6" Fill="#B23366CC" />
+            <Rectangle Canvas.Left="9.5" Canvas.Top="13" Width="5" Height="6" RadiusX="1" RadiusY="1" Stroke="{DynamicResource SystemFillColorCautionBrush}" StrokeThickness="1.6" Fill="{x:Null}" StrokeDashArray="1.5 1" />
+            <Rectangle Canvas.Left="16" Canvas.Top="13" Width="5" Height="6" RadiusX="1" RadiusY="1" Stroke="{DynamicResource TextFillColorPrimaryBrush}" StrokeThickness="1.6" Fill="#B23366CC" />
+        </Canvas>
+    </Viewbox>
+
+    <!-- 手工追加：描述子匹配（透视四边形 + 特征点） -->
+    <Viewbox x:Key="ToolIcon.descriptor-match" x:Shared="False" Width="24" Height="24" Stretch="Uniform">
+        <Canvas Width="24" Height="24">
+            <Path Data="M4,7 L19,4 L21,18 L5,20 Z" Stroke="{DynamicResource TextFillColorPrimaryBrush}" StrokeThickness="1.8" StrokeLineJoin="Round" Fill="{x:Null}" />
+            <Ellipse Canvas.Left="8" Canvas.Top="8.5" Width="2.6" Height="2.6" Fill="{DynamicResource AccentFillColorDefaultBrush}" />
+            <Ellipse Canvas.Left="14" Canvas.Top="7.5" Width="2.6" Height="2.6" Fill="{DynamicResource AccentFillColorDefaultBrush}" />
+            <Ellipse Canvas.Left="11" Canvas.Top="13" Width="2.6" Height="2.6" Fill="{DynamicResource AccentFillColorDefaultBrush}" />
+            <Ellipse Canvas.Left="15.5" Canvas.Top="14" Width="2.6" Height="2.6" Fill="{DynamicResource SystemFillColorCautionBrush}" />
+        </Canvas>
+    </Viewbox>
+
+    <!-- 手工追加：数值区间分类（数轴分段 + 标签） -->
+    <Viewbox x:Key="ToolIcon.range-classify" x:Shared="False" Width="24" Height="24" Stretch="Uniform">
+        <Canvas Width="24" Height="24">
+            <Line X1="3" Y1="16" X2="21" Y2="16" Stroke="{DynamicResource TextFillColorPrimaryBrush}" StrokeThickness="1.8" StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
+            <Line X1="9" Y1="13" X2="9" Y2="19" Stroke="{DynamicResource TextFillColorPrimaryBrush}" StrokeThickness="1.8" StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
+            <Line X1="15" Y1="13" X2="15" Y2="19" Stroke="{DynamicResource TextFillColorPrimaryBrush}" StrokeThickness="1.8" StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
+            <Rectangle Canvas.Left="10" Canvas.Top="4" Width="4" Height="7" RadiusX="1" RadiusY="1" Fill="{DynamicResource AccentFillColorDefaultBrush}" />
+            <Rectangle Canvas.Left="4" Canvas.Top="7" Width="3.5" Height="4" RadiusX="1" RadiusY="1" Fill="#B23366CC" />
+            <Rectangle Canvas.Left="16.5" Canvas.Top="7" Width="3.5" Height="4" RadiusX="1" RadiusY="1" Fill="#B23366CC" />
+        </Canvas>
+    </Viewbox>
+
+    <!-- 手工追加：区域排序（2×2 网格 + 行优先编号箭头） -->
+    <Viewbox x:Key="ToolIcon.region-sort" x:Shared="False" Width="24" Height="24" Stretch="Uniform">
+        <Canvas Width="24" Height="24">
+            <Rectangle Canvas.Left="3" Canvas.Top="3" Width="6" Height="6" RadiusX="1" RadiusY="1" Stroke="{DynamicResource TextFillColorPrimaryBrush}" StrokeThickness="1.6" Fill="#B23366CC" />
+            <Rectangle Canvas.Left="15" Canvas.Top="3" Width="6" Height="6" RadiusX="1" RadiusY="1" Stroke="{DynamicResource TextFillColorPrimaryBrush}" StrokeThickness="1.6" Fill="#B23366CC" />
+            <Rectangle Canvas.Left="3" Canvas.Top="15" Width="6" Height="6" RadiusX="1" RadiusY="1" Stroke="{DynamicResource TextFillColorPrimaryBrush}" StrokeThickness="1.6" Fill="#B23366CC" />
+            <Rectangle Canvas.Left="15" Canvas.Top="15" Width="6" Height="6" RadiusX="1" RadiusY="1" Stroke="{DynamicResource TextFillColorPrimaryBrush}" StrokeThickness="1.6" Fill="#B23366CC" />
+            <Path Data="M9.5,6 L14.5,6 M12.5,4 L14.5,6 L12.5,8 M15,9.5 L9,14.5 M9.5,18 L14.5,18 M12.5,16 L14.5,18 L12.5,20" Stroke="{DynamicResource AccentFillColorDefaultBrush}" StrokeThickness="1.4" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Fill="{x:Null}" />
+        </Canvas>
+    </Viewbox>
+
+    <!-- 手工追加：角度换算（量角器 + 角度线） -->
+    <Viewbox x:Key="ToolIcon.angle-convert" x:Shared="False" Width="24" Height="24" Stretch="Uniform">
+        <Canvas Width="24" Height="24">
+            <Path Data="M3,19 L21,19 M3,19 L16,6" Stroke="{DynamicResource TextFillColorPrimaryBrush}" StrokeThickness="1.8" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Fill="{x:Null}" />
+            <Path Data="M11,19 A8,8 0 0 0 8.7,13.3" Stroke="{DynamicResource AccentFillColorDefaultBrush}" StrokeThickness="1.8" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Fill="{x:Null}" />
+            <Ellipse Canvas.Left="17" Canvas.Top="3.5" Width="3.5" Height="3.5" Stroke="{DynamicResource AccentFillColorDefaultBrush}" StrokeThickness="1.4" Fill="{x:Null}" />
+        </Canvas>
+    </Viewbox>
+
     <Viewbox x:Key="ToolIcon._default" x:Shared="False" Width="24" Height="24" Stretch="Uniform">
         <Canvas Width="24" Height="24">
             <Rectangle Canvas.Left="4" Canvas.Top="4" Width="16" Height="16" RadiusX="2" RadiusY="2" Stroke="{DynamicResource TextFillColorPrimaryBrush}" StrokeThickness="1.8" Fill="{x:Null}" />

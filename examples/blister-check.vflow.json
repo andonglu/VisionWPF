@@ -1,0 +1,520 @@
+{
+  "FormatVersion": 1,
+  "Id": "9338f085093c4070952b0852ae30c190",
+  "Kind": "Sequence",
+  "Name": "\u6CE1\u7F69\u5B8C\u6574\u6027\u68C0\u6D4B\u793A\u4F8B",
+  "Tool": null,
+  "Condition": null,
+  "Loop": null,
+  "Outputs": null,
+  "FlowOutputs": null,
+  "Children": [
+    {
+      "FormatVersion": null,
+      "Id": "cc37424b1bb84dee9c8a5422f7be0fe5",
+      "Kind": "Tool",
+      "Name": "\u4E8C\u503C\u53161",
+      "Tool": {
+        "ToolId": "threshold",
+        "TypeName": "VisionFlow.Tools.ThresholdTool, VisionFlow.Tools, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null",
+        "ModuleName": "\u4E8C\u503C\u53161",
+        "Properties": {
+          "ImagePath": "Input.Image",
+          "FailWhenNotFound": true,
+          "SegmentMethod": 0,
+          "MinGray": 90,
+          "MaxGray": 255,
+          "MinSize": 20,
+          "Sigma": 2,
+          "Percent": 5,
+          "BinaryMethod": "max_separability",
+          "LightDark": "light",
+          "MaskWidth": 15,
+          "MaskHeight": 15,
+          "StdDevScale": 0.2,
+          "AbsThreshold": 15,
+          "Connection": true
+        }
+      },
+      "Condition": null,
+      "Loop": null,
+      "Outputs": null,
+      "FlowOutputs": null,
+      "Children": null,
+      "IfBranch": null,
+      "ElseBranch": null
+    },
+    {
+      "FormatVersion": null,
+      "Id": "3fac7cc655924fd29aa3178b371118fe",
+      "Kind": "Tool",
+      "Name": "\u533A\u57DF\u7B5B\u90091",
+      "Tool": {
+        "ToolId": "selectregion",
+        "TypeName": "VisionFlow.Tools.SelectRegionTool, VisionFlow.Tools, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null",
+        "ModuleName": "\u533A\u57DF\u7B5B\u90091",
+        "Properties": {
+          "RegionPath": "\u4E8C\u503C\u53161.Region",
+          "Feature": "area",
+          "Min": 5000,
+          "Max": 9999999,
+          "TakeMode": 1,
+          "FailWhenNotFound": true
+        }
+      },
+      "Condition": null,
+      "Loop": null,
+      "Outputs": null,
+      "FlowOutputs": null,
+      "Children": null,
+      "IfBranch": null,
+      "ElseBranch": null
+    },
+    {
+      "FormatVersion": null,
+      "Id": "bf9708ab7ab440b19e484b59db810231",
+      "Kind": "Tool",
+      "Name": "\u5F62\u72B6\u8F6C\u63621",
+      "Tool": {
+        "ToolId": "region-shape-trans",
+        "TypeName": "VisionFlow.Tools.RegionShapeTransTool, VisionFlow.Tools, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null",
+        "ModuleName": "\u5F62\u72B6\u8F6C\u63621",
+        "Properties": {
+          "RegionPath": "\u533A\u57DF\u7B5B\u90091.Region",
+          "Type": 0,
+          "FailWhenNotFound": true
+        }
+      },
+      "Condition": null,
+      "Loop": null,
+      "Outputs": null,
+      "FlowOutputs": null,
+      "Children": null,
+      "IfBranch": null,
+      "ElseBranch": null
+    },
+    {
+      "FormatVersion": null,
+      "Id": "241544f7ce724fe281b87bd150ea1b8b",
+      "Kind": "Tool",
+      "Name": "\u533A\u57DF\u5B9A\u4F4D1",
+      "Tool": {
+        "ToolId": "regionpose",
+        "TypeName": "VisionFlow.Tools.RegionPoseTool, VisionFlow.Tools, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null",
+        "ModuleName": "\u533A\u57DF\u5B9A\u4F4D1",
+        "Properties": {
+          "RegionPath": "\u5F62\u72B6\u8F6C\u63621.Region",
+          "BaseRow": 228.721,
+          "BaseColumn": 320.902,
+          "BaseAngle": -0.00019,
+          "AngleMode": 1,
+          "FailWhenNotFound": true
+        }
+      },
+      "Condition": null,
+      "Loop": null,
+      "Outputs": null,
+      "FlowOutputs": null,
+      "Children": null,
+      "IfBranch": null,
+      "ElseBranch": null
+    },
+    {
+      "FormatVersion": null,
+      "Id": "18b15e97b7cd4653956bffe957d46e34",
+      "Kind": "Tool",
+      "Name": "\u6CE1\u7F69\u683C",
+      "Tool": {
+        "ToolId": "manual-region",
+        "TypeName": "VisionFlow.Tools.ManualRegionTool, VisionFlow.Tools, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null",
+        "ModuleName": "\u6CE1\u7F69\u683C",
+        "Properties": {
+          "RoiJson": "{\u0022Items\u0022:[{\u0022Name\u0022:\u0022\\u6CE1\\u7F69_1-1\u0022,\u0022Kind\u0022:\u0022Rectangle2\u0022,\u0022Polarity\u0022:\u0022Include\u0022,\u0022Row1\u0022:0,\u0022Column1\u0022:0,\u0022Row2\u0022:0,\u0022Column2\u0022:0,\u0022Row\u0022:88,\u0022Column\u0022:163,\u0022Phi\u0022:0,\u0022Length1\u0022:64,\u0022Length2\u0022:30,\u0022Radius\u0022:0},{\u0022Name\u0022:\u0022\\u6CE1\\u7F69_1-2\u0022,\u0022Kind\u0022:\u0022Rectangle2\u0022,\u0022Polarity\u0022:\u0022Include\u0022,\u0022Row1\u0022:0,\u0022Column1\u0022:150,\u0022Row2\u0022:0,\u0022Column2\u0022:150,\u0022Row\u0022:88,\u0022Column\u0022:313,\u0022Phi\u0022:0,\u0022Length1\u0022:64,\u0022Length2\u0022:30,\u0022Radius\u0022:0},{\u0022Name\u0022:\u0022\\u6CE1\\u7F69_1-3\u0022,\u0022Kind\u0022:\u0022Rectangle2\u0022,\u0022Polarity\u0022:\u0022Include\u0022,\u0022Row1\u0022:0,\u0022Column1\u0022:300,\u0022Row2\u0022:0,\u0022Column2\u0022:300,\u0022Row\u0022:88,\u0022Column\u0022:463,\u0022Phi\u0022:0,\u0022Length1\u0022:64,\u0022Length2\u0022:30,\u0022Radius\u0022:0},{\u0022Name\u0022:\u0022\\u6CE1\\u7F69_2-1\u0022,\u0022Kind\u0022:\u0022Rectangle2\u0022,\u0022Polarity\u0022:\u0022Include\u0022,\u0022Row1\u0022:70,\u0022Column1\u0022:0,\u0022Row2\u0022:70,\u0022Column2\u0022:0,\u0022Row\u0022:158,\u0022Column\u0022:163,\u0022Phi\u0022:0,\u0022Length1\u0022:64,\u0022Length2\u0022:30,\u0022Radius\u0022:0},{\u0022Name\u0022:\u0022\\u6CE1\\u7F69_2-2\u0022,\u0022Kind\u0022:\u0022Rectangle2\u0022,\u0022Polarity\u0022:\u0022Include\u0022,\u0022Row1\u0022:70,\u0022Column1\u0022:150,\u0022Row2\u0022:70,\u0022Column2\u0022:150,\u0022Row\u0022:158,\u0022Column\u0022:313,\u0022Phi\u0022:0,\u0022Length1\u0022:64,\u0022Length2\u0022:30,\u0022Radius\u0022:0},{\u0022Name\u0022:\u0022\\u6CE1\\u7F69_2-3\u0022,\u0022Kind\u0022:\u0022Rectangle2\u0022,\u0022Polarity\u0022:\u0022Include\u0022,\u0022Row1\u0022:70,\u0022Column1\u0022:300,\u0022Row2\u0022:70,\u0022Column2\u0022:300,\u0022Row\u0022:158,\u0022Column\u0022:463,\u0022Phi\u0022:0,\u0022Length1\u0022:64,\u0022Length2\u0022:30,\u0022Radius\u0022:0},{\u0022Name\u0022:\u0022\\u6CE1\\u7F69_3-1\u0022,\u0022Kind\u0022:\u0022Rectangle2\u0022,\u0022Polarity\u0022:\u0022Include\u0022,\u0022Row1\u0022:140,\u0022Column1\u0022:0,\u0022Row2\u0022:140,\u0022Column2\u0022:0,\u0022Row\u0022:228,\u0022Column\u0022:163,\u0022Phi\u0022:0,\u0022Length1\u0022:64,\u0022Length2\u0022:30,\u0022Radius\u0022:0},{\u0022Name\u0022:\u0022\\u6CE1\\u7F69_3-2\u0022,\u0022Kind\u0022:\u0022Rectangle2\u0022,\u0022Polarity\u0022:\u0022Include\u0022,\u0022Row1\u0022:140,\u0022Column1\u0022:150,\u0022Row2\u0022:140,\u0022Column2\u0022:150,\u0022Row\u0022:228,\u0022Column\u0022:313,\u0022Phi\u0022:0,\u0022Length1\u0022:64,\u0022Length2\u0022:30,\u0022Radius\u0022:0},{\u0022Name\u0022:\u0022\\u6CE1\\u7F69_3-3\u0022,\u0022Kind\u0022:\u0022Rectangle2\u0022,\u0022Polarity\u0022:\u0022Include\u0022,\u0022Row1\u0022:140,\u0022Column1\u0022:300,\u0022Row2\u0022:140,\u0022Column2\u0022:300,\u0022Row\u0022:228,\u0022Column\u0022:463,\u0022Phi\u0022:0,\u0022Length1\u0022:64,\u0022Length2\u0022:30,\u0022Radius\u0022:0},{\u0022Name\u0022:\u0022\\u6CE1\\u7F69_4-1\u0022,\u0022Kind\u0022:\u0022Rectangle2\u0022,\u0022Polarity\u0022:\u0022Include\u0022,\u0022Row1\u0022:210,\u0022Column1\u0022:0,\u0022Row2\u0022:210,\u0022Column2\u0022:0,\u0022Row\u0022:298,\u0022Column\u0022:163,\u0022Phi\u0022:0,\u0022Length1\u0022:64,\u0022Length2\u0022:30,\u0022Radius\u0022:0},{\u0022Name\u0022:\u0022\\u6CE1\\u7F69_4-2\u0022,\u0022Kind\u0022:\u0022Rectangle2\u0022,\u0022Polarity\u0022:\u0022Include\u0022,\u0022Row1\u0022:210,\u0022Column1\u0022:150,\u0022Row2\u0022:210,\u0022Column2\u0022:150,\u0022Row\u0022:298,\u0022Column\u0022:313,\u0022Phi\u0022:0,\u0022Length1\u0022:64,\u0022Length2\u0022:30,\u0022Radius\u0022:0},{\u0022Name\u0022:\u0022\\u6CE1\\u7F69_4-3\u0022,\u0022Kind\u0022:\u0022Rectangle2\u0022,\u0022Polarity\u0022:\u0022Include\u0022,\u0022Row1\u0022:210,\u0022Column1\u0022:300,\u0022Row2\u0022:210,\u0022Column2\u0022:300,\u0022Row\u0022:298,\u0022Column\u0022:463,\u0022Phi\u0022:0,\u0022Length1\u0022:64,\u0022Length2\u0022:30,\u0022Radius\u0022:0},{\u0022Name\u0022:\u0022\\u6CE1\\u7F69_5-1\u0022,\u0022Kind\u0022:\u0022Rectangle2\u0022,\u0022Polarity\u0022:\u0022Include\u0022,\u0022Row1\u0022:280,\u0022Column1\u0022:0,\u0022Row2\u0022:280,\u0022Column2\u0022:0,\u0022Row\u0022:368,\u0022Column\u0022:163,\u0022Phi\u0022:0,\u0022Length1\u0022:64,\u0022Length2\u0022:30,\u0022Radius\u0022:0},{\u0022Name\u0022:\u0022\\u6CE1\\u7F69_5-2\u0022,\u0022Kind\u0022:\u0022Rectangle2\u0022,\u0022Polarity\u0022:\u0022Include\u0022,\u0022Row1\u0022:280,\u0022Column1\u0022:150,\u0022Row2\u0022:280,\u0022Column2\u0022:150,\u0022Row\u0022:368,\u0022Column\u0022:313,\u0022Phi\u0022:0,\u0022Length1\u0022:64,\u0022Length2\u0022:30,\u0022Radius\u0022:0},{\u0022Name\u0022:\u0022\\u6CE1\\u7F69_5-3\u0022,\u0022Kind\u0022:\u0022Rectangle2\u0022,\u0022Polarity\u0022:\u0022Include\u0022,\u0022Row1\u0022:280,\u0022Column1\u0022:300,\u0022Row2\u0022:280,\u0022Column2\u0022:300,\u0022Row\u0022:368,\u0022Column\u0022:463,\u0022Phi\u0022:0,\u0022Length1\u0022:64,\u0022Length2\u0022:30,\u0022Radius\u0022:0}]}",
+          "OutputMode": 2,
+          "MatrixPath": "\u533A\u57DF\u5B9A\u4F4D1.BaseToCurrentMatrix"
+        }
+      },
+      "Condition": null,
+      "Loop": null,
+      "Outputs": null,
+      "FlowOutputs": null,
+      "Children": null,
+      "IfBranch": null,
+      "ElseBranch": null
+    },
+    {
+      "FormatVersion": null,
+      "Id": "144ee78ae1864711971e0855db891a75",
+      "Kind": "Tool",
+      "Name": "\u6CE1\u7F69\u683C\u5408\u5E76",
+      "Tool": {
+        "ToolId": "regionprocess",
+        "TypeName": "VisionFlow.Tools.RegionProcessTool, VisionFlow.Tools, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null",
+        "ModuleName": "\u6CE1\u7F69\u683C\u5408\u5E76",
+        "Properties": {
+          "RegionPath": "\u6CE1\u7F69\u683C.Region",
+          "Method": 2,
+          "Radius": 3.5,
+          "Width": 5,
+          "Height": 5,
+          "FailWhenNotFound": true
+        }
+      },
+      "Condition": null,
+      "Loop": null,
+      "Outputs": null,
+      "FlowOutputs": null,
+      "Children": null,
+      "IfBranch": null,
+      "ElseBranch": null
+    },
+    {
+      "FormatVersion": null,
+      "Id": "a1096bf5c8de4f659c81e3a4d46d7de4",
+      "Kind": "Tool",
+      "Name": "\u9650\u5B9A\u6CE1\u7F69\u683C",
+      "Tool": {
+        "ToolId": "reduce-domain",
+        "TypeName": "VisionFlow.Tools.ReduceDomainTool, VisionFlow.Tools, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null",
+        "ModuleName": "\u9650\u5B9A\u6CE1\u7F69\u683C",
+        "Properties": {
+          "ImagePath": "Input.Image",
+          "RegionPath": "\u6CE1\u7F69\u683C\u5408\u5E76.Region"
+        }
+      },
+      "Condition": null,
+      "Loop": null,
+      "Outputs": null,
+      "FlowOutputs": null,
+      "Children": null,
+      "IfBranch": null,
+      "ElseBranch": null
+    },
+    {
+      "FormatVersion": null,
+      "Id": "48d132263fbd446ca45c3088a889d812",
+      "Kind": "Tool",
+      "Name": "\u901A\u9053\u5206\u89E31",
+      "Tool": {
+        "ToolId": "decompose-channels",
+        "TypeName": "VisionFlow.Tools.DecomposeChannelsTool, VisionFlow.Tools, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null",
+        "ModuleName": "\u901A\u9053\u5206\u89E31",
+        "Properties": {
+          "ImagePath": "\u9650\u5B9A\u6CE1\u7F69\u683C.Image",
+          "Index": 3
+        }
+      },
+      "Condition": null,
+      "Loop": null,
+      "Outputs": null,
+      "FlowOutputs": null,
+      "Children": null,
+      "IfBranch": null,
+      "ElseBranch": null
+    },
+    {
+      "FormatVersion": null,
+      "Id": "ed1f8c930f56444f869ebcfe5c73d8d1",
+      "Kind": "Tool",
+      "Name": "\u836F\u7247\u5206\u5272",
+      "Tool": {
+        "ToolId": "threshold",
+        "TypeName": "VisionFlow.Tools.ThresholdTool, VisionFlow.Tools, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null",
+        "ModuleName": "\u836F\u7247\u5206\u5272",
+        "Properties": {
+          "ImagePath": "\u901A\u9053\u5206\u89E31.Channel3",
+          "FailWhenNotFound": true,
+          "SegmentMethod": 5,
+          "MinGray": 128,
+          "MaxGray": 255,
+          "MinSize": 20,
+          "Sigma": 2,
+          "Percent": 5,
+          "BinaryMethod": "max_separability",
+          "LightDark": "dark",
+          "MaskWidth": 7,
+          "MaskHeight": 7,
+          "StdDevScale": 0.2,
+          "AbsThreshold": 2,
+          "Connection": true
+        }
+      },
+      "Condition": null,
+      "Loop": null,
+      "Outputs": null,
+      "FlowOutputs": null,
+      "Children": null,
+      "IfBranch": null,
+      "ElseBranch": null
+    },
+    {
+      "FormatVersion": null,
+      "Id": "3b2ca2df6c1e4138b413108bc87e8317",
+      "Kind": "Tool",
+      "Name": "\u95ED\u8FD0\u7B97",
+      "Tool": {
+        "ToolId": "regionprocess",
+        "TypeName": "VisionFlow.Tools.RegionProcessTool, VisionFlow.Tools, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null",
+        "ModuleName": "\u95ED\u8FD0\u7B97",
+        "Properties": {
+          "RegionPath": "\u836F\u7247\u5206\u5272.Region",
+          "Method": 9,
+          "Radius": 3.5,
+          "Width": 3,
+          "Height": 3,
+          "FailWhenNotFound": true
+        }
+      },
+      "Condition": null,
+      "Loop": null,
+      "Outputs": null,
+      "FlowOutputs": null,
+      "Children": null,
+      "IfBranch": null,
+      "ElseBranch": null
+    },
+    {
+      "FormatVersion": null,
+      "Id": "fe417803ce7842ad90dde4c904e837f4",
+      "Kind": "Tool",
+      "Name": "\u586B\u5145",
+      "Tool": {
+        "ToolId": "regionprocess",
+        "TypeName": "VisionFlow.Tools.RegionProcessTool, VisionFlow.Tools, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null",
+        "ModuleName": "\u586B\u5145",
+        "Properties": {
+          "RegionPath": "\u95ED\u8FD0\u7B97.Region",
+          "Method": 1,
+          "Radius": 3.5,
+          "Width": 5,
+          "Height": 5,
+          "FailWhenNotFound": true
+        }
+      },
+      "Condition": null,
+      "Loop": null,
+      "Outputs": null,
+      "FlowOutputs": null,
+      "Children": null,
+      "IfBranch": null,
+      "ElseBranch": null
+    },
+    {
+      "FormatVersion": null,
+      "Id": "beff1dba33ab42059cb7cc414ccf2e09",
+      "Kind": "Tool",
+      "Name": "\u9762\u79EF\u7B5B\u90091",
+      "Tool": {
+        "ToolId": "selectregion",
+        "TypeName": "VisionFlow.Tools.SelectRegionTool, VisionFlow.Tools, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null",
+        "ModuleName": "\u9762\u79EF\u7B5B\u90091",
+        "Properties": {
+          "RegionPath": "\u586B\u5145.Region",
+          "Feature": "area",
+          "Min": 1000,
+          "Max": 99999,
+          "TakeMode": 0,
+          "FailWhenNotFound": true
+        }
+      },
+      "Condition": null,
+      "Loop": null,
+      "Outputs": null,
+      "FlowOutputs": null,
+      "Children": null,
+      "IfBranch": null,
+      "ElseBranch": null
+    },
+    {
+      "FormatVersion": null,
+      "Id": "8320f58e384b4fedb5538756f7e38a0f",
+      "Kind": "Tool",
+      "Name": "\u5F00\u8FD0\u7B97",
+      "Tool": {
+        "ToolId": "regionprocess",
+        "TypeName": "VisionFlow.Tools.RegionProcessTool, VisionFlow.Tools, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null",
+        "ModuleName": "\u5F00\u8FD0\u7B97",
+        "Properties": {
+          "RegionPath": "\u9762\u79EF\u7B5B\u90091.Region",
+          "Method": 4,
+          "Radius": 4.5,
+          "Width": 5,
+          "Height": 5,
+          "FailWhenNotFound": true
+        }
+      },
+      "Condition": null,
+      "Loop": null,
+      "Outputs": null,
+      "FlowOutputs": null,
+      "Children": null,
+      "IfBranch": null,
+      "ElseBranch": null
+    },
+    {
+      "FormatVersion": null,
+      "Id": "39d689af1643497c92dcf5622094a2b7",
+      "Kind": "Tool",
+      "Name": "\u8FDE\u901A",
+      "Tool": {
+        "ToolId": "regionprocess",
+        "TypeName": "VisionFlow.Tools.RegionProcessTool, VisionFlow.Tools, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null",
+        "ModuleName": "\u8FDE\u901A",
+        "Properties": {
+          "RegionPath": "\u5F00\u8FD0\u7B97.Region",
+          "Method": 0,
+          "Radius": 3.5,
+          "Width": 5,
+          "Height": 5,
+          "FailWhenNotFound": true
+        }
+      },
+      "Condition": null,
+      "Loop": null,
+      "Outputs": null,
+      "FlowOutputs": null,
+      "Children": null,
+      "IfBranch": null,
+      "ElseBranch": null
+    },
+    {
+      "FormatVersion": null,
+      "Id": "5303060598c5404ab687ecacaadab32e",
+      "Kind": "Tool",
+      "Name": "\u9762\u79EF\u7B5B\u90092",
+      "Tool": {
+        "ToolId": "selectregion",
+        "TypeName": "VisionFlow.Tools.SelectRegionTool, VisionFlow.Tools, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null",
+        "ModuleName": "\u9762\u79EF\u7B5B\u90092",
+        "Properties": {
+          "RegionPath": "\u8FDE\u901A.Region",
+          "Feature": "area",
+          "Min": 1000,
+          "Max": 99999,
+          "TakeMode": 0,
+          "FailWhenNotFound": true
+        }
+      },
+      "Condition": null,
+      "Loop": null,
+      "Outputs": null,
+      "FlowOutputs": null,
+      "Children": null,
+      "IfBranch": null,
+      "ElseBranch": null
+    },
+    {
+      "FormatVersion": null,
+      "Id": "f632b215069745eb882b5bcd1c6127ef",
+      "Kind": "Tool",
+      "Name": "\u836F\u7247",
+      "Tool": {
+        "ToolId": "region-shape-trans",
+        "TypeName": "VisionFlow.Tools.RegionShapeTransTool, VisionFlow.Tools, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null",
+        "ModuleName": "\u836F\u7247",
+        "Properties": {
+          "RegionPath": "\u9762\u79EF\u7B5B\u90092.Region",
+          "Type": 0,
+          "FailWhenNotFound": true
+        }
+      },
+      "Condition": null,
+      "Loop": null,
+      "Outputs": null,
+      "FlowOutputs": null,
+      "Children": null,
+      "IfBranch": null,
+      "ElseBranch": null
+    },
+    {
+      "FormatVersion": null,
+      "Id": "1442d5104c91496ea5e7395c8ec91d56",
+      "Kind": "Tool",
+      "Name": "\u5206\u533A\u68C0\u6D4B1",
+      "Tool": {
+        "ToolId": "zone-inspect",
+        "TypeName": "VisionFlow.Tools.ZoneInspectTool, VisionFlow.Tools, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null",
+        "ModuleName": "\u5206\u533A\u68C0\u6D4B1",
+        "Properties": {
+          "ZonePath": "\u6CE1\u7F69\u683C.Region",
+          "TargetPath": "\u836F\u7247.Region",
+          "ImagePath": "\u901A\u9053\u5206\u89E31.Channel3",
+          "MissingArea": 0,
+          "MinArea": 3800,
+          "MaxArea": 0,
+          "MinGrayLimit": 60,
+          "MaxGrayLimit": -1,
+          "GrayPercent": 0
+        }
+      },
+      "Condition": null,
+      "Loop": null,
+      "Outputs": null,
+      "FlowOutputs": null,
+      "Children": null,
+      "IfBranch": null,
+      "ElseBranch": null
+    },
+    {
+      "FormatVersion": null,
+      "Id": "b35071568a7847b2bc65db13286a1880",
+      "Kind": "FlowOutput",
+      "Name": "\u6D41\u7A0B\u8F93\u51FA1",
+      "Tool": null,
+      "Condition": null,
+      "Loop": null,
+      "Outputs": null,
+      "FlowOutputs": [
+        {
+          "Name": "Ok",
+          "Kind": "Single",
+          "Type": "Bool",
+          "ClrTypeName": null,
+          "Value": {
+            "IsConstant": false,
+            "Reference": "\u5206\u533A\u68C0\u6D4B1.AllOk",
+            "Constant": null
+          }
+        },
+        {
+          "Name": "OkCount",
+          "Kind": "Single",
+          "Type": "Int",
+          "ClrTypeName": null,
+          "Value": {
+            "IsConstant": false,
+            "Reference": "\u5206\u533A\u68C0\u6D4B1.OkCount",
+            "Constant": null
+          }
+        },
+        {
+          "Name": "WrongCount",
+          "Kind": "Single",
+          "Type": "Int",
+          "ClrTypeName": null,
+          "Value": {
+            "IsConstant": false,
+            "Reference": "\u5206\u533A\u68C0\u6D4B1.WrongCount",
+            "Constant": null
+          }
+        },
+        {
+          "Name": "MissingCount",
+          "Kind": "Single",
+          "Type": "Int",
+          "ClrTypeName": null,
+          "Value": {
+            "IsConstant": false,
+            "Reference": "\u5206\u533A\u68C0\u6D4B1.MissingCount",
+            "Constant": null
+          }
+        }
+      ],
+      "Children": null,
+      "IfBranch": null,
+      "ElseBranch": null
+    }
+  ],
+  "IfBranch": null,
+  "ElseBranch": null
+}

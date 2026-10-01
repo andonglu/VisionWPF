@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using VisionFlow.Core;
 using VisionFlow.Nodes;
+using VisionFlow.Runtime;
 
 namespace VisionFlow.Editing
 {
@@ -120,7 +121,7 @@ namespace VisionFlow.Editing
             return ResolveInsertLocation(target, branch, position, out _, out _);
         }
 
-        /// <summary>删除节点。根节点不可删除。</summary>
+        /// <summary>删除节点（项目不提供撤销）。根节点不可删除；被删子树中工具的缓存资源随即释放。</summary>
         public bool RemoveNode(FlowNode node)
         {
             if (node == null || node == Root)
@@ -132,6 +133,7 @@ namespace VisionFlow.Editing
             {
                 return false;
             }
+            FlowResources.Release(node);
             OnStructureChanged();
             return true;
         }

@@ -48,7 +48,12 @@ namespace VisionFlow.Tools
             FlowSerializer.RegisterToolType(typeof(RegionFeaturesTool), "region-features");
             FlowSerializer.RegisterToolType(typeof(RegionMinMaxGrayTool), "region-min-max-gray");
             FlowSerializer.RegisterToolType(typeof(SelectRegionTool), "selectregion");
+            FlowSerializer.RegisterToolType(typeof(RegionSortTool), "region-sort");
             FlowSerializer.RegisterToolType(typeof(RegionPoseTool), "regionpose");
+            FlowSerializer.RegisterToolType(typeof(ZoneInspectTool), "zone-inspect");
+            FlowSerializer.RegisterToolType(typeof(DescriptorMatchTool), "descriptor-match");
+            FlowSerializer.RegisterToolType(typeof(RangeClassifyTool), "range-classify");
+            FlowSerializer.RegisterToolType(typeof(AngleConvertTool), "angle-convert");
             FlowSerializer.RegisterToolType(typeof(ContourCreateTool), "contour-create");
             FlowSerializer.RegisterToolType(typeof(SelectContourTool), "select-contour");
             FlowSerializer.RegisterToolType(typeof(ConcatXldTool), "concat-xld");

@@ -50,6 +50,9 @@
                                     <TextBlock Text="运行/卡尺设置" Style="{StaticResource EditorSectionTitleStyle}" />
                                     <TextBlock Text="运行跟随矩阵" Style="{StaticResource EditorFieldLabelStyle}" />
                                     <ComboBox x:Name="MatrixPathCombo" IsEditable="True" />
+                                    <TextBlock x:Name="InitRegionLabel" Text="初始区域（按区域形状直接测量，配置后不使用示教基准与跟随矩阵）"
+                                               TextWrapping="Wrap" Style="{StaticResource EditorFieldLabelStyle}" />
+                                    <ComboBox x:Name="InitRegionPathCombo" IsEditable="True" />
                                     <TextBlock Text="结果序号" Style="{StaticResource EditorFieldLabelStyle}" />
                                     <ComboBox x:Name="IndexPathCombo" IsEditable="True" />
                                     <TextBlock Text="卡尺长度1" Style="{StaticResource EditorFieldLabelStyle}" />
@@ -65,6 +68,8 @@
                                     <TextBlock Text="边缘选择" Style="{StaticResource EditorFieldLabelStyle}" />
                                     <ComboBox x:Name="SelectCombo" IsEditable="True" />
                                     <StackPanel x:Name="ArcSettingsPanel" />
+                                    <CheckBox x:Name="FailWhenNotFoundCheck" Margin="0,12,0,0"
+                                              Content="未找到边缘时失败（取消后输出 Found=false 并继续）" />
                                     <Button Content="执行测试" Style="{StaticResource AccentButtonStyle}" Margin="0,16,0,0" Click="RunTest_Click" />
                                 </StackPanel>
                             </Border>

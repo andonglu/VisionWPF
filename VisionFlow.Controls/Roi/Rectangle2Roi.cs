@@ -68,12 +68,13 @@ namespace VisionFlow.Controls.Roi
             double sin = Math.Sin(Phi);
             double dRow = row - Row;
             double dCol = col - Column;
-            double local1 = dCol * cos + dRow * sin;
-            double local2 = -dCol * sin + dRow * cos;
+            // HALCON 约定：Length1 方向(行,列) = (-sin, cos)，Length2 方向 = (-cos, -sin)
+            double local1 = dCol * cos - dRow * sin;
+            double local2 = -dCol * sin - dRow * cos;
 
             if (handleIndex == 5)
             {
-                Phi = Math.Atan2(dRow, dCol);
+                Phi = Math.Atan2(-dRow, dCol);
                 return;
             }
 
@@ -122,7 +123,7 @@ namespace VisionFlow.Controls.Roi
             double cos = Math.Cos(Phi);
             double sin = Math.Sin(Phi);
             col = Column + local1 * cos - local2 * sin;
-            row = Row + local1 * sin + local2 * cos;
+            row = Row - local1 * sin - local2 * cos;
         }
     }
 }

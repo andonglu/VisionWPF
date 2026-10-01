@@ -60,6 +60,15 @@ namespace VisionFlow.WpfToolEditors.Editors
             FillTeachPoseCandidates();
             FillMatrixCandidates(MatrixPathCombo, _tool.MatrixPath, includeCollections: true);
             FillRefCandidates(IndexPathCombo, typeof(int), _tool.IndexPath, optional: true);
+            if (_tool is IRegionSeededMeasureTool seeded)
+            {
+                FillRefCandidates(InitRegionPathCombo, typeof(HalconRegion), seeded.InitRegionPath, optional: true);
+            }
+            else
+            {
+                InitRegionLabel.Visibility = Visibility.Collapsed;
+                InitRegionPathCombo.Visibility = Visibility.Collapsed;
+            }
 
             MeasureLength1Text.Value = _tool.MeasureLength1;
             MeasureLength2Text.Value = _tool.MeasureLength2;
@@ -69,6 +78,7 @@ namespace VisionFlow.WpfToolEditors.Editors
             TransitionCombo.Text = _tool.MeasureTransition;
             AddItems(SelectCombo, "all", "first", "last");
             SelectCombo.Text = _tool.MeasureSelect;
+            FailWhenNotFoundCheck.IsChecked = _tool.FailWhenNotFound;
 
             if (_tool is CircleFollowMeasureTool circle)
             {
@@ -394,6 +404,16 @@ namespace VisionFlow.WpfToolEditors.Editors
             return TeachModeCombo.Text == TeachCurrentText;
         }
 
+        private double CurrentTeachRotation()
+        {
+            if (TeachModeCombo == null || !IsCurrentTeachMode())
+            {
+                return 0;
+            }
+            HomMat2D pose = ResolveMatrix(TeachPosePathCombo.Text);
+            return pose == null ? 0 : pose.RotationAngle;
+        }
+
         private RoiShape FindBaseRoi()
         {
             RoiKind kind = GetRoiKind(_tool);
@@ -465,7 +485,8 @@ namespace VisionFlow.WpfToolEditors.Editors
             if (roi is Rectangle2Roi rect)
             {
                 matrix.TransformPose(rect.Row, rect.Column, rect.Phi, out double row, out double column, out double phi);
-                return new Rectangle2Roi(rect.Name, row, column, phi, rect.Length1, rect.Length2);
+                double scale = matrix.ScaleFactor;
+                return new Rectangle2Roi(rect.Name, row, column, phi, rect.Length1 * scale, rect.Length2 * scale);
             }
             var circle = (CircleRoi)roi;
             matrix.TransformPoint(circle.Row, circle.Column, out double centerRow, out double centerColumn);
@@ -523,12 +544,17 @@ namespace VisionFlow.WpfToolEditors.Editors
             _tool.ImagePath = ImagePathCombo.Text.Trim();
             _tool.MatrixPath = MatrixPathCombo.Text.Trim();
             _tool.IndexPath = IndexPathCombo.Text.Trim();
+            if (_tool is IRegionSeededMeasureTool seeded)
+            {
+                seeded.InitRegionPath = InitRegionPathCombo.Text.Trim();
+            }
             _tool.MeasureLength1 = MeasureLength1Text.Value;
             _tool.MeasureLength2 = MeasureLength2Text.Value;
             _tool.MeasureSigma = MeasureSigmaText.Value;
             _tool.MeasureThreshold = MeasureThresholdText.Value;
             _tool.MeasureTransition = TransitionCombo.Text.Trim();
             _tool.MeasureSelect = SelectCombo.Text.Trim();
+            _tool.FailWhenNotFound = FailWhenNotFoundCheck.IsChecked == true;
 
             if (_tool is CircleFollowMeasureTool circle)
             {
@@ -580,10 +606,13 @@ namespace VisionFlow.WpfToolEditors.Editors
             {
                 return;
             }
-            if (_context.LastRunContext.TryGetVariable(_tool.ModuleName, "ResultContour", out Variable contourVariable)
-                && contourVariable.Value is HObject contour)
+            if (_context.LastRunContext.TryGetVariable(_tool.ModuleName, "ResultContour", out Variable contourVariable))
             {
-                TeachRoiEditor.SetOverlay(contour);
+                HObject contour = contourVariable.Value is HalconXld xld ? xld.Object : contourVariable.Value as HObject;
+                if (contour != null)
+                {
+                    TeachRoiEditor.SetOverlay(contour);
+                }
             }
             if (_context.LastRunContext.TryGetVariable(_tool.ModuleName, "Results", out Variable resultsVariable))
             {
@@ -659,16 +688,19 @@ namespace VisionFlow.WpfToolEditors.Editors
             {
                 double startPhi = _startPhi.TextBox == null ? 0 : _startPhi.TextBox.Value;
                 double endPhi = _endPhi.TextBox == null ? Math.PI * 2 : _endPhi.TextBox.Value;
+                // 起止角始终按基准填写；当前图像示教时按定位旋转量显示，与运行时 FollowArc 一致
+                double rotation = CurrentTeachRotation();
+                startPhi += rotation;
+                endPhi += rotation;
                 int count = _tool is ArcCaliperFollowMeasureTool && _caliperCount.TextBox != null
                     ? Math.Max(1, (int)Math.Round(_caliperCount.TextBox.Value))
                     : Math.Max(12, (int)(Math.Abs(endPhi - startPhi) * circle.Radius / Math.Max(8, measureLength2 * 4)));
                 for (int i = 0; i < count; i++)
                 {
-                    double phi = count == 1 ? (startPhi + endPhi) / 2.0 : startPhi + (endPhi - startPhi) * i / (count - 1);
+                    double phi = ArcCaliperFollowMeasureTool.CaliperPhi(startPhi, endPhi, count, i);
+                    HomMat2D.PointOnCircle(circle.Row, circle.Column, circle.Radius, phi, out double caliperRow, out double caliperColumn);
                     AppendCaliper(ref rows, ref columns, ref phis, ref length1, ref length2,
-                        circle.Row + circle.Radius * Math.Sin(phi),
-                        circle.Column + circle.Radius * Math.Cos(phi),
-                        phi, measureLength1, measureLength2);
+                        caliperRow, caliperColumn, phi, measureLength1, measureLength2);
                 }
             }
 
@@ -725,8 +757,9 @@ namespace VisionFlow.WpfToolEditors.Editors
                 double local2 = alongLength1 ? fixedLocal : moving;
                 double cos = Math.Cos(rect.Phi);
                 double sin = Math.Sin(rect.Phi);
+                // HALCON 约定：Length1 方向(行,列) = (-sin, cos)，Length2 方向 = (-cos, -sin)
                 double column = rect.Column + local1 * cos - local2 * sin;
-                double row = rect.Row + local1 * sin + local2 * cos;
+                double row = rect.Row - local1 * sin - local2 * cos;
                 AppendCaliper(ref rows, ref columns, ref phis, ref length1, ref length2, row, column, phi, measureLength1, measureLength2);
             }
         }

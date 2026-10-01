@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using VisionFlow.Editing;
 using VisionFlow.Nodes;
+using VisionFlow.Runtime;
 using VisionFlow.Validation;
 
 namespace VisionFlow.Ui
@@ -58,20 +59,27 @@ namespace VisionFlow.Ui
         /// <summary>文档保存成功（含另存为）后触发，参数为实际保存路径。</summary>
         public event Action<string> Saved;
 
-        /// <summary>新建空白流程文档。</summary>
+        /// <summary>新建空白流程文档。旧流程的运行期缓存资源随即释放。</summary>
         public void New()
         {
+            SequenceNode previous = _model.Root;
             _model.ReplaceRoot(new SequenceNode("主流程"));
             CurrentFlowPath = null;
+            FlowResources.Release(previous);
         }
 
-        /// <summary>从文件加载流程并替换当前文档，返回兼容性警告与校验结果。</summary>
+        /// <summary>
+        /// 从文件加载流程并替换当前文档，返回兼容性警告与校验结果。
+        /// 旧流程的缓存资源在替换成功后释放；新流程不在此预热，由调用方决定同步或后台调用 <see cref="FlowResources.Prepare"/>。
+        /// </summary>
         public FlowLoadResult Load(string fileName)
         {
             var loadWarnings = new List<string>();
             SequenceNode root = FlowSerializer.Load(File.ReadAllText(fileName), loadWarnings);
+            SequenceNode previous = _model.Root;
             _model.ReplaceRoot(root);
             CurrentFlowPath = Path.GetFullPath(fileName);
+            FlowResources.Release(previous);
             return new FlowLoadResult
             {
                 Warnings = loadWarnings,

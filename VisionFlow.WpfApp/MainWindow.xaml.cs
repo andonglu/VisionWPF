@@ -76,6 +76,7 @@ namespace VisionFlow.WpfApp
         private ParameterPanelBuilder _panelBuilder;
         private HObject _inputImage;
         private string _inputImagePath;
+        private bool _closed;
         private string _overlayDrawMode = "margin";
         private double _overlayFillOpacity = 0.35;
         private double _overlayLineWidth = 2.0;
@@ -274,7 +275,7 @@ namespace VisionFlow.WpfApp
             }
             try
             {
-                var transaction = new ToolEditTransaction(node, new ToolEditContext
+                using var transaction = new ToolEditTransaction(node, new ToolEditContext
                 {
                     Root = _model.Root,
                     Node = node,
@@ -293,6 +294,8 @@ namespace VisionFlow.WpfApp
                         node.Name = node.Tool.ModuleName;
                         MarkDirtyFromUi();
                         RefreshFlowTree();
+                        // 新配置（如重新示教的模板）立即预热，问题在编辑时就能发现
+                        ReportPrepareIssues(FlowResources.Prepare(node), "工具资源预热");
                     }
                 }
             }
@@ -486,6 +489,7 @@ namespace VisionFlow.WpfApp
             RefreshFlowTree();
             UpdateWindowTitle();
             SetStatus("已加载流程：" + dialog.FileName);
+            PrepareFlowInBackground(_model.Root);
 
             if (load.Warnings.Count > 0)
             {
@@ -623,10 +627,62 @@ namespace VisionFlow.WpfApp
 
         protected override void OnClosed(EventArgs e)
         {
+            _closed = true;
             DiscardLastRunResult();
+            FlowResources.Release(_model.Root);
             _inputImage?.Dispose();
             _inputImage = null;
             base.OnClosed(e);
+        }
+
+        /// <summary>
+        /// 加载流程后在后台预热工具资源（模型句柄、标定等），避免首次运行的加载延迟。
+        /// 预热与运行共用工具内部锁，期间开始运行是安全的；预热完成前已切换文档或关闭窗口时，立即释放刚加载的资源。
+        /// </summary>
+        private async void PrepareFlowInBackground(SequenceNode root)
+        {
+            List<ToolNode> toolNodes = FlowResources.EnumerateToolNodes(root).ToList();
+            List<ToolBase> snapshotTools = toolNodes.Select(n => n.Tool).ToList();
+            FlowPrepareResult result;
+            try
+            {
+                result = await Task.Run(() => FlowResources.Prepare(toolNodes));
+            }
+            catch (Exception ex)
+            {
+                SetStatus("流程资源预热失败：" + ex.GetBaseException().Message);
+                return;
+            }
+            if (_closed || _model.Root != root)
+            {
+                FlowResources.Release(root);
+                foreach (ToolBase tool in snapshotTools)
+                {
+                    FlowResources.Release(tool);
+                }
+                return;
+            }
+            // 预热期间被删除或被替换配置的工具可能刚被重新加载，补释放
+            var currentTools = new HashSet<ToolBase>(FlowResources.EnumerateToolNodes(root).Select(n => n.Tool));
+            foreach (ToolBase tool in snapshotTools.Where(t => !currentTools.Contains(t)))
+            {
+                FlowResources.Release(tool);
+            }
+            if (result.PreparedCount > 0 && result.IsSuccess)
+            {
+                SetStatus($"流程资源已预热：{result.PreparedCount} 个工具，耗时 {result.Duration.TotalMilliseconds:F0} ms");
+            }
+            ReportPrepareIssues(result, "流程资源预热");
+        }
+
+        private void ReportPrepareIssues(FlowPrepareResult result, string title)
+        {
+            if (result.IsSuccess)
+            {
+                return;
+            }
+            ShowWarning(title, "以下工具的资源加载失败，运行到这些节点时会报错：\r\n"
+                + string.Join("\r\n", result.Issues.Take(10).Select(i => i.ToString())));
         }
 
         /// <summary>丢弃上次运行结果并回收其 HALCON 资源（VF-04：旧结果替换后资源可回收）。</summary>

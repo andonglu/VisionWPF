@@ -236,6 +236,7 @@
                                             <RowDefinition Height="Auto" />
                                             <RowDefinition Height="Auto" />
                                             <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
                                         </Grid.RowDefinitions>
                                         <TextBlock Grid.Row="0" Grid.Column="0" Text="起始角" Style="{StaticResource EditorFieldLabelStyle}" />
                                         <TextBox x:Name="FindStartAngleText" Grid.Row="0" Grid.Column="1" />
@@ -251,6 +252,9 @@
                                         <TextBox x:Name="GreedinessText" Grid.Row="5" Grid.Column="1" />
                                         <TextBlock Grid.Row="6" Grid.Column="0" Text="亚像素" Style="{StaticResource EditorFieldLabelStyle}" />
                                         <ComboBox x:Name="SubPixelCombo" Grid.Row="6" Grid.Column="1" />
+                                        <CheckBox x:Name="FailWhenNotFoundCheck" Grid.Row="7" Grid.Column="0" Grid.ColumnSpan="2"
+                                                  Margin="0,12,0,0"
+                                                  Content="未匹配到目标时失败（取消后输出 Found=false 并继续）" />
                                     </Grid>
                                     <Button Content="执行测试" Margin="0,16,0,0" HorizontalAlignment="Right" Click="TestRun_Click" />
                                 </StackPanel>

@@ -46,6 +46,37 @@ namespace VisionFlow.Variables
             return new HomMat2D(hom);
         }
 
+        /// <summary>
+        /// 由基准位姿到带缩放的目标位姿创建相似变换矩阵：先刚体对齐（位姿1 → 位姿2），再以目标点为中心等比缩放。
+        /// </summary>
+        public static HomMat2D FromPosesScaled(double row1, double col1, double angle1,
+            double row2, double col2, double angle2, double scale)
+        {
+            HOperatorSet.VectorAngleToRigid(row1, col1, angle1, row2, col2, angle2, out HTuple hom);
+            HOperatorSet.HomMat2dScale(hom, scale, scale, row2, col2, out hom);
+            return new HomMat2D(hom);
+        }
+
+        /// <summary>等比缩放系数（线性部分行列式绝对值的平方根），刚体变换为 1。</summary>
+        public double ScaleFactor
+        {
+            get
+            {
+                double[] d = Data.DArr;
+                return Math.Sqrt(Math.Abs(d[0] * d[4] - d[1] * d[3]));
+            }
+        }
+
+        /// <summary>旋转量（HALCON 约定，逆时针为正）：方向角 phi 经本矩阵变换后变为 phi + RotationAngle。</summary>
+        public double RotationAngle
+        {
+            get
+            {
+                TransformPose(0, 0, 0, out _, out _, out double phi);
+                return phi;
+            }
+        }
+
         /// <summary>变换一个点（affine_trans_point_2d）。</summary>
         public void TransformPoint(double row, double col, out double outRow, out double outCol)
         {
@@ -57,14 +88,28 @@ namespace VisionFlow.Variables
         /// <summary>
         /// 变换一个位姿（点 + 方向角）。
         /// 角度通过"中心 + 方向向量点"两点变换求得，刚体/相似变换均成立。
-        /// Halcon 方向约定：方向向量(行,列) = (sin(phi), cos(phi))。
+        /// HALCON 方向约定：行轴向下、角度逆时针为正，方向向量(行,列) = (-sin(phi), cos(phi))。
         /// </summary>
         public void TransformPose(double row, double col, double phi,
             out double outRow, out double outCol, out double outPhi)
         {
             TransformPoint(row, col, out outRow, out outCol);
-            TransformPoint(row + Math.Sin(phi), col + Math.Cos(phi), out double dirRow, out double dirCol);
-            outPhi = Math.Atan2(dirRow - outRow, dirCol - outCol);
+            TransformPoint(row - Math.Sin(phi), col + Math.Cos(phi), out double dirRow, out double dirCol);
+            outPhi = DirectionToPhi(dirRow - outRow, dirCol - outCol);
+        }
+
+        /// <summary>HALCON 约定下，由方向向量(行,列)求角度。</summary>
+        public static double DirectionToPhi(double deltaRow, double deltaColumn)
+        {
+            return Math.Atan2(-deltaRow, deltaColumn);
+        }
+
+        /// <summary>HALCON 约定下，以 (row, col) 为圆心、半径 radius、角度 phi 的圆周点。</summary>
+        public static void PointOnCircle(double row, double col, double radius, double phi,
+            out double pointRow, out double pointCol)
+        {
+            pointRow = row - radius * Math.Sin(phi);
+            pointCol = col + radius * Math.Cos(phi);
         }
 
         /// <summary>返回当前仿射矩阵的逆矩阵。</summary>

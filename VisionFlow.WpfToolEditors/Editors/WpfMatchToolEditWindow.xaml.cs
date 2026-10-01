@@ -130,6 +130,7 @@ namespace VisionFlow.WpfToolEditors.Editors
             MaxOverlapText.Text = Format(_tool.MaxOverlap);
             GreedinessText.Text = Format(_tool.Greediness);
             SubPixelCombo.Text = string.IsNullOrWhiteSpace(_tool.SubPixel) ? "least_squares" : _tool.SubPixel;
+            FailWhenNotFoundCheck.IsChecked = _tool.FailWhenNotFound;
             if (IsGrayMatch && string.IsNullOrWhiteSpace(SubPixelCombo.Text))
             {
                 SubPixelCombo.Text = "true";
@@ -202,10 +203,13 @@ namespace VisionFlow.WpfToolEditors.Editors
             {
                 RunImageView.ShowImage(image.Object);
             }
-            if (_context.LastRunContext.TryGetVariable(_tool.ModuleName, "ResultContour", out Variable contourVar)
-                && contourVar.Value is HObject contour)
+            if (_context.LastRunContext.TryGetVariable(_tool.ModuleName, "ResultContour", out Variable contourVar))
             {
-                RunImageView.SetOverlay(contour);
+                HObject contour = contourVar.Value is HalconXld xld ? xld.Object : contourVar.Value as HObject;
+                if (contour != null)
+                {
+                    RunImageView.SetOverlay(contour);
+                }
             }
             if (_context.LastRunContext.TryGetVariable(_tool.ModuleName, "Items", out Variable itemsVar))
             {
@@ -925,6 +929,7 @@ namespace VisionFlow.WpfToolEditors.Editors
             _tool.MaxOverlap = ParseDouble(MaxOverlapText.Text, "重叠");
             _tool.SubPixel = SubPixelCombo.Text;
             _tool.Greediness = ParseDouble(GreedinessText.Text, "贪婪度");
+            _tool.FailWhenNotFound = FailWhenNotFoundCheck.IsChecked == true;
             _tool.BaseRow = ParseDouble(BaseRowText.Text, "基准 Row");
             _tool.BaseColumn = ParseDouble(BaseColumnText.Text, "基准 Col");
             _tool.BaseAngle = ParseDouble(BaseAngleText.Text, "基准角");

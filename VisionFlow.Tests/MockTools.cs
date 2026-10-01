@@ -1,3 +1,5 @@
+﻿#nullable disable
+// 测试替身：仅供自动化测试使用，不随正式程序集发布（TR-15）。
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -5,7 +7,7 @@ using System.Linq;
 using VisionFlow.Core;
 using VisionFlow.Variables;
 
-namespace VisionFlow.Tools
+namespace VisionFlow.Tests
 {
     /// <summary>模拟的匹配结果项。</summary>
     public sealed class MatchItem

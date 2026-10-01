@@ -28,11 +28,50 @@
                 <TextBlock Text="输出模式" Style="{StaticResource EditorFieldLabelStyle}" />
                 <ComboBox x:Name="OutputModeCombo" Margin="0,0,0,16" />
 
+                <TextBlock Text="运行跟随矩阵（可选）" Style="{StaticResource EditorFieldLabelStyle}" />
+                <ComboBox x:Name="MatrixPathCombo" IsEditable="True" Margin="0,0,0,16" />
+
+                <TextBlock Text="示教模式" Style="{StaticResource EditorFieldLabelStyle}" />
+                <ComboBox x:Name="TeachModeCombo" Margin="0,0,0,8" SelectionChanged="TeachMode_Changed" />
+                <TextBlock Text="当前姿态" Style="{StaticResource EditorFieldLabelStyle}" />
+                <ComboBox x:Name="TeachPosePathCombo" IsEditable="True" Margin="0,0,0,16"
+                          SelectionChanged="TeachMode_Changed" LostFocus="TeachPose_LostFocus" />
+
                 <Button Content="预览 Region" Margin="0,0,0,16" Click="PreviewRegion_Click" />
+
+                <TextBlock Text="阵列生成" Style="{StaticResource EditorSectionTitleStyle}" />
+                <Grid Margin="0,0,0,8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="12" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+                    <StackPanel Grid.Row="0" Grid.Column="0">
+                        <TextBlock Text="行数" Style="{StaticResource EditorFieldLabelStyle}" />
+                        <controls:NumericInputControl x:Name="ArrayRowsText" Minimum="1" Maximum="100" Increment="1" DecimalPlaces="0" Value="1" />
+                    </StackPanel>
+                    <StackPanel Grid.Row="0" Grid.Column="2">
+                        <TextBlock Text="列数" Style="{StaticResource EditorFieldLabelStyle}" />
+                        <controls:NumericInputControl x:Name="ArrayColumnsText" Minimum="1" Maximum="100" Increment="1" DecimalPlaces="0" Value="1" />
+                    </StackPanel>
+                    <StackPanel Grid.Row="1" Grid.Column="0">
+                        <TextBlock Text="行距（像素）" Style="{StaticResource EditorFieldLabelStyle}" />
+                        <controls:NumericInputControl x:Name="ArrayRowPitchText" Minimum="-10000" Maximum="10000" Increment="1" DecimalPlaces="2" Value="0" />
+                    </StackPanel>
+                    <StackPanel Grid.Row="1" Grid.Column="2">
+                        <TextBlock Text="列距（像素）" Style="{StaticResource EditorFieldLabelStyle}" />
+                        <controls:NumericInputControl x:Name="ArrayColumnPitchText" Minimum="-10000" Maximum="10000" Increment="1" DecimalPlaces="2" Value="0" />
+                    </StackPanel>
+                </Grid>
+                <Button Content="按选中 ROI 生成阵列" Margin="0,0,0,16" Click="GenerateArray_Click" />
 
                 <TextBlock TextWrapping="Wrap"
                            Foreground="{DynamicResource TextFillColorSecondaryBrush}"
-                           Text="绿色 ROI 为包含区域，黄色 ROI 为排除区域。UnionOne 输出一个合并 Region；Connection 会拆成多个连通 Region。RegionPose 前必须保证最终只有一个 Region。" />
+                           Text="绿色 ROI 为包含区域，黄色 ROI 为排除区域。UnionOne 输出一个合并 Region；Connection 会拆成多个连通 Region；PerShape 每个包含 ROI 单独输出（顺序与绘制/阵列顺序一致，适合分区检测）。阵列以选中 ROI 为第 1 行第 1 列，先行后列生成并替换选中 ROI。配置运行跟随矩阵后，ROI 按示教基准保存、运行时跟随当前位姿；“当前图像”示教模式下 ROI 按当前姿态显示，确定时用逆矩阵换算回基准。RegionPose 前必须保证最终只有一个 Region。" />
             </StackPanel>
         </Border>
 

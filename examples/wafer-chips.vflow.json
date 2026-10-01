@@ -1,0 +1,217 @@
+{
+  "Id": "sample_wafer_chips_root",
+  "Kind": "Sequence",
+  "Name": "晶圆 chip 行列定位示例",
+  "Tool": null,
+  "Condition": null,
+  "Loop": null,
+  "Outputs": null,
+  "FlowOutputs": null,
+  "Children": [
+    {
+      "Id": "sample_wafer_chips_threshold",
+      "Kind": "Tool",
+      "Name": "灰度分割",
+      "Tool": {
+        "ToolId": "threshold",
+        "ModuleName": "灰度分割",
+        "Properties": {
+          "ImagePath": "Input.Image",
+          "MinGray": 150,
+          "MaxGray": 255,
+          "Connection": true
+        }
+      },
+      "Condition": null,
+      "Loop": null,
+      "Outputs": null,
+      "FlowOutputs": null,
+      "Children": null,
+      "IfBranch": null,
+      "ElseBranch": null
+    },
+    {
+      "Id": "sample_wafer_chips_select",
+      "Kind": "Tool",
+      "Name": "chip筛选",
+      "Tool": {
+        "ToolId": "selectregion",
+        "ModuleName": "chip筛选",
+        "Properties": {
+          "RegionPath": "灰度分割.Region",
+          "Feature": "area",
+          "Min": 2000,
+          "Max": 5000,
+          "TakeMode": "All"
+        }
+      },
+      "Condition": null,
+      "Loop": null,
+      "Outputs": null,
+      "FlowOutputs": null,
+      "Children": null,
+      "IfBranch": null,
+      "ElseBranch": null
+    },
+    {
+      "Id": "sample_wafer_chips_sort",
+      "Kind": "Tool",
+      "Name": "行列排序",
+      "Tool": {
+        "ToolId": "region-sort",
+        "ModuleName": "行列排序",
+        "Properties": {
+          "RegionPath": "chip筛选.Region",
+          "Order": "RowMajor",
+          "AngleMode": "Auto",
+          "GridAngle": 0,
+          "RowTolerance": 0,
+          "ColumnTolerance": 0
+        }
+      },
+      "Condition": null,
+      "Loop": null,
+      "Outputs": null,
+      "FlowOutputs": null,
+      "Children": null,
+      "IfBranch": null,
+      "ElseBranch": null
+    },
+    {
+      "Id": "sample_wafer_chips_measure",
+      "Kind": "Tool",
+      "Name": "chip测量",
+      "Tool": {
+        "ToolId": "measurerectangle",
+        "ModuleName": "chip测量",
+        "Properties": {
+          "ImagePath": "Input.Image",
+          "InitRegionPath": "行列排序.Region",
+          "MeasureLength1": 6,
+          "MeasureLength2": 2,
+          "MeasureSigma": 1,
+          "MeasureThreshold": 20,
+          "MeasureTransition": "all",
+          "MeasureSelect": "all"
+        }
+      },
+      "Condition": null,
+      "Loop": null,
+      "Outputs": null,
+      "FlowOutputs": null,
+      "Children": null,
+      "IfBranch": null,
+      "ElseBranch": null
+    },
+    {
+      "Id": "sample_wafer_chips_angle",
+      "Kind": "Tool",
+      "Name": "角度换算",
+      "Tool": {
+        "ToolId": "angle-convert",
+        "ModuleName": "角度换算",
+        "Properties": {
+          "ValuePath": "chip测量.Phis",
+          "InputUnit": "Radian",
+          "OutputUnit": "Degree",
+          "Range": "Minus90To90",
+          "RangeMin": -90,
+          "RangeMax": 90
+        }
+      },
+      "Condition": null,
+      "Loop": null,
+      "Outputs": null,
+      "FlowOutputs": null,
+      "Children": null,
+      "IfBranch": null,
+      "ElseBranch": null
+    },
+    {
+      "Id": "sample_wafer_chips_output",
+      "Kind": "FlowOutput",
+      "Name": "流程输出1",
+      "Tool": null,
+      "Condition": null,
+      "Loop": null,
+      "Outputs": null,
+      "FlowOutputs": [
+        {
+          "Name": "Ok",
+          "Kind": "Single",
+          "Type": "Bool",
+          "ClrTypeName": null,
+          "Value": { "IsConstant": false, "Reference": "chip测量.Found", "Constant": null }
+        },
+        {
+          "Name": "ChipCount",
+          "Kind": "Single",
+          "Type": "Int",
+          "ClrTypeName": null,
+          "Value": { "IsConstant": false, "Reference": "行列排序.Count", "Constant": null }
+        },
+        {
+          "Name": "FailedCount",
+          "Kind": "Single",
+          "Type": "Int",
+          "ClrTypeName": null,
+          "Value": { "IsConstant": false, "Reference": "chip测量.FailedCount", "Constant": null }
+        },
+        {
+          "Name": "RowCount",
+          "Kind": "Single",
+          "Type": "Int",
+          "ClrTypeName": null,
+          "Value": { "IsConstant": false, "Reference": "行列排序.RowCount", "Constant": null }
+        },
+        {
+          "Name": "ColumnCount",
+          "Kind": "Single",
+          "Type": "Int",
+          "ClrTypeName": null,
+          "Value": { "IsConstant": false, "Reference": "行列排序.ColumnCount", "Constant": null }
+        },
+        {
+          "Name": "RowIndices",
+          "Kind": "Array",
+          "Type": "Int",
+          "ClrTypeName": null,
+          "Value": { "IsConstant": false, "Reference": "行列排序.RowIndices", "Constant": null }
+        },
+        {
+          "Name": "ColumnIndices",
+          "Kind": "Array",
+          "Type": "Int",
+          "ClrTypeName": null,
+          "Value": { "IsConstant": false, "Reference": "行列排序.ColumnIndices", "Constant": null }
+        },
+        {
+          "Name": "Rows",
+          "Kind": "Array",
+          "Type": "Double",
+          "ClrTypeName": null,
+          "Value": { "IsConstant": false, "Reference": "chip测量.Rows", "Constant": null }
+        },
+        {
+          "Name": "Columns",
+          "Kind": "Array",
+          "Type": "Double",
+          "ClrTypeName": null,
+          "Value": { "IsConstant": false, "Reference": "chip测量.Columns", "Constant": null }
+        },
+        {
+          "Name": "Angles",
+          "Kind": "Array",
+          "Type": "Double",
+          "ClrTypeName": null,
+          "Value": { "IsConstant": false, "Reference": "角度换算.Values", "Constant": null }
+        }
+      ],
+      "Children": null,
+      "IfBranch": null,
+      "ElseBranch": null
+    }
+  ],
+  "IfBranch": null,
+  "ElseBranch": null
+}

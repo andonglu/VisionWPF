@@ -27,6 +27,11 @@ public class ExampleFlowTests
     [Theory]
     [InlineData("threshold-region.vflow.json")]
     [InlineData("xld-line.vflow.json")]
+    [InlineData("region-measure.vflow.json")]
+    [InlineData("blister-check.vflow.json")]
+    [InlineData("pizza-salami.vflow.json")]
+    [InlineData("cookie-box.vflow.json")]
+    [InlineData("wafer-chips.vflow.json")]
     public void 示例流程_加载并通过校验(string fileName)
     {
         string path = Path.Combine(ExamplesDir, fileName);

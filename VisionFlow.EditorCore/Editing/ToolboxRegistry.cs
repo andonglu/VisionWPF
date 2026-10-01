@@ -60,7 +60,10 @@ namespace VisionFlow.Editing
                 {
                     ImagePath = "Input.Image",
                     ModelPath = RepoPaths.Find("src/Image/temp.shm"),
-                    NumMatches = 10
+                    NumMatches = 10,
+                    // 示例模板 temp.shm 的示教基准位姿
+                    BaseRow = 99,
+                    BaseColumn = 79
                 })));
             Register(new ToolboxItem("gray-match", "01 定位匹配", "灰度匹配", () =>
                 new ToolNode(new HalconGrayMatchTool(NextModuleName("灰度匹配"))
@@ -80,8 +83,18 @@ namespace VisionFlow.Editing
                     ImagePath = "Input.Image",
                     NumMatches = 10
                 })));
+            Register(new ToolboxItem("descriptor-match", "01 定位匹配", "描述子匹配", () =>
+                new ToolNode(new DescriptorMatchTool(NextModuleName("描述子匹配")))));
             Register(new ToolboxItem("measure", "05 几何测量", "椭圆测量", () =>
-                new ToolNode(new EllipseFollowMeasureTool(NextModuleName("椭圆测量")))));
+                new ToolNode(new EllipseFollowMeasureTool(NextModuleName("椭圆测量"))
+                {
+                    // 示例图像 razors1.png + 示例模板 temp.shm 下的初始测量位置
+                    EllipseRow = 28.1559,
+                    EllipseColumn = 82.9631,
+                    EllipseAngle = -Math.PI / 2,
+                    EllipseLength1 = 10,
+                    EllipseLength2 = 4
+                })));
             Register(new ToolboxItem("measureline", "05 几何测量", "直线测量", () =>
                 new ToolNode(new LineFollowMeasureTool(NextModuleName("直线测量")))));
             Register(new ToolboxItem("measure-caliper1d", "05 几何测量", "一维卡尺测量", () =>
@@ -128,16 +141,17 @@ namespace VisionFlow.Editing
                 new ToolNode(new RegionIntersectionTool(NextModuleName("Region交集")))));
             Register(new ToolboxItem("region-shape-trans", "03 区域处理", "Region 形状转换", () =>
                 new ToolNode(new RegionShapeTransTool(NextModuleName("形状转换")))));
-            Register(new ToolboxItem("region-union1", "03 区域处理", "Region Union1", () =>
-                new ToolNode(new RegionUnion1Tool(NextModuleName("RegionUnion1")))));
-            Register(new ToolboxItem("morphology", "03 区域处理", "形态学", () =>
-                new ToolNode(new MorphologyTool(NextModuleName("形态学")))));
+            // “Region Union1”“形态学”已并入“区域处理”（TR-11），不再提供独立入口；类型与 ID 保留用于历史流程
             Register(new ToolboxItem("region-features", "03 区域处理", "Region 特征值", () =>
                 new ToolNode(new RegionFeaturesTool(NextModuleName("Region特征")))));
             Register(new ToolboxItem("region-min-max-gray", "03 区域处理", "MinMaxGray 灰度统计", () =>
                 new ToolNode(new RegionMinMaxGrayTool(NextModuleName("灰度统计")))));
             Register(new ToolboxItem("selectregion", "03 区域处理", "区域筛选", () =>
                 new ToolNode(new SelectRegionTool(NextModuleName("区域筛选")))));
+            Register(new ToolboxItem("region-sort", "03 区域处理", "区域排序(行列编号)", () =>
+                new ToolNode(new RegionSortTool(NextModuleName("区域排序")))));
+            Register(new ToolboxItem("zone-inspect", "03 区域处理", "分区检测", () =>
+                new ToolNode(new ZoneInspectTool(NextModuleName("分区检测")))));
             Register(new ToolboxItem("regionpose", "01 定位匹配", "区域定位", () =>
                 new ToolNode(new RegionPoseTool(NextModuleName("区域定位")))));
             Register(new ToolboxItem("contour-create", "04 XLD轮廓", "边缘提取", () =>
@@ -158,8 +172,12 @@ namespace VisionFlow.Editing
                 new ToolNode(new IntersectionLinesTool(NextModuleName("线线交点")))));
             Register(new ToolboxItem("affine-point", "05 几何测量", "图像坐标转世界坐标", () =>
                 new ToolNode(new AffinePointTool(NextModuleName("坐标转换")))));
+            Register(new ToolboxItem("angle-convert", "05 几何测量", "角度换算(弧度/角度)", () =>
+                new ToolNode(new AngleConvertTool(NextModuleName("角度换算")))));
             Register(new ToolboxItem("barcode1d", "06 识别工具", "一维码", () =>
                 new ToolNode(new Barcode1DTool(NextModuleName("一维码")))));
+            Register(new ToolboxItem("range-classify", "07 结果判定", "数值区间分类", () =>
+                new ToolNode(new RangeClassifyTool(NextModuleName("区间分类")))));
             Register(new ToolboxItem("ifelse", "逻辑控制", "IfElse 分支", () =>
                 new IfElseNode("条件分支")));
             Register(new ToolboxItem("forcount", "逻辑控制", "For 循环(次数)", () =>

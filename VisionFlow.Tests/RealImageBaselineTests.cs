@@ -28,6 +28,14 @@ public class RealImageBaselineTests
     }
 
     [Fact]
+    public void 区域测量示例_结果符合基线()
+    {
+        using var baseline = new ExampleImageBaseline(ExampleImageBaseline.RegionMeasureExample);
+        using var ctx = new FlowContext();
+        baseline.AssertResult(baseline.Run(ctx), ctx);
+    }
+
+    [Fact]
     public void 区域处理示例_输入图像在上下文释放后仍有效()
     {
         using var baseline = new ExampleImageBaseline(ExampleImageBaseline.RegionExample);

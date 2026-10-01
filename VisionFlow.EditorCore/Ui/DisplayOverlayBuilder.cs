@@ -21,6 +21,7 @@ namespace VisionFlow.Ui
                 || variable.Value is HalconXld
                 || variable.Value is HObject
                 || variable.Value is List<HObject>
+                || variable.Value is IEnumerable<HalconXld>
                 || variable.Value is List<LineMeasureResult>
                 || variable.Value is List<RectangleMeasureResult>
                 || variable.Value is List<CircleMeasureResult>
@@ -72,6 +73,13 @@ namespace VisionFlow.Ui
                 foreach (HObject obj in objects)
                 {
                     AppendObject(ref overlay, obj);
+                }
+            }
+            else if (variable.Value is IEnumerable<HalconXld> xlds)
+            {
+                foreach (HalconXld item in xlds)
+                {
+                    AppendObject(ref overlay, item?.Object);
                 }
             }
             else if (variable.Value is List<LineMeasureResult> lines)

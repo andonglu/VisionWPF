@@ -1,0 +1,143 @@
+{
+  "Id": "sample_region_measure_root",
+  "Kind": "Sequence",
+  "Name": "区域测量示例",
+  "Tool": null,
+  "Condition": null,
+  "Loop": null,
+  "Outputs": null,
+  "FlowOutputs": null,
+  "Children": [
+    {
+      "Id": "sample_region_measure_threshold",
+      "Kind": "Tool",
+      "Name": "二值化1",
+      "Tool": {
+        "ToolId": "threshold",
+        "ModuleName": "二值化1",
+        "Properties": {
+          "ImagePath": "Input.Image",
+          "MinGray": 80,
+          "MaxGray": 255,
+          "Connection": true
+        }
+      },
+      "Condition": null,
+      "Loop": null,
+      "Outputs": null,
+      "FlowOutputs": null,
+      "Children": null,
+      "IfBranch": null,
+      "ElseBranch": null
+    },
+    {
+      "Id": "sample_region_measure_select",
+      "Kind": "Tool",
+      "Name": "区域筛选1",
+      "Tool": {
+        "ToolId": "selectregion",
+        "ModuleName": "区域筛选1",
+        "Properties": {
+          "RegionPath": "二值化1.Region",
+          "Feature": "height",
+          "Min": 350,
+          "Max": 450,
+          "TakeMode": "All"
+        }
+      },
+      "Condition": null,
+      "Loop": null,
+      "Outputs": null,
+      "FlowOutputs": null,
+      "Children": null,
+      "IfBranch": null,
+      "ElseBranch": null
+    },
+    {
+      "Id": "sample_region_measure_rectangle",
+      "Kind": "Tool",
+      "Name": "矩形测量1",
+      "Tool": {
+        "ToolId": "measurerectangle",
+        "ModuleName": "矩形测量1",
+        "Properties": {
+          "ImagePath": "Input.Image",
+          "InitRegionPath": "区域筛选1.Region",
+          "MeasureLength1": 6,
+          "MeasureLength2": 2,
+          "MeasureSigma": 1,
+          "MeasureThreshold": 20,
+          "MeasureTransition": "all",
+          "MeasureSelect": "all"
+        }
+      },
+      "Condition": null,
+      "Loop": null,
+      "Outputs": null,
+      "FlowOutputs": null,
+      "Children": null,
+      "IfBranch": null,
+      "ElseBranch": null
+    },
+    {
+      "Id": "sample_region_measure_output",
+      "Kind": "FlowOutput",
+      "Name": "流程输出1",
+      "Tool": null,
+      "Condition": null,
+      "Loop": null,
+      "Outputs": null,
+      "FlowOutputs": [
+        {
+          "Name": "Ok",
+          "Kind": "Single",
+          "Type": "Bool",
+          "ClrTypeName": null,
+          "Value": {
+            "IsConstant": false,
+            "Reference": "矩形测量1.Found",
+            "Constant": null
+          }
+        },
+        {
+          "Name": "MeasuredCount",
+          "Kind": "Single",
+          "Type": "Int",
+          "ClrTypeName": null,
+          "Value": {
+            "IsConstant": false,
+            "Reference": "矩形测量1.Count",
+            "Constant": null
+          }
+        },
+        {
+          "Name": "FailedCount",
+          "Kind": "Single",
+          "Type": "Int",
+          "ClrTypeName": null,
+          "Value": {
+            "IsConstant": false,
+            "Reference": "矩形测量1.FailedCount",
+            "Constant": null
+          }
+        },
+        {
+          "Name": "LastLength2",
+          "Kind": "Single",
+          "Type": "Double",
+          "ClrTypeName": null,
+          "Value": {
+            "IsConstant": false,
+            "Reference": "矩形测量1.Length2",
+            "Constant": null
+          }
+        }
+      ],
+      "Children": null,
+      "IfBranch": null,
+      "ElseBranch": null
+    }
+  ],
+  "IfBranch": null,
+  "ElseBranch": null
+}

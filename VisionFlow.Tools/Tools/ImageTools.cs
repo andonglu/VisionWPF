@@ -11,12 +11,23 @@ namespace VisionFlow.Tools
         Sub
     }
 
+    /// <summary>trans_from_rgb 的目标色彩空间（名称即 HALCON 参数值，追加时保持已有值不变以兼容已保存流程）。</summary>
     public enum ColorTransformSpace
     {
         hsv,
         hls,
         yuv,
-        i1i2i3
+        i1i2i3,
+        yiq,
+        argyb,
+        ciexyz,
+        ihs,
+        hsi,
+        cielab,
+        cieluv,
+        cielchab,
+        cielchuv,
+        lms
     }
 
     public enum ImageInterpolationMode
@@ -145,6 +156,11 @@ namespace VisionFlow.Tools
         }
     }
 
+    /// <summary>
+    /// 通道分解：Channel1~3 始终写出——图像不足 3 通道时，缺少的通道输出为 null 并记录警告，
+    /// 下游引用会得到明确的空值错误，而不是“找不到变量”或上一轮的旧值（TR-14）。
+    /// Index 超出实际通道数时失败，不再静默截断。
+    /// </summary>
     [ToolOutput("Channel1", VariableKind.Object, VariableType.Object, ElementClrType = typeof(HalconImage))]
     [ToolOutput("Channel2", VariableKind.Object, VariableType.Object, ElementClrType = typeof(HalconImage))]
     [ToolOutput("Channel3", VariableKind.Object, VariableType.Object, ElementClrType = typeof(HalconImage))]
@@ -155,6 +171,7 @@ namespace VisionFlow.Tools
         [InputRef("图像", typeof(HalconImage))]
         public string ImagePath { get; set; } = "Input.Image";
 
+        /// <summary>选择输出到 SelectedImage 的通道（1 起，须不超过实际通道数）。</summary>
         public int Index { get; set; } = 1;
 
         public DecomposeChannelsTool(string moduleName) : base(moduleName)
@@ -170,27 +187,39 @@ namespace VisionFlow.Tools
             {
                 return NodeResult.Fail("图像通道数无效");
             }
+            if (Index < 1 || Index > count)
+            {
+                return NodeResult.Fail($"通道分解 Index={Index} 超出范围：图像共有 {count} 个通道");
+            }
 
             HObject selected = null;
-            int selectedIndex = Math.Max(1, Math.Min(Index, count));
-            for (int i = 1; i <= Math.Min(count, 3); i++)
+            for (int i = 1; i <= 3; i++)
             {
+                if (i > count)
+                {
+                    SetOutput(ctx, Variable.Object<HalconImage>(ModuleName, "Channel" + i, null, 0));
+                    continue;
+                }
                 HOperatorSet.AccessChannel(image, out HObject channel, i);
                 SetOutput(ctx, Variable.Object(ModuleName, "Channel" + i, new HalconImage(channel), 1));
-                if (i == selectedIndex)
+                if (i == Index)
                 {
                     selected = channel;
                 }
             }
+            if (count < 3)
+            {
+                ctx.AddLog(FlowLogLevel.Warning, $"[通道分解] 图像只有 {count} 个通道，Channel{count + 1}~Channel3 输出为空");
+            }
 
             if (selected == null)
             {
-                HOperatorSet.AccessChannel(image, out selected, selectedIndex);
+                HOperatorSet.AccessChannel(image, out selected, Index);
             }
 
             SetOutput(ctx, Variable.Object(ModuleName, "SelectedImage", new HalconImage(selected), 1));
             SetOutput(ctx, Variable.Single(ModuleName, "ChannelCount", VariableType.Int, count));
-            ctx.AddLog(FlowLogLevel.Info, $"[通道分解] 通道数={count}, 选择={selectedIndex}");
+            ctx.AddLog(FlowLogLevel.Info, $"[通道分解] 通道数={count}, 选择={Index}");
             return NodeResult.Ok;
         }
     }
@@ -247,6 +276,10 @@ namespace VisionFlow.Tools
 
         public override NodeResult Run(FlowContext ctx)
         {
+            if (Index < 1 || Index > 3)
+            {
+                return NodeResult.Fail($"色彩转换 Index={Index} 超出范围（1~3）");
+            }
             HObject channel1 = Input<HalconImage>(ctx, Channel1Path).Object;
             HObject channel2 = Input<HalconImage>(ctx, Channel2Path).Object;
             HObject channel3 = Input<HalconImage>(ctx, Channel3Path).Object;
@@ -259,7 +292,7 @@ namespace VisionFlow.Tools
 
             HObject selected = Index == 2 ? out2 : Index == 3 ? out3 : out1;
             SetOutput(ctx, Variable.Object(ModuleName, "SelectedImage", new HalconImage(selected), 1));
-            ctx.AddLog(FlowLogLevel.Info, $"[色彩转换] {ColorType}, 选择通道={Math.Max(1, Math.Min(Index, 3))}");
+            ctx.AddLog(FlowLogLevel.Info, $"[色彩转换] {ColorType}, 选择通道={Index}");
             return NodeResult.Ok;
         }
     }

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using HalconDotNet;
@@ -52,11 +53,15 @@ namespace VisionFlow.Tools
     [ToolOutput("Region", VariableKind.Object, VariableType.Object, ElementClrType = typeof(HalconRegion))]
     [ToolOutput("UsedThreshold", VariableKind.Single, VariableType.Double)]
     [ToolOutput("Count", VariableKind.Single, VariableType.Int)]
-    public class ThresholdTool : ToolBase
+    [ToolOutput("Found", VariableKind.Single, VariableType.Bool)]
+    public class ThresholdTool : ToolBase, INotFoundPolicy
     {
         /// <summary>图像变量引用。</summary>
         [InputRef("图像", typeof(HalconImage))]
         public string ImagePath { get; set; }
+
+        /// <summary>分割结果为空时是否失败（默认 true）；关闭后输出 Found=false 并继续。</summary>
+        public bool FailWhenNotFound { get; set; } = true;
 
         /// <summary>阈值分割方式。</summary>
         public ThresholdSegmentMethod SegmentMethod { get; set; } = ThresholdSegmentMethod.Threshold;
@@ -146,8 +151,8 @@ namespace VisionFlow.Tools
                 region = connected;
             }
 
-            NodeResult result = RegionThresholdOutput.Set(ctx, ModuleName, region, label, detail);
-            if (result.IsSuccess && usedThreshold != null)
+            NodeResult result = RegionOutput.Set(ctx, ModuleName, this, region, label, detail);
+            if (usedThreshold != null)
             {
                 SetOutput(ctx, Variable.Single(ModuleName, "UsedThreshold", VariableType.Double, usedThreshold.D));
             }
@@ -210,23 +215,29 @@ namespace VisionFlow.Tools
         }
     }
 
-    internal static class RegionThresholdOutput
+    /// <summary>
+    /// 区域类工具的统一输出（TR-06）：写 Region / Count / Found；区域个数为 0 时按“未找到”策略处理。
+    /// 与 ToolBase.SetOutput 同一约定：输出归本次运行所有（VF-04）。
+    /// </summary>
+    internal static class RegionOutput
     {
-        public static NodeResult Set(FlowContext ctx, string moduleName, HObject region, string label, string detail)
+        public static NodeResult Set(FlowContext ctx, string moduleName, INotFoundPolicy policy, HObject region,
+            string label, string detail)
         {
             HOperatorSet.CountObj(region, out HTuple count);
-            if (count.I == 0)
-            {
-                region.Dispose();
-                return NodeResult.Fail($"{label} 结果为空（{detail}）");
-            }
-
-            // 与 ToolBase.SetOutput 同一约定：输出归本次运行所有（VF-04）
             Variable output = Variable.Object(moduleName, "Region", new HalconRegion(region), count.I);
             HalconOwnership.Adopt(output);
             ctx.SetVariable(output);
             ctx.SetVariable(Variable.Single(moduleName, "Count", VariableType.Int, count.I));
-            ctx.AddLog(FlowLogLevel.Info, $"[{label}] {detail}，区域数 {count.I}");
+            ctx.SetVariable(Variable.Single(moduleName, "Found", VariableType.Bool, count.I > 0));
+            if (count.I == 0)
+            {
+                return NotFoundOutcome.Resolve(ctx, policy,
+                    string.IsNullOrEmpty(detail) ? $"{label}结果为空" : $"{label}结果为空（{detail}）");
+            }
+            ctx.AddLog(FlowLogLevel.Info, string.IsNullOrEmpty(detail)
+                ? $"[{label}] 区域数 {count.I}"
+                : $"[{label}] {detail}，区域数 {count.I}");
             return NodeResult.Ok;
         }
     }
@@ -249,15 +260,25 @@ namespace VisionFlow.Tools
         /// <summary>圆形膨胀。</summary>
         DilationCircle,
         /// <summary>圆形腐蚀。</summary>
-        ErosionCircle
+        ErosionCircle,
+        /// <summary>矩形开运算。</summary>
+        OpeningRectangle,
+        /// <summary>矩形闭运算。</summary>
+        ClosingRectangle,
+        /// <summary>矩形膨胀。</summary>
+        DilationRectangle,
+        /// <summary>矩形腐蚀。</summary>
+        ErosionRectangle
     }
 
     /// <summary>
-    /// 区域处理工具（参考 VisionTools.ProcessRegionTool）：对区域做连通拆分 / 填充 / 合并 / 形态学操作。
+    /// 区域处理工具（参考 VisionTools.ProcessRegionTool）：对区域做连通拆分 / 填充 / 合并 / 骨架 /
+    /// 圆形或矩形结构元素的形态学操作。工具箱中的区域形态学与 Union1 统一由本工具提供（TR-11）。
     /// </summary>
     [ToolOutput("Region", VariableKind.Object, VariableType.Object, ElementClrType = typeof(HalconRegion))]
     [ToolOutput("Count", VariableKind.Single, VariableType.Int)]
-    public sealed class RegionProcessTool : ToolBase
+    [ToolOutput("Found", VariableKind.Single, VariableType.Bool)]
+    public sealed class RegionProcessTool : ToolBase, INotFoundPolicy
     {
         /// <summary>区域变量引用。</summary>
         [InputRef("区域", typeof(HalconRegion))]
@@ -265,8 +286,14 @@ namespace VisionFlow.Tools
 
         /// <summary>处理方式。</summary>
         public RegionProcessOp Method { get; set; } = RegionProcessOp.Connection;
-        /// <summary>圆形结构元素半径（仅形态学操作有效）。</summary>
+        /// <summary>圆形结构元素半径（仅圆形形态学有效）。</summary>
         public double Radius { get; set; } = 3.5;
+        /// <summary>矩形结构元素宽（仅矩形形态学有效）。</summary>
+        public int Width { get; set; } = 5;
+        /// <summary>矩形结构元素高（仅矩形形态学有效）。</summary>
+        public int Height { get; set; } = 5;
+        /// <summary>处理结果为空时是否失败（默认 true）；关闭后输出 Found=false 并继续。</summary>
+        public bool FailWhenNotFound { get; set; } = true;
 
         public RegionProcessTool(string moduleName) : base(moduleName)
         {
@@ -274,6 +301,15 @@ namespace VisionFlow.Tools
 
         public override NodeResult Run(FlowContext ctx)
         {
+            if (IsRectangleOp(Method) && (Width <= 0 || Height <= 0))
+            {
+                return NodeResult.Fail("矩形形态学宽高必须大于 0");
+            }
+            if (IsCircleOp(Method) && Radius <= 0)
+            {
+                return NodeResult.Fail("圆形形态学半径必须大于 0");
+            }
+
             HObject input = Input<HalconRegion>(ctx, RegionPath).Object;
             HObject output;
             switch (Method)
@@ -299,22 +335,36 @@ namespace VisionFlow.Tools
                 case RegionProcessOp.ErosionCircle:
                     HOperatorSet.ErosionCircle(input, out output, Radius);
                     break;
+                case RegionProcessOp.OpeningRectangle:
+                    HOperatorSet.OpeningRectangle1(input, out output, Width, Height);
+                    break;
+                case RegionProcessOp.ClosingRectangle:
+                    HOperatorSet.ClosingRectangle1(input, out output, Width, Height);
+                    break;
+                case RegionProcessOp.DilationRectangle:
+                    HOperatorSet.DilationRectangle1(input, out output, Width, Height);
+                    break;
+                case RegionProcessOp.ErosionRectangle:
+                    HOperatorSet.ErosionRectangle1(input, out output, Width, Height);
+                    break;
                 default:
                     HOperatorSet.Connection(input, out output);
                     break;
             }
 
-            HOperatorSet.CountObj(output, out HTuple count);
-            if (count.I == 0)
-            {
-                output.Dispose();
-                return NodeResult.Fail($"区域处理（{Method}）结果为空");
-            }
+            return RegionOutput.Set(ctx, ModuleName, this, output, "区域处理", Method.ToString());
+        }
 
-            SetOutput(ctx, Variable.Object(ModuleName, "Region", new HalconRegion(output), count.I));
-            SetOutput(ctx, Variable.Single(ModuleName, "Count", VariableType.Int, count.I));
-            ctx.AddLog(FlowLogLevel.Info, $"[区域处理] {Method}，区域数 {count.I}");
-            return NodeResult.Ok;
+        private static bool IsRectangleOp(RegionProcessOp op)
+        {
+            return op == RegionProcessOp.OpeningRectangle || op == RegionProcessOp.ClosingRectangle
+                || op == RegionProcessOp.DilationRectangle || op == RegionProcessOp.ErosionRectangle;
+        }
+
+        private static bool IsCircleOp(RegionProcessOp op)
+        {
+            return op == RegionProcessOp.OpeningCircle || op == RegionProcessOp.ClosingCircle
+                || op == RegionProcessOp.DilationCircle || op == RegionProcessOp.ErosionCircle;
         }
     }
 
@@ -342,7 +392,9 @@ namespace VisionFlow.Tools
     public enum ManualRegionOutputMode
     {
         UnionOne,
-        Connection
+        Connection,
+        /// <summary>每个包含 ROI 单独输出一个区域（扣除全部排除 ROI），顺序与绘制/阵列生成顺序一致，适合分区检测。</summary>
+        PerShape
     }
 
     public enum ManualRegionShapeKind
@@ -379,6 +431,111 @@ namespace VisionFlow.Tools
         public double Length1 { get; set; }
         public double Length2 { get; set; }
         public double Radius { get; set; }
+
+        /// <summary>复制并平移（行、列方向），形状与角度不变。</summary>
+        public ManualRegionShape Offset(double deltaRow, double deltaColumn, string name)
+        {
+            var copy = (ManualRegionShape)MemberwiseClone();
+            copy.Name = name;
+            copy.Row1 += deltaRow;
+            copy.Row2 += deltaRow;
+            copy.Row += deltaRow;
+            copy.Column1 += deltaColumn;
+            copy.Column2 += deltaColumn;
+            copy.Column += deltaColumn;
+            return copy;
+        }
+
+        /// <summary>
+        /// 按变换矩阵变换 ROI 形状（编辑器示教换算用；运行时直接对生成的区域做 affine_trans_region）。
+        /// 轴对齐矩形在有旋转或缩放时转换为旋转矩形；变换后仍轴对齐且无缩放时保持轴对齐矩形。
+        /// </summary>
+        public ManualRegionShape Transform(HomMat2D matrix)
+        {
+            if (matrix == null)
+            {
+                throw new ArgumentNullException(nameof(matrix));
+            }
+            var copy = (ManualRegionShape)MemberwiseClone();
+            double scale = matrix.ScaleFactor;
+            switch (Kind)
+            {
+                case ManualRegionShapeKind.Rectangle1:
+                {
+                    double row = (Row1 + Row2) / 2.0;
+                    double column = (Column1 + Column2) / 2.0;
+                    double halfWidth = (Column2 - Column1) / 2.0;
+                    double halfHeight = (Row2 - Row1) / 2.0;
+                    matrix.TransformPose(row, column, 0, out double newRow, out double newColumn, out double phi);
+                    if (Math.Abs(phi) < 1e-9 && Math.Abs(scale - 1) < 1e-9)
+                    {
+                        copy.Row1 = newRow - halfHeight;
+                        copy.Row2 = newRow + halfHeight;
+                        copy.Column1 = newColumn - halfWidth;
+                        copy.Column2 = newColumn + halfWidth;
+                        return copy;
+                    }
+                    copy.Kind = ManualRegionShapeKind.Rectangle2;
+                    copy.Row = newRow;
+                    copy.Column = newColumn;
+                    copy.Phi = phi;
+                    copy.Length1 = halfWidth * scale;
+                    copy.Length2 = halfHeight * scale;
+                    return copy;
+                }
+                case ManualRegionShapeKind.Rectangle2:
+                    matrix.TransformPose(Row, Column, Phi, out double rectRow, out double rectColumn, out double rectPhi);
+                    copy.Row = rectRow;
+                    copy.Column = rectColumn;
+                    copy.Phi = rectPhi;
+                    copy.Length1 = Length1 * scale;
+                    copy.Length2 = Length2 * scale;
+                    return copy;
+                case ManualRegionShapeKind.Circle:
+                    matrix.TransformPoint(Row, Column, out double circleRow, out double circleColumn);
+                    copy.Row = circleRow;
+                    copy.Column = circleColumn;
+                    copy.Radius = Radius * scale;
+                    return copy;
+                case ManualRegionShapeKind.Line:
+                    matrix.TransformPoint(Row1, Column1, out double row1, out double column1);
+                    matrix.TransformPoint(Row2, Column2, out double row2, out double column2);
+                    copy.Row1 = row1;
+                    copy.Column1 = column1;
+                    copy.Row2 = row2;
+                    copy.Column2 = column2;
+                    return copy;
+                default:
+                    throw new InvalidOperationException("不支持的手动 ROI 类型：" + Kind);
+            }
+        }
+    }
+
+    /// <summary>手动 ROI 阵列生成：以一个 ROI 为左上角，按行列间距生成网格（先行后列，含原 ROI）。</summary>
+    public static class ManualRegionArray
+    {
+        public static List<ManualRegionShape> Generate(ManualRegionShape seed, int rows, int columns,
+            double rowPitch, double columnPitch)
+        {
+            if (seed == null)
+            {
+                throw new ArgumentNullException(nameof(seed));
+            }
+            if (rows < 1 || columns < 1)
+            {
+                throw new ArgumentException("阵列行数和列数必须大于 0");
+            }
+            string baseName = string.IsNullOrWhiteSpace(seed.Name) ? seed.Kind.ToString() : seed.Name;
+            var shapes = new List<ManualRegionShape>(rows * columns);
+            for (int r = 0; r < rows; r++)
+            {
+                for (int c = 0; c < columns; c++)
+                {
+                    shapes.Add(seed.Offset(r * rowPitch, c * columnPitch, $"{baseName}_{r + 1}-{c + 1}"));
+                }
+            }
+            return shapes;
+        }
     }
 
     public static class ManualRegionSerializer
@@ -413,12 +570,30 @@ namespace VisionFlow.Tools
         public string RoiJson { get; set; } = ManualRegionSerializer.Serialize(new ManualRegionDefinition());
         public ManualRegionOutputMode OutputMode { get; set; } = ManualRegionOutputMode.UnionOne;
 
+        /// <summary>
+        /// 变换矩阵（可选）：ROI 按示教基准坐标保存，配置后运行时整体变换到当前位姿（affine_trans_region），
+        /// 如引用“区域定位1.Matrix”或匹配的“BestHomMat”；多个工件请在循环中引用 Loop.Current.HomMat。
+        /// 未配置时按基准坐标输出。
+        /// </summary>
+        [InputRef("变换矩阵", typeof(HomMat2D), Optional = true)]
+        public string MatrixPath { get; set; }
+
         public ManualRegionTool(string moduleName) : base(moduleName)
         {
         }
 
         public override NodeResult Run(FlowContext ctx)
         {
+            if (!FollowMatrixResolver.TryResolve(ctx, ModuleName, MatrixPath, out List<HomMat2D> matrices, out string matrixError))
+            {
+                return NodeResult.Fail(matrixError);
+            }
+            if (matrices.Count > 1)
+            {
+                return NodeResult.Fail($"{ModuleName} 的变换矩阵只支持单个矩阵（当前为 {matrices.Count} 个）；多个工件请放在 For 循环中引用 Loop.Current.HomMat");
+            }
+            HomMat2D matrix = matrices[0];
+
             ManualRegionDefinition definition;
             try
             {
@@ -441,30 +616,49 @@ namespace VisionFlow.Tools
             {
                 HOperatorSet.GenEmptyRegion(out include);
                 HOperatorSet.GenEmptyRegion(out exclude);
-                foreach (ManualRegionShape shape in definition.Items)
+                HOperatorSet.GenEmptyObj(out HObject perShape);
+                try
                 {
-                    HObject shapeRegion = CreateShapeRegion(shape);
-                    if (shape.Polarity == ManualRegionPolarity.Exclude)
+                    foreach (ManualRegionShape shape in definition.Items)
                     {
-                        HOperatorSet.Union2(exclude, shapeRegion, out HObject mergedExclude);
-                        exclude.Dispose();
-                        exclude = mergedExclude;
+                        HObject shapeRegion = CreateShapeRegion(shape);
+                        if (shape.Polarity == ManualRegionPolarity.Exclude)
+                        {
+                            HOperatorSet.Union2(exclude, shapeRegion, out HObject mergedExclude);
+                            exclude.Dispose();
+                            exclude = mergedExclude;
+                        }
+                        else
+                        {
+                            HOperatorSet.Union2(include, shapeRegion, out HObject mergedInclude);
+                            include.Dispose();
+                            include = mergedInclude;
+                            HOperatorSet.ConcatObj(perShape, shapeRegion, out HObject mergedPerShape);
+                            perShape.Dispose();
+                            perShape = mergedPerShape;
+                        }
+                        shapeRegion.Dispose();
                     }
-                    else
-                    {
-                        HOperatorSet.Union2(include, shapeRegion, out HObject mergedInclude);
-                        include.Dispose();
-                        include = mergedInclude;
-                    }
-                    shapeRegion.Dispose();
-                }
 
-                HOperatorSet.Difference(include, exclude, out output);
+                    // PerShape：每个包含 ROI 各自扣除排除区域，保持绘制顺序
+                    HOperatorSet.Difference(OutputMode == ManualRegionOutputMode.PerShape ? perShape : include, exclude, out output);
+                }
+                finally
+                {
+                    perShape.Dispose();
+                }
                 if (OutputMode == ManualRegionOutputMode.Connection)
                 {
                     HOperatorSet.Connection(output, out HObject connected);
                     output.Dispose();
                     output = connected;
+                }
+                if (matrix != null)
+                {
+                    // 逐对象变换，保持对象顺序（PerShape 的格子序号不变）
+                    HOperatorSet.AffineTransRegion(output, out HObject followed, matrix.Data, "nearest_neighbor");
+                    output.Dispose();
+                    output = followed;
                 }
 
                 HOperatorSet.CountObj(output, out HTuple count);
@@ -476,7 +670,8 @@ namespace VisionFlow.Tools
 
                 SetOutput(ctx, Variable.Object(ModuleName, "Region", new HalconRegion(output), count.I));
                 SetOutput(ctx, Variable.Single(ModuleName, "Count", VariableType.Int, count.I));
-                ctx.AddLog(FlowLogLevel.Info, $"[手动 Region] ROI={definition.Items.Count}, 输出模式={OutputMode}, 区域数={count.I}");
+                ctx.AddLog(FlowLogLevel.Info, $"[手动 Region] ROI={definition.Items.Count}, 输出模式={OutputMode}, 区域数={count.I}"
+                    + (matrix != null ? $"，已按 {MatrixPath} 跟随" : string.Empty));
                 return NodeResult.Ok;
             }
             finally
@@ -511,7 +706,8 @@ namespace VisionFlow.Tools
 
     [ToolOutput("Region", VariableKind.Object, VariableType.Object, ElementClrType = typeof(HalconRegion))]
     [ToolOutput("Count", VariableKind.Single, VariableType.Int)]
-    public sealed class RegionDifferenceTool : ToolBase
+    [ToolOutput("Found", VariableKind.Single, VariableType.Bool)]
+    public sealed class RegionDifferenceTool : ToolBase, INotFoundPolicy
     {
         [InputRef("区域1", typeof(HalconRegion))]
         public string RegionPath1 { get; set; }
@@ -520,6 +716,8 @@ namespace VisionFlow.Tools
         public string RegionPath2 { get; set; }
 
         public bool Connection { get; set; }
+        /// <summary>结果为空时是否失败（默认 true）；关闭后输出 Found=false 并继续。</summary>
+        public bool FailWhenNotFound { get; set; } = true;
 
         public RegionDifferenceTool(string moduleName) : base(moduleName)
         {
@@ -538,23 +736,14 @@ namespace VisionFlow.Tools
                 union.Dispose();
             }
 
-            HOperatorSet.CountObj(output, out HTuple count);
-            if (count.I == 0)
-            {
-                output.Dispose();
-                return NodeResult.Fail("Region 相减结果为空");
-            }
-
-            SetOutput(ctx, Variable.Object(ModuleName, "Region", new HalconRegion(output), count.I));
-            SetOutput(ctx, Variable.Single(ModuleName, "Count", VariableType.Int, count.I));
-            ctx.AddLog(FlowLogLevel.Info, $"[Region 相减] 输出区域数={count.I}");
-            return NodeResult.Ok;
+            return RegionOutput.Set(ctx, ModuleName, this, output, "Region 相减", null);
         }
     }
 
     [ToolOutput("Region", VariableKind.Object, VariableType.Object, ElementClrType = typeof(HalconRegion))]
     [ToolOutput("Count", VariableKind.Single, VariableType.Int)]
-    public sealed class RegionUnion2Tool : ToolBase
+    [ToolOutput("Found", VariableKind.Single, VariableType.Bool)]
+    public sealed class RegionUnion2Tool : ToolBase, INotFoundPolicy
     {
         [InputRef("区域1", typeof(HalconRegion))]
         public string RegionPath1 { get; set; }
@@ -563,6 +752,8 @@ namespace VisionFlow.Tools
         public string RegionPath2 { get; set; }
 
         public bool Connection { get; set; }
+        /// <summary>结果为空时是否失败（默认 true）；关闭后输出 Found=false 并继续。</summary>
+        public bool FailWhenNotFound { get; set; } = true;
 
         public RegionUnion2Tool(string moduleName) : base(moduleName)
         {
@@ -580,23 +771,14 @@ namespace VisionFlow.Tools
                 output = connected;
             }
 
-            HOperatorSet.CountObj(output, out HTuple count);
-            if (count.I == 0)
-            {
-                output.Dispose();
-                return NodeResult.Fail("Region 合并结果为空");
-            }
-
-            SetOutput(ctx, Variable.Object(ModuleName, "Region", new HalconRegion(output), count.I));
-            SetOutput(ctx, Variable.Single(ModuleName, "Count", VariableType.Int, count.I));
-            ctx.AddLog(FlowLogLevel.Info, $"[Region 合并] 输出区域数={count.I}");
-            return NodeResult.Ok;
+            return RegionOutput.Set(ctx, ModuleName, this, output, "Region 合并", null);
         }
     }
 
     [ToolOutput("Region", VariableKind.Object, VariableType.Object, ElementClrType = typeof(HalconRegion))]
     [ToolOutput("Count", VariableKind.Single, VariableType.Int)]
-    public sealed class RegionIntersectionTool : ToolBase
+    [ToolOutput("Found", VariableKind.Single, VariableType.Bool)]
+    public sealed class RegionIntersectionTool : ToolBase, INotFoundPolicy
     {
         [InputRef("区域1", typeof(HalconRegion))]
         public string RegionPath1 { get; set; }
@@ -605,6 +787,8 @@ namespace VisionFlow.Tools
         public string RegionPath2 { get; set; }
 
         public bool Connection { get; set; }
+        /// <summary>结果为空时是否失败（默认 true）；关闭后输出 Found=false 并继续。</summary>
+        public bool FailWhenNotFound { get; set; } = true;
 
         public RegionIntersectionTool(string moduleName) : base(moduleName)
         {
@@ -622,28 +806,21 @@ namespace VisionFlow.Tools
                 output = connected;
             }
 
-            HOperatorSet.CountObj(output, out HTuple count);
-            if (count.I == 0)
-            {
-                output.Dispose();
-                return NodeResult.Fail("Region 交集结果为空");
-            }
-
-            SetOutput(ctx, Variable.Object(ModuleName, "Region", new HalconRegion(output), count.I));
-            SetOutput(ctx, Variable.Single(ModuleName, "Count", VariableType.Int, count.I));
-            ctx.AddLog(FlowLogLevel.Info, $"[Region 交集] 输出区域数={count.I}");
-            return NodeResult.Ok;
+            return RegionOutput.Set(ctx, ModuleName, this, output, "Region 交集", null);
         }
     }
 
     [ToolOutput("Region", VariableKind.Object, VariableType.Object, ElementClrType = typeof(HalconRegion))]
     [ToolOutput("Count", VariableKind.Single, VariableType.Int)]
-    public sealed class RegionShapeTransTool : ToolBase
+    [ToolOutput("Found", VariableKind.Single, VariableType.Bool)]
+    public sealed class RegionShapeTransTool : ToolBase, INotFoundPolicy
     {
         [InputRef("区域", typeof(HalconRegion))]
         public string RegionPath { get; set; }
 
         public RegionShapeTransformType Type { get; set; } = RegionShapeTransformType.convex;
+        /// <summary>结果为空时是否失败（默认 true）；关闭后输出 Found=false 并继续。</summary>
+        public bool FailWhenNotFound { get; set; } = true;
 
         public RegionShapeTransTool(string moduleName) : base(moduleName)
         {
@@ -653,28 +830,25 @@ namespace VisionFlow.Tools
         {
             HObject region = Input<HalconRegion>(ctx, RegionPath).Object;
             HOperatorSet.ShapeTrans(region, out HObject output, Type.ToString());
-            HOperatorSet.CountObj(output, out HTuple count);
-            if (count.I == 0)
-            {
-                output.Dispose();
-                return NodeResult.Fail("Region 形状转换结果为空");
-            }
-
-            SetOutput(ctx, Variable.Object(ModuleName, "Region", new HalconRegion(output), count.I));
-            SetOutput(ctx, Variable.Single(ModuleName, "Count", VariableType.Int, count.I));
-            ctx.AddLog(FlowLogLevel.Info, $"[Region 形状转换] Type={Type}, 输出区域数={count.I}");
-            return NodeResult.Ok;
+            return RegionOutput.Set(ctx, ModuleName, this, output, "Region 形状转换", $"Type={Type}");
         }
     }
 
+    /// <summary>
+    /// Region Union1：已并入“区域处理”（Method=Union1），工具箱不再提供独立入口（TR-11），
+    /// 类型保留用于加载历史流程文件。
+    /// </summary>
     [ToolOutput("Region", VariableKind.Object, VariableType.Object, ElementClrType = typeof(HalconRegion))]
     [ToolOutput("Count", VariableKind.Single, VariableType.Int)]
-    public sealed class RegionUnion1Tool : ToolBase
+    [ToolOutput("Found", VariableKind.Single, VariableType.Bool)]
+    public sealed class RegionUnion1Tool : ToolBase, INotFoundPolicy
     {
         [InputRef("区域", typeof(HalconRegion))]
         public string RegionPath { get; set; }
 
         public bool Connection { get; set; }
+        /// <summary>结果为空时是否失败（默认 true）；关闭后输出 Found=false 并继续。</summary>
+        public bool FailWhenNotFound { get; set; } = true;
 
         public RegionUnion1Tool(string moduleName) : base(moduleName)
         {
@@ -691,17 +865,7 @@ namespace VisionFlow.Tools
                 output = connected;
             }
 
-            HOperatorSet.CountObj(output, out HTuple count);
-            if (count.I == 0)
-            {
-                output.Dispose();
-                return NodeResult.Fail("Region Union1 结果为空");
-            }
-
-            SetOutput(ctx, Variable.Object(ModuleName, "Region", new HalconRegion(output), count.I));
-            SetOutput(ctx, Variable.Single(ModuleName, "Count", VariableType.Int, count.I));
-            ctx.AddLog(FlowLogLevel.Info, $"[Region Union1] 输出区域数={count.I}");
-            return NodeResult.Ok;
+            return RegionOutput.Set(ctx, ModuleName, this, output, "Region Union1", null);
         }
     }
 
@@ -713,12 +877,13 @@ namespace VisionFlow.Tools
     }
 
     /// <summary>
-    /// 形态学工具：按 Shape 选择矩形或圆形结构元素执行膨胀/腐蚀/开/闭运算，
-    /// 可选 connection 拆分连通域。
+    /// 形态学工具：按 Shape 选择矩形或圆形结构元素执行膨胀/腐蚀/开/闭运算，可选 connection 拆分连通域。
+    /// 已并入“区域处理”（TR-11），工具箱不再提供独立入口；类型保留用于加载历史流程文件。
     /// </summary>
     [ToolOutput("Region", VariableKind.Object, VariableType.Object, ElementClrType = typeof(HalconRegion))]
     [ToolOutput("Count", VariableKind.Single, VariableType.Int)]
-    public class MorphologyTool : ToolBase
+    [ToolOutput("Found", VariableKind.Single, VariableType.Bool)]
+    public class MorphologyTool : ToolBase, INotFoundPolicy
     {
         [InputRef("区域", typeof(HalconRegion))]
         public string RegionPath { get; set; }
@@ -734,6 +899,8 @@ namespace VisionFlow.Tools
         public double Radius { get; set; } = 3.5;
         public bool Connection { get; set; }
         public MorphologyOperation Operation { get; set; } = MorphologyOperation.closing;
+        /// <summary>结果为空时是否失败（默认 true）；关闭后输出 Found=false 并继续。</summary>
+        public bool FailWhenNotFound { get; set; } = true;
 
         public MorphologyTool(string moduleName) : base(moduleName)
         {
@@ -797,17 +964,7 @@ namespace VisionFlow.Tools
                 union.Dispose();
             }
 
-            HOperatorSet.CountObj(output, out HTuple count);
-            if (count.I == 0)
-            {
-                output.Dispose();
-                return NodeResult.Fail($"{label}结果为空");
-            }
-
-            SetOutput(ctx, Variable.Object(ModuleName, "Region", new HalconRegion(output), count.I));
-            SetOutput(ctx, Variable.Single(ModuleName, "Count", VariableType.Int, count.I));
-            ctx.AddLog(FlowLogLevel.Info, $"[{label}] {Operation}，输出区域数={count.I}");
-            return NodeResult.Ok;
+            return RegionOutput.Set(ctx, ModuleName, this, output, label, Operation.ToString());
         }
     }
 
@@ -835,7 +992,8 @@ namespace VisionFlow.Tools
     [ToolOutput("FirstMaxGray", VariableKind.Single, VariableType.Double)]
     [ToolOutput("FirstRange", VariableKind.Single, VariableType.Double)]
     [ToolOutput("Count", VariableKind.Single, VariableType.Int)]
-    public sealed class RegionMinMaxGrayTool : ToolBase
+    [ToolOutput("Found", VariableKind.Single, VariableType.Bool)]
+    public sealed class RegionMinMaxGrayTool : ToolBase, INotFoundPolicy
     {
         [InputRef("区域", typeof(HalconRegion))]
         public string RegionPath { get; set; }
@@ -844,6 +1002,8 @@ namespace VisionFlow.Tools
         public string ImagePath { get; set; } = "Input.Image";
 
         public double Percent { get; set; }
+        /// <summary>输入区域为空时是否失败（默认 true）；关闭后输出 Found=false 并继续。</summary>
+        public bool FailWhenNotFound { get; set; } = true;
 
         public RegionMinMaxGrayTool(string moduleName) : base(moduleName)
         {
@@ -859,36 +1019,98 @@ namespace VisionFlow.Tools
             HObject region = Input<HalconRegion>(ctx, RegionPath).Object;
             HObject image = Input<HalconImage>(ctx, ImagePath).Object;
             HOperatorSet.CountObj(region, out HTuple regionCount);
-            if (regionCount.I == 0)
+            var mins = new List<double>();
+            var maxs = new List<double>();
+            var ranges = new List<double>();
+            if (regionCount.I > 0)
             {
-                return NodeResult.Fail("Region 灰度统计输入区域为空");
+                HOperatorSet.MinMaxGray(region, image, Percent, out HTuple minTuple, out HTuple maxTuple, out HTuple rangeTuple);
+                mins.AddRange(HalconTupleConvert.ToDoubles(minTuple));
+                maxs.AddRange(HalconTupleConvert.ToDoubles(maxTuple));
+                ranges.AddRange(HalconTupleConvert.ToDoubles(rangeTuple));
             }
-
-            HOperatorSet.MinMaxGray(region, image, Percent, out HTuple minTuple, out HTuple maxTuple, out HTuple rangeTuple);
-            var mins = new List<double>(HalconTupleConvert.ToDoubles(minTuple));
-            var maxs = new List<double>(HalconTupleConvert.ToDoubles(maxTuple));
-            var ranges = new List<double>(HalconTupleConvert.ToDoubles(rangeTuple));
             int count = Math.Max(mins.Count, Math.Max(maxs.Count, ranges.Count));
-            if (count == 0)
-            {
-                return NodeResult.Fail("Region 灰度统计结果为空");
-            }
 
             SetOutput(ctx, Variable.Array(ModuleName, "MinGrays", VariableType.Double, mins));
             SetOutput(ctx, Variable.Array(ModuleName, "MaxGrays", VariableType.Double, maxs));
             SetOutput(ctx, Variable.Array(ModuleName, "Ranges", VariableType.Double, ranges));
-            SetOutput(ctx, Variable.Single(ModuleName, "FirstMinGray", VariableType.Double, mins.Count > 0 ? mins[0] : 0));
-            SetOutput(ctx, Variable.Single(ModuleName, "FirstMaxGray", VariableType.Double, maxs.Count > 0 ? maxs[0] : 0));
-            SetOutput(ctx, Variable.Single(ModuleName, "FirstRange", VariableType.Double, ranges.Count > 0 ? ranges[0] : 0));
+            SetOutput(ctx, Variable.Single(ModuleName, "FirstMinGray", VariableType.Double, mins.Count > 0 ? mins[0] : double.NaN));
+            SetOutput(ctx, Variable.Single(ModuleName, "FirstMaxGray", VariableType.Double, maxs.Count > 0 ? maxs[0] : double.NaN));
+            SetOutput(ctx, Variable.Single(ModuleName, "FirstRange", VariableType.Double, ranges.Count > 0 ? ranges[0] : double.NaN));
             SetOutput(ctx, Variable.Single(ModuleName, "Count", VariableType.Int, count));
+            SetOutput(ctx, Variable.Single(ModuleName, "Found", VariableType.Bool, count > 0));
+            if (count == 0)
+            {
+                return NotFoundOutcome.Resolve(ctx, this,
+                    regionCount.I == 0 ? "Region 灰度统计输入区域为空" : "Region 灰度统计结果为空");
+            }
             ctx.AddLog(FlowLogLevel.Info, $"[MinMaxGray] 区域数={regionCount.I}, 输出={count}, Percent={Percent}");
             return NodeResult.Ok;
+        }
+    }
+
+    /// <summary>
+    /// 特征值工具的统一输出（TR-09）：
+    /// Values 按“特征优先”排列（特征 f 第 i 个对象 = Values[f * ObjectCount + i]），
+    /// Features 按特征汇总（名称、数量、首值、最小/最大/平均值），供条件判断直接引用。
+    /// </summary>
+    public sealed class FeatureValues
+    {
+        public string Name { get; set; }
+        public int Count { get; set; }
+        public double First { get; set; }
+        public double Min { get; set; }
+        public double Max { get; set; }
+        public double Mean { get; set; }
+        public double[] Values { get; set; }
+
+        public static FeatureValues Create(string name, IList<double> values)
+        {
+            bool any = values.Count > 0;
+            return new FeatureValues
+            {
+                Name = name,
+                Count = values.Count,
+                First = any ? values[0] : double.NaN,
+                Min = any ? values.Min() : double.NaN,
+                Max = any ? values.Max() : double.NaN,
+                Mean = any ? values.Average() : double.NaN,
+                Values = values.ToArray()
+            };
+        }
+
+        public override string ToString()
+        {
+            return $"{Name}: Count={Count}, Min={Min:F3}, Max={Max:F3}, Mean={Mean:F3}";
+        }
+    }
+
+    internal static class FeatureOutput
+    {
+        public static void Set(FlowContext ctx, string moduleName, List<FeatureValues> features, int objectCount)
+        {
+            var values = features.SelectMany(f => f.Values).ToList();
+            var outputs = new[]
+            {
+                Variable.Array(moduleName, "Values", VariableType.Double, values),
+                Variable.Single(moduleName, "FirstValue", VariableType.Double, values.Count > 0 ? values[0] : double.NaN),
+                Variable.Single(moduleName, "Count", VariableType.Int, values.Count),
+                Variable.Single(moduleName, "ObjectCount", VariableType.Int, objectCount),
+                Variable.Array(moduleName, "Features", VariableType.Object, features)
+            };
+            foreach (Variable output in outputs)
+            {
+                ctx.SetVariable(output);
+            }
         }
     }
 
     [ToolOutput("Values", VariableKind.Array, VariableType.Double)]
     [ToolOutput("FirstValue", VariableKind.Single, VariableType.Double)]
     [ToolOutput("Count", VariableKind.Single, VariableType.Int)]
+    [ToolOutput("ObjectCount", VariableKind.Single, VariableType.Int)]
+    [ToolOutput("Features", VariableKind.Array, VariableType.Object, ElementClrType = typeof(FeatureValues),
+        Members = new[] { "Name", "Count", "First", "Min", "Max", "Mean" })]
     public sealed class RegionFeaturesTool : ToolBase
     {
         [InputRef("区域", typeof(HalconRegion))]
@@ -903,17 +1125,16 @@ namespace VisionFlow.Tools
         public override NodeResult Run(FlowContext ctx)
         {
             HObject region = Input<HalconRegion>(ctx, RegionPath).Object;
-            var values = new List<double>();
+            HOperatorSet.CountObj(region, out HTuple objectCount);
+            var features = new List<FeatureValues>();
             foreach (string feature in HalconTupleConvert.SplitCsv(Features))
             {
                 HOperatorSet.RegionFeatures(region, feature, out HTuple tuple);
-                values.AddRange(HalconTupleConvert.ToDoubles(tuple));
+                features.Add(FeatureValues.Create(feature, HalconTupleConvert.ToDoubles(tuple).ToList()));
             }
 
-            SetOutput(ctx, Variable.Array(ModuleName, "Values", VariableType.Double, values));
-            SetOutput(ctx, Variable.Single(ModuleName, "FirstValue", VariableType.Double, values.Count > 0 ? values[0] : 0));
-            SetOutput(ctx, Variable.Single(ModuleName, "Count", VariableType.Int, values.Count));
-            ctx.AddLog(FlowLogLevel.Info, $"[Region 特征值] {Features}，输出 {values.Count} 个数值");
+            FeatureOutput.Set(ctx, ModuleName, features, objectCount.I);
+            ctx.AddLog(FlowLogLevel.Info, $"[Region 特征值] {Features}，对象数 {objectCount.I}，输出 {features.Sum(f => f.Count)} 个数值");
             return NodeResult.Ok;
         }
     }
@@ -967,7 +1188,8 @@ namespace VisionFlow.Tools
     /// </summary>
     [ToolOutput("Region", VariableKind.Object, VariableType.Object, ElementClrType = typeof(HalconRegion))]
     [ToolOutput("Count", VariableKind.Single, VariableType.Int)]
-    public sealed class SelectRegionTool : ToolBase
+    [ToolOutput("Found", VariableKind.Single, VariableType.Bool)]
+    public sealed class SelectRegionTool : ToolBase, INotFoundPolicy
     {
         /// <summary>区域变量引用。</summary>
         [InputRef("区域", typeof(HalconRegion))]
@@ -981,6 +1203,8 @@ namespace VisionFlow.Tools
         public double Max { get; set; } = 99999999;
         /// <summary>多个满足条件时的取件方式。</summary>
         public RegionTakeMode TakeMode { get; set; } = RegionTakeMode.All;
+        /// <summary>筛选结果为空时是否失败（默认 true）；关闭后输出 Found=false 并继续。</summary>
+        public bool FailWhenNotFound { get; set; } = true;
 
         public SelectRegionTool(string moduleName) : base(moduleName)
         {
@@ -993,11 +1217,6 @@ namespace VisionFlow.Tools
             HOperatorSet.SelectShape(input, out HObject selected,
                 new HTuple(Feature), new HTuple("and"), new HTuple(Min), new HTuple(Max));
             HOperatorSet.CountObj(selected, out HTuple count);
-            if (count.I == 0)
-            {
-                selected.Dispose();
-                return NodeResult.Fail($"区域筛选结果为空（特征 {Feature} ∈ [{Min}, {Max}]）");
-            }
 
             HObject result = selected;
             if (TakeMode != RegionTakeMode.All && count.I > 1)
@@ -1005,17 +1224,10 @@ namespace VisionFlow.Tools
                 int pick = PickIndex(selected, count.I);
                 HOperatorSet.SelectObj(selected, out result, pick + 1);
                 selected.Dispose();
-                count = 1;
-            }
-            else if (TakeMode != RegionTakeMode.All && count.I == 1)
-            {
-                // 只有一个时无需再取
             }
 
-            SetOutput(ctx, Variable.Object(ModuleName, "Region", new HalconRegion(result), count.I));
-            SetOutput(ctx, Variable.Single(ModuleName, "Count", VariableType.Int, count.I));
-            ctx.AddLog(FlowLogLevel.Info, $"[区域筛选] {Feature} ∈ [{Min}, {Max}]，取 {TakeMode}，输出 {count.I} 个区域");
-            return NodeResult.Ok;
+            return RegionOutput.Set(ctx, ModuleName, this, result, "区域筛选",
+                $"{Feature} ∈ [{Min}, {Max}]，取 {TakeMode}");
         }
 
         /// <summary>按取件方式返回要选中的下标（0 基）。</summary>
@@ -1081,7 +1293,8 @@ namespace VisionFlow.Tools
     [ToolOutput("Matrix", VariableKind.Object, VariableType.Object, ElementClrType = typeof(HomMat2D))]
     [ToolOutput("BaseToCurrentMatrix", VariableKind.Object, VariableType.Object, ElementClrType = typeof(HomMat2D))]
     [ToolOutput("CurrentToBaseMatrix", VariableKind.Object, VariableType.Object, ElementClrType = typeof(HomMat2D))]
-    public sealed class RegionPoseTool : ToolBase
+    [ToolOutput("Found", VariableKind.Single, VariableType.Bool)]
+    public sealed class RegionPoseTool : ToolBase, INotFoundPolicy
     {
         private sealed class PoseInfo
         {
@@ -1105,6 +1318,9 @@ namespace VisionFlow.Tools
         /// <summary>方向角处理方式（水平 / 垂直 / 不约束）。</summary>
         public RegionAngleMode AngleMode { get; set; } = RegionAngleMode.Horizontal;
 
+        /// <summary>输入区域为空时是否失败（默认 true）；关闭后输出 Found=false、矩阵为 null 并继续。</summary>
+        public bool FailWhenNotFound { get; set; } = true;
+
         public RegionPoseTool(string moduleName) : base(moduleName)
         {
         }
@@ -1112,6 +1328,21 @@ namespace VisionFlow.Tools
         public override NodeResult Run(FlowContext ctx)
         {
             HObject region = Input<HalconRegion>(ctx, RegionPath).Object;
+            HOperatorSet.CountObj(region, out HTuple regionCount);
+            if (regionCount.I == 0)
+            {
+                // 未定位到区域：显式清空输出，避免循环中下游读到上一轮的位姿
+                SetOutput(ctx, Variable.Single(ModuleName, "CenterRow", VariableType.Double, double.NaN));
+                SetOutput(ctx, Variable.Single(ModuleName, "CenterColumn", VariableType.Double, double.NaN));
+                SetOutput(ctx, Variable.Single(ModuleName, "Angle", VariableType.Double, double.NaN));
+                SetOutput(ctx, Variable.Single(ModuleName, "Area", VariableType.Double, 0.0));
+                SetOutput(ctx, Variable.Object<HomMat2D>(ModuleName, "Matrix", null, 0));
+                SetOutput(ctx, Variable.Object<HomMat2D>(ModuleName, "BaseToCurrentMatrix", null, 0));
+                SetOutput(ctx, Variable.Object<HomMat2D>(ModuleName, "CurrentToBaseMatrix", null, 0));
+                SetOutput(ctx, Variable.Single(ModuleName, "Found", VariableType.Bool, false));
+                return NotFoundOutcome.Resolve(ctx, this, "区域定位输入区域为空（请检查上游分割/筛选）");
+            }
+
             PoseInfo pose;
             try
             {
@@ -1132,6 +1363,7 @@ namespace VisionFlow.Tools
             SetOutput(ctx, Variable.Object(ModuleName, "Matrix", baseToCurrent, 1));
             SetOutput(ctx, Variable.Object(ModuleName, "BaseToCurrentMatrix", baseToCurrent, 1));
             SetOutput(ctx, Variable.Object(ModuleName, "CurrentToBaseMatrix", currentToBase, 1));
+            SetOutput(ctx, Variable.Single(ModuleName, "Found", VariableType.Bool, true));
 
             ctx.AddLog(FlowLogLevel.Info,
                 $"[区域定位] 中心=({pose.Row:F2}, {pose.Column:F2}), 角度={pose.Angle:F4}, 面积={pose.Area:F0}，BaseToCurrent={baseToCurrent}, CurrentToBase={currentToBase}");

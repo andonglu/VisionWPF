@@ -30,6 +30,12 @@ namespace VisionFlow.WpfToolEditors.Controls
             ImageView.ShowImage(image);
         }
 
+        /// <summary>当前显示的图像（控件持有的副本，调用方不得释放）；未加载图像时为 null。</summary>
+        public HObject CurrentImage
+        {
+            get { return ImageView.ImageObject; }
+        }
+
         public void BeginAddRoi(RoiKind kind)
         {
             ImageView.BeginAddRoi(kind);

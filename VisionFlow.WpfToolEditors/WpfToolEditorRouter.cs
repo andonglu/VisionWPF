@@ -23,9 +23,18 @@ namespace VisionFlow.WpfToolEditors
             {
                 return new WpfMatchToolEditWindow(matchTool, context);
             }
+            if (tool is DescriptorMatchTool descriptorTool)
+            {
+                return new WpfDescriptorMatchToolEditWindow(descriptorTool, context);
+            }
             if (tool is LoadImageTool loadImageTool)
             {
                 return new WpfLoadImageToolEditWindow(loadImageTool);
+            }
+            // 椭圆测量也派生自 FollowMeasureToolBase，须先于通用跟随测量窗口路由到专用窗口
+            if (tool is EllipseFollowMeasureTool ellipseMeasureTool)
+            {
+                return new WpfEllipseMeasureToolEditWindow(ellipseMeasureTool, context);
             }
             if (tool is FollowMeasureToolBase followMeasureTool)
             {
@@ -34,10 +43,6 @@ namespace VisionFlow.WpfToolEditors
             if (tool is ManualRegionTool manualRegionTool)
             {
                 return new WpfManualRegionToolEditWindow(manualRegionTool, context);
-            }
-            if (tool is EllipseFollowMeasureTool ellipseMeasureTool)
-            {
-                return new WpfEllipseMeasureToolEditWindow(ellipseMeasureTool, context);
             }
             return IsVisualPreviewTool(tool)
                 ? (Window)new WpfVisualToolEditWindow(tool, context)
@@ -65,6 +70,8 @@ namespace VisionFlow.WpfToolEditors
                 || tool is RegionFeaturesTool
                 || tool is RegionMinMaxGrayTool
                 || tool is SelectRegionTool
+                || tool is RegionSortTool
+                || tool is ZoneInspectTool
                 || tool is RegionPoseTool
                 || tool is XldToolBase
                 || tool is XldFeaturesTool
