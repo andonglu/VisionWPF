@@ -8,7 +8,11 @@ namespace VisionFlow.Core
         NodeCompleted,
         NodeFailed,
         FlowCompleted,
-        FlowCancelled
+        FlowCancelled,
+        /// <summary>单步调试：引擎在节点前暂停，携带节点 Id。</summary>
+        DebugPaused,
+        /// <summary>单步调试：暂停被解除、节点继续执行，携带节点 Id。</summary>
+        DebugResumed
     }
 
     public sealed class FlowProgress

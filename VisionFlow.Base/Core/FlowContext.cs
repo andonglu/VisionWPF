@@ -47,6 +47,11 @@ namespace VisionFlow.Core
 
         public CancellationToken CancellationToken { get; set; }
         public IProgress<FlowProgress> Progress { get; set; }
+        /// <summary>
+        /// 调试钩子（如 <see cref="FlowDebugController"/>），默认 null 表示不调试。
+        /// 预览上下文不继承该钩子，工具预览永不暂停。
+        /// </summary>
+        public IFlowDebugHooks DebugHooks { get; set; }
         public bool IsPreview { get; private set; }
         public bool AllowMatrixFallback { get; private set; }
 

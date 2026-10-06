@@ -31,6 +31,11 @@ namespace VisionFlow.Nodes
 
         public List<FlowNode> Body { get; } = new List<FlowNode>();
 
+        public override bool IsComposite
+        {
+            get { return true; }
+        }
+
         private ForLoopNode(string name) : base(name)
         {
         }

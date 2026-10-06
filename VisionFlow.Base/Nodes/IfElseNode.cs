@@ -28,6 +28,11 @@ namespace VisionFlow.Nodes
         public List<FlowNode> ElseBranch { get; } = new List<FlowNode>();
         public List<BranchOutputDef> Outputs { get; } = new List<BranchOutputDef>();
 
+        public override bool IsComposite
+        {
+            get { return true; }
+        }
+
         public IfElseNode(string name, ComparisonCondition condition = null) : base(name)
         {
             Condition = condition;

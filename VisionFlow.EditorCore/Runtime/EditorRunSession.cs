@@ -55,6 +55,10 @@ namespace VisionFlow.Runtime
         private readonly IVisionFlowRuntime _runtime;
         private CancellationTokenSource _runCts;
         private FlowContext _lastRunContext;
+        /// <summary>当前调试会话的控制器（非调试运行为 null）。</summary>
+        private FlowDebugController _debugController;
+        /// <summary>当前正在运行（含暂停中）的实时上下文，供暂停时读取变量/日志。</summary>
+        private FlowContext _activeContext;
         /// <summary>本次运行专用的输入图像副本（CopyObj），避免运行结果引用被换图释放的对象。</summary>
         private HObject _runImage;
 
@@ -81,10 +85,53 @@ namespace VisionFlow.Runtime
             get { return _lastRunContext; }
         }
 
-        /// <summary>请求停止当前运行；无运行时为空操作。</summary>
+        /// <summary>当前运行的实时上下文（运行中/暂停中可读，运行结束或失败时为 null）。</summary>
+        public FlowContext ActiveContext
+        {
+            get { return _activeContext; }
+        }
+
+        /// <summary>调试会话是否正暂停在某个节点前。</summary>
+        public bool IsPaused
+        {
+            get { return _debugController != null && _debugController.IsPaused; }
+        }
+
+        /// <summary>当前暂停节点 Id（未暂停时为 null）。</summary>
+        public string PausedNodeId
+        {
+            get { return _debugController?.PausedNodeId; }
+        }
+
+        /// <summary>当前暂停节点名（未暂停时为 null）。</summary>
+        public string PausedNodeName
+        {
+            get { return _debugController?.PausedNodeName; }
+        }
+
+        /// <summary>请求停止当前运行；无运行时为空操作。调试暂停中会先放行闸门再由取消令牌中止。</summary>
         public void Stop()
         {
+            _debugController?.Stop();
             _runCts?.Cancel();
+        }
+
+        /// <summary>单步（步入）：恢复执行恰好一个节点，在下一个节点前再暂停。</summary>
+        public void Step()
+        {
+            _debugController?.Step();
+        }
+
+        /// <summary>逐过程：暂停在复合节点上时执行整个子树不再暂停；普通节点等同单步。</summary>
+        public void StepOver()
+        {
+            _debugController?.StepOver();
+        }
+
+        /// <summary>继续：解除所有暂停，自由运行到结束/失败。</summary>
+        public void Continue()
+        {
+            _debugController?.Continue();
         }
 
         /// <summary>丢弃上次运行结果并回收其 HALCON 资源（旧结果替换后资源可回收）。</summary>
@@ -100,7 +147,21 @@ namespace VisionFlow.Runtime
         /// 执行一次运行。重复调用（运行中）返回 AlreadyRunning；
         /// 成功结束时用新结果替换旧结果并释放旧资源。
         /// </summary>
-        public async Task<EditorRunOutcome> RunAsync(FlowNode root, HObject inputImage, string inputImagePath)
+        public Task<EditorRunOutcome> RunAsync(FlowNode root, HObject inputImage, string inputImagePath)
+        {
+            return RunCoreAsync(root, inputImage, inputImagePath, enableDebug: false);
+        }
+
+        /// <summary>
+        /// 以调试方式启动：第一步就暂停在第一个节点前，之后由 Step / StepOver / Continue / Stop 控制。
+        /// 暂停时可通过 IsPaused / PausedNodeId / ActiveContext 观察现场。
+        /// </summary>
+        public Task<EditorRunOutcome> StartDebugAsync(FlowNode root, HObject inputImage, string inputImagePath)
+        {
+            return RunCoreAsync(root, inputImage, inputImagePath, enableDebug: true);
+        }
+
+        private async Task<EditorRunOutcome> RunCoreAsync(FlowNode root, HObject inputImage, string inputImagePath, bool enableDebug)
         {
             if (_runCts != null)
             {
@@ -111,6 +172,14 @@ namespace VisionFlow.Runtime
             RunningChanged?.Invoke(true);
             FlowRunResult result = null;
             var context = new FlowContext();
+            if (enableDebug)
+            {
+                // 调试会话：控制器挂到上下文，引擎在每个节点边界回调；第一步即暂停
+                _debugController = new FlowDebugController();
+                _debugController.ArmStepping();
+                context.DebugHooks = _debugController;
+            }
+            _activeContext = context;
             HObject newRunImage = null;
             try
             {
@@ -143,6 +212,8 @@ namespace VisionFlow.Runtime
             }
             finally
             {
+                _debugController = null;
+                _activeContext = null;
                 _runCts?.Dispose();
                 _runCts = null;
                 RunningChanged?.Invoke(false);

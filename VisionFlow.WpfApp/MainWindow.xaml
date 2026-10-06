@@ -76,6 +76,24 @@
                         <Path Data="M7,5 L19,12 L7,19 Z" Fill="{DynamicResource AccentFillColorDefaultBrush}" />
                     </Viewbox>
                 </Button>
+                <Button x:Name="DebugButton" ToolTip="调试运行（第一步即暂停；暂停中再次点击为单步/步入）" Style="{StaticResource ToolBarIconButtonStyle}" Click="Debug_Click">
+                    <Viewbox Width="18" Height="18">
+                        <Path Data="M12,3 L12,12 M7,8 L12,13 L17,8 M5,19 L19,19"
+                              Stroke="{DynamicResource TextFillColorPrimaryBrush}" StrokeThickness="1.8" StrokeLineJoin="Round" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Fill="Transparent" />
+                    </Viewbox>
+                </Button>
+                <Button x:Name="StepOverButton" ToolTip="逐过程（复合节点跳过子树）" IsEnabled="False" Style="{StaticResource ToolBarIconButtonStyle}" Click="StepOver_Click">
+                    <Viewbox Width="18" Height="18">
+                        <Path Data="M4,18 C4,9 20,9 20,18 M17.5,14.5 L20,18 L22.5,15.5 M12,19 L12,20"
+                              Stroke="{DynamicResource TextFillColorPrimaryBrush}" StrokeThickness="1.8" StrokeLineJoin="Round" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Fill="Transparent" />
+                    </Viewbox>
+                </Button>
+                <Button x:Name="ContinueButton" ToolTip="继续运行到结束" IsEnabled="False" Style="{StaticResource ToolBarIconButtonStyle}" Click="Continue_Click">
+                    <Viewbox Width="18" Height="18">
+                        <Path Data="M5,5 L14,12 L5,19 Z M17,5 L17,19"
+                              Stroke="{DynamicResource AccentFillColorDefaultBrush}" StrokeThickness="1.6" StrokeLineJoin="Round" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Fill="{DynamicResource AccentFillColorDefaultBrush}" />
+                    </Viewbox>
+                </Button>
                 <Button ToolTip="停止运行" x:Name="StopButton" IsEnabled="False" Style="{StaticResource ToolBarIconButtonStyle}" Click="Stop_Click">
                     <Viewbox Width="18" Height="18">
                         <Path Data="M7,7 L17,7 L17,17 L7,17 Z" Fill="{DynamicResource SystemFillColorCriticalBrush}" />

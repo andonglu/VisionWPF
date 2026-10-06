@@ -77,6 +77,9 @@ namespace VisionFlow.WpfApp
         private HObject _inputImage;
         private string _inputImagePath;
         private bool _closed;
+        /// <summary>当前调试暂停节点 Id 与被高亮的树节点（调试会话用）。</summary>
+        private string _pausedNodeId;
+        private TreeViewItem _pausedItem;
         private string _overlayDrawMode = "margin";
         private double _overlayFillOpacity = 0.35;
         private double _overlayLineWidth = 2.0;
@@ -195,6 +198,13 @@ namespace VisionFlow.WpfApp
             root.IsExpanded = true;
             FlowTree.Items.Add(root);
             _panelBuilder.Build(GetSelectedFlowNode());
+            // 调试暂停中重建了树（理论上运行期已锁定编辑），补回暂停节点高亮
+            if (_pausedNodeId != null)
+            {
+                string nodeId = _pausedNodeId;
+                ClearPausedNodeHighlight();
+                HighlightPausedNode(nodeId);
+            }
         }
 
         private TreeViewItem CreateFlowItem(FlowNode node)
@@ -558,7 +568,38 @@ namespace VisionFlow.WpfApp
             await RunFlowAsync();
         }
 
-        private async Task RunFlowAsync()
+        private async void Debug_Click(object sender, RoutedEventArgs e)
+        {
+            // 暂停中再次点击“调试”充当单步（步入）；未运行时启动调试会话
+            if (_runSession.IsPaused)
+            {
+                _runSession.Step();
+                return;
+            }
+            await DebugFlowAsync();
+        }
+
+        private void StepOver_Click(object sender, RoutedEventArgs e)
+        {
+            _runSession.StepOver();
+        }
+
+        private void Continue_Click(object sender, RoutedEventArgs e)
+        {
+            _runSession.Continue();
+        }
+
+        private Task RunFlowAsync()
+        {
+            return RunFlowCoreAsync(startDebugging: false);
+        }
+
+        private Task DebugFlowAsync()
+        {
+            return RunFlowCoreAsync(startDebugging: true);
+        }
+
+        private async Task RunFlowCoreAsync(bool startDebugging)
         {
             if (_runSession.IsRunning)
             {
@@ -568,11 +609,13 @@ namespace VisionFlow.WpfApp
             FlowValidationResult validation = FlowValidator.Validate(_model.Root);
             if (!validation.IsValid)
             {
-                ShowValidationResult(validation, "流程校验失败，已阻止运行。");
+                ShowValidationResult(validation, startDebugging ? "流程校验失败，已阻止调试。" : "流程校验失败，已阻止运行。");
                 return;
             }
 
-            EditorRunOutcome outcome = await _runSession.RunAsync(_model.Root, _inputImage, _inputImagePath);
+            EditorRunOutcome outcome = startDebugging
+                ? await _runSession.StartDebugAsync(_model.Root, _inputImage, _inputImagePath)
+                : await _runSession.RunAsync(_model.Root, _inputImage, _inputImagePath);
             switch (outcome.Kind)
             {
                 case EditorRunOutcomeKind.AlreadyRunning:
@@ -808,11 +851,99 @@ namespace VisionFlow.WpfApp
                     SetStatus(progress.Status == NodeStatus.Success
                         ? $"运行完成（{progress.Duration?.TotalMilliseconds:F0} ms）"
                         : $"运行失败（{progress.Duration?.TotalMilliseconds:F0} ms）");
+                    ClearPausedNodeHighlight();
                     break;
                 case FlowProgressKind.FlowCancelled:
                     SetStatus("已取消");
+                    ClearPausedNodeHighlight();
+                    break;
+                case FlowProgressKind.DebugPaused:
+                    OnDebugPaused(progress);
+                    break;
+                case FlowProgressKind.DebugResumed:
+                    OnDebugResumed(progress);
                     break;
             }
+        }
+
+        /// <summary>调试暂停：高亮当前节点、刷新变量与日志面板，让用户逐节点观察现场。</summary>
+        private void OnDebugPaused(FlowProgress progress)
+        {
+            SetStatus("已暂停：" + progress.NodeName);
+            HighlightPausedNode(progress.NodeId);
+            RefreshPausedPanels();
+            UpdateDebugButtons();
+        }
+
+        private void OnDebugResumed(FlowProgress progress)
+        {
+            SetStatus("继续执行：" + progress.NodeName);
+            ClearPausedNodeHighlight();
+            UpdateDebugButtons();
+        }
+
+        /// <summary>暂停期间引擎线程被阻塞，实时上下文稳定可读；复用运行完成后的填充逻辑。</summary>
+        private void RefreshPausedPanels()
+        {
+            FlowContext context = _runSession.ActiveContext;
+            if (context == null || !_runSession.IsPaused)
+            {
+                return;
+            }
+            try
+            {
+                FillVariables(context);
+                FillLog(context);
+            }
+            catch (InvalidOperationException)
+            {
+                // 恰好在恢复瞬间读取失败时放弃本次刷新，下一次暂停再刷
+            }
+        }
+
+        /// <summary>高亮流程树中的“当前暂停节点”（琥珀底，区别于选中高亮与失败定位）。</summary>
+        private void HighlightPausedNode(string nodeId)
+        {
+            ClearPausedNodeHighlight();
+            _pausedNodeId = nodeId;
+            if (string.IsNullOrWhiteSpace(nodeId) || !_flowItemsByNodeId.TryGetValue(nodeId, out TreeViewItem item))
+            {
+                return;
+            }
+            _pausedItem = item;
+            item.Background = (Brush)FindResource("SystemFillColorCautionBrush");
+            item.Foreground = Brushes.White;
+        }
+
+        private void ClearPausedNodeHighlight()
+        {
+            _pausedNodeId = null;
+            if (_pausedItem != null)
+            {
+                _pausedItem.ClearValue(Control.BackgroundProperty);
+                _pausedItem.ClearValue(Control.ForegroundProperty);
+                _pausedItem = null;
+            }
+        }
+
+        /// <summary>调试按钮启用状态：未运行全禁（仅“调试”可启动）；运行中非暂停只许停止；暂停中允许单步/逐过程/继续/停止。</summary>
+        private void UpdateDebugButtons()
+        {
+            bool paused = _runSession.IsPaused;
+            if (!IsRunning)
+            {
+                DebugButton.IsEnabled = true;
+                StepOverButton.IsEnabled = false;
+                ContinueButton.IsEnabled = false;
+            }
+            else
+            {
+                // 暂停中“调试”按钮充当单步（步入）；运行中未暂停时三个步进按钮都不可用
+                DebugButton.IsEnabled = paused;
+                StepOverButton.IsEnabled = paused;
+                ContinueButton.IsEnabled = paused;
+            }
+            Cursor = IsRunning && !paused ? Cursors.Wait : Cursors.Arrow;
         }
 
         private void FillVariables(FlowContext context)
@@ -926,7 +1057,12 @@ namespace VisionFlow.WpfApp
             DeleteButton.IsEnabled = !running;
             ToolboxPanel.IsEnabled = !running;
             ParameterPanel.IsEnabled = !running;
-            Cursor = running ? Cursors.Wait : Cursors.Arrow;
+            if (!running)
+            {
+                // 运行结束：清除可能残留的暂停高亮
+                ClearPausedNodeHighlight();
+            }
+            UpdateDebugButtons();
             if (running)
             {
                 SetStatus("正在运行...");

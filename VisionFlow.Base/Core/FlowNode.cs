@@ -78,10 +78,31 @@ namespace VisionFlow.Core
             Name = name;
         }
 
+        /// <summary>是否为复合节点（含子树的容器：顺序/分支/循环）。逐过程（StepOver）在复合节点上跳过整棵子树。</summary>
+        public virtual bool IsComposite
+        {
+            get { return false; }
+        }
+
         /// <summary>执行入口：记录轨迹与日志，并把未捕获异常转换为 Failed。</summary>
         public NodeResult Execute(FlowContext ctx)
         {
             ctx.CancellationToken.ThrowIfCancellationRequested();
+            // 调试钩子：单步/断点时在此阻塞等待恢复；取消时直接抛 OCE，不进入 try（深度未推进）
+            IFlowDebugHooks debugHooks = ctx.DebugHooks;
+            debugHooks?.NodeEntering(this, ctx);
+            try
+            {
+                return ExecuteCore(ctx);
+            }
+            finally
+            {
+                debugHooks?.NodeExecuted(this, ctx);
+            }
+        }
+
+        private NodeResult ExecuteCore(FlowContext ctx)
+        {
             ctx.Trace.Add(Name);
             ctx.TraceIds.Add(Id);
             ctx.AddLog(FlowLogLevel.Info, $"[开始] {Name}", Id, Name);

@@ -11,6 +11,11 @@ namespace VisionFlow.Nodes
     {
         public List<FlowNode> Children { get; } = new List<FlowNode>();
 
+        public override bool IsComposite
+        {
+            get { return true; }
+        }
+
         public SequenceNode(string name) : base(name)
         {
         }
