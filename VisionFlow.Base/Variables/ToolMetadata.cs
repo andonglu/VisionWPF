@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using VisionFlow.Core;
 
 namespace VisionFlow.Variables
 {
@@ -66,6 +67,17 @@ namespace VisionFlow.Variables
         public string[] Members { get; set; }
     }
 
+    /// <summary>
+    /// 按当前配置声明额外输出的工具（输出名由用户配置决定，如变量计算的结果名）。
+    /// 输出名来自工具的可序列化参数，随流程文件保存，加载后自然恢复。
+    /// 实现不应抛出异常：无法解析的配置项直接跳过，由工具运行时报告。
+    /// </summary>
+    public interface IDynamicOutputTool
+    {
+        /// <summary>按当前配置声明的输出（不含类型上 [ToolOutput] 声明的静态输出）。</summary>
+        IReadOnlyList<ToolOutputDef> GetDynamicOutputs();
+    }
+
     /// <summary>一个工具引用输入声明（运行期读取结果）。</summary>
     public sealed class ToolInputRefDef
     {
@@ -103,6 +115,61 @@ namespace VisionFlow.Variables
                 }
                 return defs;
             }
+        }
+
+        /// <summary>
+        /// 工具实例的全部输出：类型上的静态声明，加上 <see cref="IDynamicOutputTool"/> 按当前配置给出的输出。
+        /// 名称非法或与已有输出重名（不区分大小写）的动态输出不会出现在结果中，由 FlowValidator 报告。
+        /// </summary>
+        public static IReadOnlyList<ToolOutputDef> GetOutputs(ToolBase tool)
+        {
+            if (tool == null)
+            {
+                throw new ArgumentNullException(nameof(tool));
+            }
+            IReadOnlyList<ToolOutputDef> staticOutputs = GetOutputs(tool.GetType());
+            if (!(tool is IDynamicOutputTool dynamicTool))
+            {
+                return staticOutputs;
+            }
+
+            var outputs = new List<ToolOutputDef>(staticOutputs);
+            var names = new HashSet<string>(staticOutputs.Select(o => o.Name), StringComparer.OrdinalIgnoreCase);
+            foreach (ToolOutputDef def in dynamicTool.GetDynamicOutputs() ?? new ToolOutputDef[0])
+            {
+                if (def == null || !IsValidOutputName(def.Name) || !names.Add(def.Name))
+                {
+                    continue;
+                }
+                outputs.Add(new ToolOutputDef
+                {
+                    Name = def.Name,
+                    Kind = def.Kind,
+                    Type = def.Type,
+                    ElementClrType = def.ElementClrType,
+                    Members = def.Members ?? new string[0]
+                });
+            }
+            return outputs;
+        }
+
+        /// <summary>
+        /// 输出名是否可作为 模块名.变量名 中的变量名：非空，且不含空白和引用语法字符（. [ ] { }）。
+        /// </summary>
+        public static bool IsValidOutputName(string name)
+        {
+            if (string.IsNullOrEmpty(name))
+            {
+                return false;
+            }
+            foreach (char c in name)
+            {
+                if (char.IsWhiteSpace(c) || c == '.' || c == '[' || c == ']' || c == '{' || c == '}')
+                {
+                    return false;
+                }
+            }
+            return true;
         }
 
         public static IReadOnlyList<ToolInputRefDef> GetInputRefs(Type toolType)

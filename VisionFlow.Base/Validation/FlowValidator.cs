@@ -118,6 +118,43 @@ namespace VisionFlow.Validation
 
                 ValidateReference(root, node, path.Trim(), def.ExpectedType, def.DisplayName, result, def.AcceptsCollection);
             }
+
+            ValidateDynamicOutputs(node, result);
+        }
+
+        /// <summary>动态输出名必须可被引用，且不能与该工具的其他输出重名（引用按不区分大小写匹配）。</summary>
+        private static void ValidateDynamicOutputs(ToolNode node, FlowValidationResult result)
+        {
+            if (!(node.Tool is IDynamicOutputTool dynamicTool))
+            {
+                return;
+            }
+
+            var names = new HashSet<string>(ToolMetadata.GetOutputs(node.Tool.GetType()).Select(o => o.Name),
+                StringComparer.OrdinalIgnoreCase);
+            foreach (ToolOutputDef output in dynamicTool.GetDynamicOutputs() ?? new ToolOutputDef[0])
+            {
+                if (output == null)
+                {
+                    continue;
+                }
+                if (string.IsNullOrWhiteSpace(output.Name))
+                {
+                    result.Add(new FlowValidationIssue(FlowValidationSeverity.Error, node, "输出", "输出名不能为空"));
+                    continue;
+                }
+                if (!ToolMetadata.IsValidOutputName(output.Name))
+                {
+                    result.Add(new FlowValidationIssue(FlowValidationSeverity.Error, node, output.Name,
+                        "输出名不能包含空白或 . [ ] { } 字符"));
+                    continue;
+                }
+                if (!names.Add(output.Name))
+                {
+                    result.Add(new FlowValidationIssue(FlowValidationSeverity.Error, node, output.Name,
+                        "输出名与该工具的其他输出重复"));
+                }
+            }
         }
 
         private static void ValidateIfElse(FlowNode root, IfElseNode node, FlowValidationResult result)

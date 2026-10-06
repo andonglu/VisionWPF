@@ -291,7 +291,7 @@ namespace VisionFlow.Editing
 
         private static void AddToolOutputs(ToolNode toolNode, List<RefCandidate> candidates)
         {
-            foreach (ToolOutputDef def in ToolMetadata.GetOutputs(toolNode.Tool.GetType()))
+            foreach (ToolOutputDef def in ToolMetadata.GetOutputs(toolNode.Tool))
             {
                 candidates.Add(new RefCandidate
                 {
