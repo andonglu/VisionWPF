@@ -58,28 +58,37 @@
 
 ### LD-01 表达式引擎、动态输出与文本内引用
 
-**表达式语法**
+**表达式语法**（已实现）
 
-- 变量引用写在花括号内：`{匹配1.Score}`、`{测量1.Rows[0]}`、`{匹配1.BestMatch.Row}`、`{Loop.Index}`、`{Loop.Current.Score}`，解析与 `VariableReference` 完全一致。
-- 常量：整数、小数、`true` / `false`、双引号字符串（`\"` 转义）。
-- 运算符（优先级从低到高）：`?:`、`||`、`&&`、`== != > >= < <=`、`+ -`、`* / %`、一元 `! -`。字符串用 `+` 拼接。
-- 函数：
-  - 数学：`abs`、`sqrt`、`pow`、`min`、`max`、`round(x, n)`、`floor`、`ceil`、`sin`、`cos`、`tan`、`atan2`、`deg`、`rad`、`hypot`。
-  - 判断：`isnan`、`isvalid`（非 NaN、非无穷）、`if(cond, a, b)`。
-  - 字符串：`len`、`substr(s, start, length)`、`contains`、`startswith`、`endswith`、`replace`、`trim`、`upper`、`lower`、`regex(s, pattern)`（是否匹配）、`format(模板, 参数...)`（`{0}` 占位，数值格式如 `{0:F2}`）、`str(x)`、`num(s)`（字符串转数值，失败为 NaN）。
-  - 数组：`count`、`sum`、`mean`、`maxof`、`minof`、`at(arr, i)`（越界为 NaN）。
-- 类型规则：整数与小数运算得小数；比较两侧一侧为字符串时按字符串比较；类型不匹配给出中文错误，指出位置。
+- 变量引用写在花括号内：`{匹配1.Score}`、`{测量1.Rows[0]}`、`{测量1.Rows.Count}`、`{匹配1.BestMatch.Row}`、`{Loop.Index}`、`{Loop.Current.Score}`，解析与 `VariableReference` 完全一致。不含点的 `{名称}` 为局部名称（如数组处理的 `{Item}`），由调用方在求值时提供取值。
+- 常量：整数、小数、科学计数法、`true` / `false`、`pi`、双引号字符串（支持 `\"`、`\\`、`\n`、`\t`）。常量名与函数名不区分大小写。
+- 运算符（优先级从低到高）：`?:`（右结合）、`||`、`&&`、`== !=`、`> >= < <=`、`+ -`、`* / %`、一元 `! -`。`&&`、`||`、`?:`、`if` 只计算需要的一侧。
+- 函数（完整列表与说明见 `ExpressionFunctions.All`）：
+  - 数学：`abs`、`sqrt`、`pow`、`min`、`max`、`round(x, n)`（远离零舍入）、`floor`、`ceil`、`sin`、`cos`、`tan`、`atan2`、`deg`、`rad`、`hypot`。
+  - 判断：`isnan`、`isvalid`（数值不是 NaN 或无穷，其他值不为空）、`if(cond, a, b)`。
+  - 字符串：`len`、`substr(s, start, length)`（超出范围截到末尾）、`contains`、`startswith`、`endswith`、`replace`、`trim`、`upper`、`lower`、`regex(s, pattern)`（是否匹配，200 ms 超时）、`format(模板, 参数...)`（`{0}` 占位，数值格式如 `{0:F2}`）、`str(x)`、`num(s)`（失败为 NaN）。
+  - 数组：`count`、`sum`、`mean`、`maxof`、`minof`（忽略 NaN；空数组的平均、最大、最小为 NaN）、`at(arr, i)`（越界为 NaN）。
+- 类型规则：
+  - 值只有整数（long）、小数（double）、布尔、字符串、空值和数组；变量中的其他数值类型自动规范。
+  - 整数之间的 `+ - * %` 结果为整数（溢出报错）；`/` 结果总是小数；有小数参与时结果为小数；除数为 0 报错。
+  - `+` 一侧为字符串时为拼接。
+  - `== !=`：数值按数值比较；一侧为字符串时按文本比较（如 `"123" == 123` 为真）；布尔只能与布尔比较。`> >= < <=` 只用于数值之间或字符串之间。NaN 参与比较时只有 `!=` 为真。
+  - 类型不匹配、除零、引用无法取值都抛出 `ExpressionException`，带出错位置（`Position`，消息以“第 N 个字符处”开头）。
+- 结果转换为变量类型：`ExpressionValues.ConvertTo(value, VariableType)`；Int 只接受整数或没有小数部分的有限小数。
 
-**实现**
+**实现**（已实现）
 
-- 新增 `VisionFlow.Base\Expressions\`：词法分析、递归下降语法分析、抽象语法树、求值器。不引入第三方库，不使用动态编译，不允许访问 CLR 对象成员以外的内容（成员访问仍由 `VariableReference` 完成）。
-- 解析结果按表达式文本缓存，运行时只做求值。
-- 提供 `ExpressionParser.TryParse(text, out expr, out error)` 和 `expr.GetReferences()`，供编辑器实时提示、校验器检查引用。
+- `VisionFlow.Base\Expressions\`：`ExpressionLexer`（词法）、`ExpressionParser`（递归下降语法分析，按文本缓存解析结果）、`ExpressionNodes`（语法树与求值）、`ExpressionFunctions`（内置函数表）、`ExpressionValues`（值模型与类型转换）、`ExpressionException`。不引入第三方库，不使用动态编译；成员访问只通过 `VariableReference`。
+- 公开接口：`ExpressionParser.Parse` / `TryParse` → `CompiledExpression`（`References`、`LocalNames`、`Evaluate(FlowContext, resolveLocal)`、`Evaluate(Func<string, object>)`），解析结果不可变、可并发求值。
+- 测试：`VisionFlow.Tests\ExpressionTests.cs`。
 
-**动态输出**
+**动态输出**（已实现）
 
-- 新增接口 `IDynamicOutputTool { IReadOnlyList<ToolOutputDef> GetDynamicOutputs(); }`。
-- 新增 `ToolMetadata.GetOutputs(ToolBase tool)`：返回静态 `[ToolOutput]` 加上动态输出。`RefCandidateService`、`FlowValidator`、编辑器输出列表一律改为按工具实例取输出（目前只有 `RefCandidates.cs` 一处调用按类型取）。
+- 接口 `IDynamicOutputTool { IReadOnlyList<ToolOutputDef> GetDynamicOutputs(); }`（`VisionFlow.Base\Variables\ToolMetadata.cs`）。
+- `ToolMetadata.GetOutputs(ToolBase tool)`：返回静态 `[ToolOutput]` 加上动态输出；名称非法或与已有输出重名（不区分大小写）的动态输出不进入结果。`RefCandidateService` 改为按工具实例取输出，引用候选与声明级校验因此同时识别动态输出。
+- 输出名规则 `ToolMetadata.IsValidOutputName`：非空，不含空白和 `. [ ] { }`。
+- `FlowValidator` 对动态输出报告：输出名为空、含非法字符、与该工具的其他输出重名。
+- 测试：`VisionFlow.Tests\DynamicOutputTests.cs`。
 
 **文本内引用校验**
 
