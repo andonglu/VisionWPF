@@ -120,8 +120,24 @@ namespace VisionFlow.Validation
                 ValidateReference(root, node, path.Trim(), def.ExpectedType, def.DisplayName, result, def.AcceptsCollection);
             }
 
+            ValidateConfiguration(node, result);
             ValidateDynamicOutputs(node, result);
             ValidateExpressions(root, node, result);
+        }
+
+        private static void ValidateConfiguration(ToolNode node, FlowValidationResult result)
+        {
+            if (!(node.Tool is IToolConfigurationCheck check))
+            {
+                return;
+            }
+            foreach (ToolConfigurationIssue issue in check.CheckConfiguration() ?? new ToolConfigurationIssue[0])
+            {
+                if (issue != null)
+                {
+                    result.Add(new FlowValidationIssue(FlowValidationSeverity.Error, node, issue.Parameter, issue.Message));
+                }
+            }
         }
 
         /// <summary>

@@ -176,8 +176,10 @@ namespace VisionFlow.Editing
                 new ToolNode(new AngleConvertTool(NextModuleName("角度换算")))));
             Register(new ToolboxItem("barcode1d", "06 识别工具", "一维码", () =>
                 new ToolNode(new Barcode1DTool(NextModuleName("一维码")))));
-            Register(new ToolboxItem("range-classify", "07 结果判定", "数值区间分类", () =>
+            Register(new ToolboxItem("range-classify", "07 数据与判定", "数值区间分类", () =>
                 new ToolNode(new RangeClassifyTool(NextModuleName("区间分类")))));
+            Register(new ToolboxItem("expression-calc", "07 数据与判定", "变量计算", () =>
+                new ToolNode(new ExpressionCalcTool(NextModuleName("变量计算")))));
             Register(new ToolboxItem("ifelse", "逻辑控制", "IfElse 分支", () =>
                 new IfElseNode("条件分支")));
             Register(new ToolboxItem("forcount", "逻辑控制", "For 循环(次数)", () =>

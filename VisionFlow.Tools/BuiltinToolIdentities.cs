@@ -53,6 +53,7 @@ namespace VisionFlow.Tools
             FlowSerializer.RegisterToolType(typeof(ZoneInspectTool), "zone-inspect");
             FlowSerializer.RegisterToolType(typeof(DescriptorMatchTool), "descriptor-match");
             FlowSerializer.RegisterToolType(typeof(RangeClassifyTool), "range-classify");
+            FlowSerializer.RegisterToolType(typeof(ExpressionCalcTool), "expression-calc");
             FlowSerializer.RegisterToolType(typeof(AngleConvertTool), "angle-convert");
             FlowSerializer.RegisterToolType(typeof(ContourCreateTool), "contour-create");
             FlowSerializer.RegisterToolType(typeof(SelectContourTool), "select-contour");

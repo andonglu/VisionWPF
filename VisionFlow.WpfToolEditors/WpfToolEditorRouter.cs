@@ -44,6 +44,10 @@ namespace VisionFlow.WpfToolEditors
             {
                 return new WpfManualRegionToolEditWindow(manualRegionTool, context);
             }
+            if (tool is ExpressionCalcTool expressionCalcTool)
+            {
+                return new WpfExpressionCalcToolEditWindow(expressionCalcTool, context);
+            }
             return IsVisualPreviewTool(tool)
                 ? (Window)new WpfVisualToolEditWindow(tool, context)
                 : new WpfGenericToolEditWindow(tool, context);

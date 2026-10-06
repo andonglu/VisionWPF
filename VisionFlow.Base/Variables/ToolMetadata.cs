@@ -78,6 +78,29 @@ namespace VisionFlow.Variables
         IReadOnlyList<ToolOutputDef> GetDynamicOutputs();
     }
 
+    /// <summary>工具参数配置中的一个问题（如多行配置的格式错误）。</summary>
+    public sealed class ToolConfigurationIssue
+    {
+        public ToolConfigurationIssue(string parameter, string message)
+        {
+            Parameter = parameter;
+            Message = message;
+        }
+
+        /// <summary>校验结果中显示的参数名，如“计算式 第 2 行”。</summary>
+        public string Parameter { get; private set; }
+        public string Message { get; private set; }
+    }
+
+    /// <summary>
+    /// 能自行检查参数配置的工具（如按行书写的配置格式），FlowValidator 把返回的问题作为错误报告。
+    /// 实现不应抛出异常。
+    /// </summary>
+    public interface IToolConfigurationCheck
+    {
+        IEnumerable<ToolConfigurationIssue> CheckConfiguration();
+    }
+
     /// <summary>一个工具引用输入声明（运行期读取结果）。</summary>
     public sealed class ToolInputRefDef
     {
