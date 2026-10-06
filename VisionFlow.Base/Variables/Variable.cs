@@ -78,6 +78,12 @@ namespace VisionFlow.Variables
                 PreviewValueCopy.Copy(Value, copies), Count);
         }
 
+        /// <summary>同一个值换一个地址（子流程把输出交给父流程、把父流程变量作为子流程输入时使用）。</summary>
+        internal Variable WithName(string moduleName, string name)
+        {
+            return new Variable(moduleName, name, Kind, Type, Value, Count);
+        }
+
         /// <summary>取数组变量的第 index 个元素。</summary>
         public object GetElement(int index)
         {

@@ -11,6 +11,7 @@ using VisionFlow.Conditions;
 using VisionFlow.Core;
 using VisionFlow.Editing;
 using VisionFlow.Nodes;
+using VisionFlow.Runtime;
 using VisionFlow.Tools;
 using VisionFlow.Ui;
 using VisionFlow.Variables;
@@ -95,6 +96,10 @@ namespace VisionFlow.WpfApp.Ui
             {
                 BuildSwitchCaseParameterPanel(switchCase);
             }
+            else if (node is SubFlowNode subFlow)
+            {
+                BuildSubFlowParameterPanel(subFlow);
+            }
             else if (node is LoopControlNode control)
             {
                 AddInfo(control.Signal == LoopControlSignal.Break
@@ -159,6 +164,87 @@ namespace VisionFlow.WpfApp.Ui
         private void BuildIfElseParameterPanel(IfElseNode node)
         {
             AddConditionEditor(node.Condition, RefCandidateService.ForNode(_flowRoot(), node), condition => node.Condition = condition);
+        }
+
+        private void BuildSubFlowParameterPanel(SubFlowNode node)
+        {
+            AddSection("子流程文件");
+            AddTextRow("文件路径", node.FlowFile, value =>
+            {
+                node.FlowFile = (value ?? string.Empty).Trim();
+                _refreshFlowTree();
+                Build(node);
+            });
+            AddButtonRow("选择文件...", () =>
+            {
+                var dialog = new Microsoft.Win32.OpenFileDialog
+                {
+                    Filter = "VisionFlow 流程 (*.vflow.json)|*.vflow.json|JSON (*.json)|*.json|所有文件|*.*",
+                    InitialDirectory = node.BaseDirectory ?? string.Empty
+                };
+                if (dialog.ShowDialog() != true)
+                {
+                    return;
+                }
+                node.FlowFile = ToStoredPath(dialog.FileName, node.BaseDirectory);
+                _refreshFlowTree();
+                Build(node);
+            });
+
+            SubFlowDefinition definition = node.TryLoadDefinition(out string error);
+            if (definition == null)
+            {
+                AddInfo("状态：" + error);
+            }
+            else
+            {
+                AddInfo("完整路径：" + definition.FullPath);
+                AddSection("输出（来自子流程顶层的流程输出）");
+                if (definition.Outputs.Count == 0)
+                {
+                    AddInfo("子流程没有顶层流程输出节点，调用后不会带回结果。");
+                }
+                foreach (SubFlowOutputDef output in definition.Outputs)
+                {
+                    AddInfo($"{node.Name}.{output.Name}（{output.Kind}/{output.Type}）");
+                }
+            }
+            AddInfo(string.IsNullOrWhiteSpace(node.BaseDirectory)
+                ? "当前流程尚未保存，相对路径相对于程序目录；建议先保存流程，再选择子流程文件。"
+                : "相对路径相对于当前流程文件所在目录：" + node.BaseDirectory);
+
+            AddSection("输入映射");
+            AddInfo("子流程默认沿用当前流程的 Input.* 外部输入（如 Input.Image）；在此追加或覆盖，例如把 Input.Threshold 设为 ref:计算1.阈值。");
+            List<string> candidates = RefCandidateService.ForNode(_flowRoot(), node)
+                .Select(c => "ref:" + c.Path)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            foreach (SubFlowInputMapping mapping in node.Inputs.ToList())
+            {
+                AddTextRow("子流程输入（Input.名称）", mapping.InputPath, value => mapping.InputPath = (value ?? string.Empty).Trim());
+                AddComboRow("取值", candidates, OperandText(mapping.Value), value => mapping.Value = ParseOperand(value));
+                AddButtonRow("删除此映射", () =>
+                {
+                    node.Inputs.Remove(mapping);
+                    Build(node);
+                });
+            }
+            AddButtonRow("添加输入映射", () =>
+            {
+                node.Inputs.Add(new SubFlowInputMapping { InputPath = "Input.", Value = Operand.Const(string.Empty) });
+                Build(node);
+            });
+        }
+
+        /// <summary>保存的子流程路径：在当前流程目录内（含子目录）时存相对路径，便于整体拷贝；否则存完整路径。</summary>
+        private static string ToStoredPath(string fullPath, string baseDirectory)
+        {
+            if (string.IsNullOrWhiteSpace(baseDirectory))
+            {
+                return fullPath;
+            }
+            string relative = System.IO.Path.GetRelativePath(baseDirectory, fullPath);
+            return relative.StartsWith("..", StringComparison.Ordinal) || System.IO.Path.IsPathRooted(relative) ? fullPath : relative;
         }
 
         private void BuildSwitchParameterPanel(SwitchNode node)

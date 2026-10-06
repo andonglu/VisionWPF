@@ -208,6 +208,7 @@ namespace VisionFlow.Editing
                 node.Cases.Add(new SwitchCaseNode("默认", isDefault: true));
                 return node;
             }));
+            Register(new ToolboxItem("subflow", "逻辑控制", "子流程", () => new SubFlowNode(NextModuleName("子流程"))));
             Register(new ToolboxItem("flowoutput", "逻辑控制", "流程输出", () =>
                 new FlowOutputNode(NextModuleName("流程输出"))
                 {

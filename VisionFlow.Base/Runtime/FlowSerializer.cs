@@ -8,6 +8,7 @@ using System.Text.Json.Serialization;
 using VisionFlow.Conditions;
 using VisionFlow.Core;
 using VisionFlow.Nodes;
+using VisionFlow.Runtime;
 using VisionFlow.Variables;
 
 namespace VisionFlow.Editing
@@ -55,7 +56,8 @@ namespace VisionFlow.Editing
         {
             int version = BaseFormatVersion;
             if ((node is IfElseNode ifElse && ifElse.Condition != null && RequiresVersion2(ifElse.Condition))
-                || node is WhileLoopNode || node is LoopControlNode || node is SwitchNode || node is SwitchCaseNode)
+                || node is WhileLoopNode || node is LoopControlNode || node is SwitchNode || node is SwitchCaseNode
+                || node is SubFlowNode)
             {
                 version = 2;
             }
@@ -74,6 +76,27 @@ namespace VisionFlow.Editing
         public static SequenceNode Load(string json)
         {
             return Load(json, null);
+        }
+
+        /// <summary>
+        /// 从文件加载流程，并把其中子流程节点的相对路径基准设为该文件所在目录。
+        /// 加载文件中的流程应优先使用本方法，以便子流程的相对路径正确解析。
+        /// </summary>
+        public static SequenceNode LoadFile(string path, IList<string> warnings = null)
+        {
+            string fullPath = System.IO.Path.GetFullPath(path);
+            SequenceNode root = Load(System.IO.File.ReadAllText(fullPath), warnings);
+            SetSubFlowBaseDirectory(root, System.IO.Path.GetDirectoryName(fullPath));
+            return root;
+        }
+
+        /// <summary>把流程中全部子流程节点的相对路径基准设为指定目录（流程保存到新位置后由编辑器调用）。</summary>
+        public static void SetSubFlowBaseDirectory(FlowNode root, string directory)
+        {
+            foreach (SubFlowNode node in SubFlowLibrary.EnumerateNodes(root).OfType<SubFlowNode>())
+            {
+                node.BaseDirectory = directory;
+            }
         }
 
         /// <summary>加载流程。warnings 非空时收集兼容性警告（未知参数、枚举回退等）。</summary>
@@ -368,6 +391,16 @@ namespace VisionFlow.Editing
                 dto.OutputValues = switchCase.OutputValues.ToDictionary(p => p.Key, p => ToOperandDto(p.Value));
                 dto.Children = switchCase.Children.Select(ToDto).ToList();
             }
+            else if (node is SubFlowNode subFlow)
+            {
+                dto.Kind = "SubFlow";
+                dto.FlowFile = subFlow.FlowFile ?? string.Empty;
+                dto.SubFlowInputs = subFlow.Inputs.Select(i => new SubFlowInputDto
+                {
+                    InputPath = i.InputPath,
+                    Value = ToOperandDto(i.Value)
+                }).ToList();
+            }
             else if (node is BreakNode)
             {
                 dto.Kind = "Break";
@@ -456,6 +489,14 @@ namespace VisionFlow.Editing
                     }
                     AddChildren(switchCase.Children, dto.Children, warnings);
                     node = switchCase;
+                    break;
+                case "SubFlow":
+                    var subFlow = new SubFlowNode(dto.Name ?? "子流程", dto.FlowFile);
+                    foreach (SubFlowInputDto input in dto.SubFlowInputs ?? new List<SubFlowInputDto>())
+                    {
+                        subFlow.Inputs.Add(new SubFlowInputMapping { InputPath = input.InputPath, Value = FromOperandDto(input.Value) });
+                    }
+                    node = subFlow;
                     break;
                 case "Break":
                     node = new BreakNode(dto.Name ?? "跳出循环");
@@ -824,6 +865,16 @@ namespace VisionFlow.Editing
             public bool? IsDefault { get; set; }
             [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
             public Dictionary<string, OperandDto> OutputValues { get; set; }
+            [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+            public string FlowFile { get; set; }
+            [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+            public List<SubFlowInputDto> SubFlowInputs { get; set; }
+        }
+
+        private sealed class SubFlowInputDto
+        {
+            public string InputPath { get; set; }
+            public OperandDto Value { get; set; }
         }
 
         private sealed class SwitchOutputDto

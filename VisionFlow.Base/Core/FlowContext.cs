@@ -121,6 +121,97 @@ namespace VisionFlow.Core
             SetVariable(variable);
         }
 
+        /// <summary>子流程嵌套深度（顶层流程为 0），用于防止循环引用导致的无限递归。</summary>
+        internal int SubFlowDepth { get; set; }
+
+        /// <summary>写入借用的变量：其中的 HALCON 资源归别的上下文所有，本上下文释放时不处置（子流程输入）。</summary>
+        internal void SetBorrowedVariable(Variable variable)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            ArgumentNullException.ThrowIfNull(variable);
+            foreach (HObject obj in CollectHalconObjects(variable.Value))
+            {
+                if (!_ownedResources.ContainsKey(obj))
+                {
+                    _borrowedResources.Add(obj);
+                }
+            }
+            SetVariable(variable);
+        }
+
+        /// <summary>
+        /// 把值中的 HALCON 资源移出本上下文的所有权（改为借用），本上下文释放时不再处置；
+        /// 子流程把输出交给父上下文前调用，所有权随后由父上下文接管。
+        /// </summary>
+        internal void ReleaseOwnership(object value)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            TrackResources(value);
+            foreach (HObject obj in CollectHalconObjects(value))
+            {
+                if (_ownedResources.Remove(obj))
+                {
+                    _borrowedResources.Add(obj);
+                }
+            }
+        }
+
+        private static List<HObject> CollectHalconObjects(object value)
+        {
+            var result = new List<HObject>();
+            CollectHalconObjects(value, result, new HashSet<object>(ReferenceEqualityComparer.Instance));
+            return result;
+        }
+
+        private static void CollectHalconObjects(object value, List<HObject> result, HashSet<object> visited)
+        {
+            if (value == null || value is string || !visited.Add(value))
+            {
+                return;
+            }
+            switch (value)
+            {
+                case HalconImage image:
+                    AddObject(image.Object, result);
+                    return;
+                case HalconRegion region:
+                    AddObject(region.Object, result);
+                    return;
+                case HalconXld xld:
+                    AddObject(xld.Object, result);
+                    return;
+                case HObject obj:
+                    AddObject(obj, result);
+                    return;
+                case IHalconResourceContainer container:
+                    foreach (HObject owned in container.OwnedHalconObjects)
+                    {
+                        AddObject(owned, result);
+                    }
+                    return;
+                case System.Collections.IDictionary dictionary:
+                    foreach (object item in dictionary.Values)
+                    {
+                        CollectHalconObjects(item, result, visited);
+                    }
+                    return;
+                case System.Collections.IEnumerable enumerable:
+                    foreach (object item in enumerable)
+                    {
+                        CollectHalconObjects(item, result, visited);
+                    }
+                    return;
+            }
+        }
+
+        private static void AddObject(HObject obj, List<HObject> result)
+        {
+            if (obj != null)
+            {
+                result.Add(obj);
+            }
+        }
+
         /// <summary>按 模块名.变量名 读取变量，不存在时抛出带中文说明的异常。</summary>
         public Variable GetVariable(string moduleName, string name)
         {

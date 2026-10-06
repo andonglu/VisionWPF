@@ -43,9 +43,47 @@ namespace VisionFlow.Runtime
     /// </summary>
     public static class FlowResources
     {
+        /// <summary>
+        /// 预热流程中的工具；流程中引用的子流程文件一并加载并预热（按文件去重，循环引用不会重复进入）。
+        /// 子流程定义由 <see cref="SubFlowLibrary"/> 缓存与释放，<see cref="Release(FlowNode)"/> 不会释放共享的子流程。
+        /// </summary>
         public static FlowPrepareResult Prepare(FlowNode root)
         {
-            return Prepare(EnumerateToolNodes(root).ToList());
+            var toolNodes = new List<ToolNode>();
+            var issues = new List<FlowPrepareIssue>();
+            CollectForPrepare(root, toolNodes, issues, new HashSet<string>(StringComparer.OrdinalIgnoreCase));
+            FlowPrepareResult result = Prepare(toolNodes);
+            if (issues.Count == 0)
+            {
+                return result;
+            }
+            return new FlowPrepareResult
+            {
+                Issues = issues.Concat(result.Issues).ToList(),
+                PreparedCount = result.PreparedCount,
+                Duration = result.Duration
+            };
+        }
+
+        private static void CollectForPrepare(FlowNode root, List<ToolNode> toolNodes, List<FlowPrepareIssue> issues,
+            HashSet<string> visitedFiles)
+        {
+            toolNodes.AddRange(EnumerateToolNodes(root));
+            foreach (SubFlowNode subFlow in SubFlowLibrary.EnumerateNodes(root).OfType<SubFlowNode>())
+            {
+                string path = subFlow.ResolvePath();
+                if (path == null || !visitedFiles.Add(path))
+                {
+                    continue;
+                }
+                SubFlowDefinition definition = subFlow.TryLoadDefinition(out string error);
+                if (definition == null)
+                {
+                    issues.Add(new FlowPrepareIssue { NodeId = subFlow.Id, NodeName = subFlow.Name, Message = "子流程加载失败：" + error });
+                    continue;
+                }
+                CollectForPrepare(definition.Root, toolNodes, issues, visitedFiles);
+            }
         }
 
         /// <summary>

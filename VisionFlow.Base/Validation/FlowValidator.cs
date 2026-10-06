@@ -6,6 +6,7 @@ using VisionFlow.Core;
 using VisionFlow.Editing;
 using VisionFlow.Expressions;
 using VisionFlow.Nodes;
+using VisionFlow.Runtime;
 using VisionFlow.Variables;
 
 namespace VisionFlow.Validation
@@ -99,6 +100,10 @@ namespace VisionFlow.Validation
             else if (node is SwitchNode switchNode)
             {
                 ValidateSwitch(root, switchNode, result);
+            }
+            else if (node is SubFlowNode subFlow)
+            {
+                ValidateSubFlow(root, subFlow, result);
             }
             else if (node is LoopControlNode && loopDepth == 0)
             {
@@ -408,6 +413,82 @@ namespace VisionFlow.Validation
             }
         }
 
+        /// <summary>
+        /// 子流程：文件可加载、无循环引用、输出名不重复；输入映射的路径为 Input.名称 且取值在当前流程作用域内；
+        /// 并以映射的输入作为额外外部输入校验子流程本身，问题以“子流程内部”前缀报告。
+        /// </summary>
+        private static void ValidateSubFlow(FlowNode root, SubFlowNode node, FlowValidationResult result)
+        {
+            var inputNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var declaredInputs = new List<ExternalInputDef>();
+            foreach (SubFlowInputMapping mapping in node.Inputs)
+            {
+                string parameter = "输入 " + (mapping.InputPath ?? string.Empty);
+                VariableReference target = null;
+                try
+                {
+                    target = string.IsNullOrWhiteSpace(mapping.InputPath) ? null : VariableReference.Parse(mapping.InputPath.Trim());
+                }
+                catch (Exception ex) when (ex is FormatException || ex is ArgumentException || ex is OverflowException)
+                {
+                    target = null;
+                }
+                if (target == null || !string.Equals(target.ModuleName, "Input", StringComparison.Ordinal)
+                    || target.ElementIndex.HasValue || target.MemberPath.Length > 0 || !ToolMetadata.IsValidOutputName(target.VarName))
+                {
+                    result.Add(new FlowValidationIssue(FlowValidationSeverity.Error, node, parameter, "输入路径应为 Input.名称"));
+                    continue;
+                }
+                if (!inputNames.Add(target.VarName))
+                {
+                    result.Add(new FlowValidationIssue(FlowValidationSeverity.Error, node, parameter, "输入重复"));
+                }
+                if (mapping.Value == null)
+                {
+                    result.Add(new FlowValidationIssue(FlowValidationSeverity.Error, node, parameter, "未配置取值"));
+                }
+                else
+                {
+                    ValidateOperand(root, node, mapping.Value, null, parameter, result);
+                }
+                declaredInputs.Add(new ExternalInputDef("Input." + target.VarName, typeof(object)));
+            }
+
+            SubFlowDefinition definition = node.TryLoadDefinition(out string loadError);
+            if (definition == null)
+            {
+                result.Add(new FlowValidationIssue(FlowValidationSeverity.Error, node, "子流程文件", loadError));
+                return;
+            }
+            string cycle = SubFlowLibrary.FindCycle(definition.FullPath);
+            if (cycle != null)
+            {
+                result.Add(new FlowValidationIssue(FlowValidationSeverity.Error, node, "子流程文件", $"子流程存在循环引用：{cycle}"));
+                return;
+            }
+
+            var outputNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (SubFlowOutputDef output in definition.Outputs)
+            {
+                if (!outputNames.Add(output.Name))
+                {
+                    result.Add(new FlowValidationIssue(FlowValidationSeverity.Error, node, output.Name,
+                        "子流程的流程输出中有重名输出，回到当前流程后会互相覆盖"));
+                }
+            }
+
+            FlowValidationResult inner;
+            using (ExternalInputRegistry.BeginScope(declaredInputs))
+            {
+                inner = Validate(definition.Root);
+            }
+            foreach (FlowValidationIssue issue in inner.Issues)
+            {
+                result.Add(new FlowValidationIssue(issue.Severity, node, "子流程内部",
+                    $"{issue.NodeName}{(string.IsNullOrEmpty(issue.Parameter) ? string.Empty : " - " + issue.Parameter)}：{issue.Message}"));
+            }
+        }
+
         private static void ValidateWhile(FlowNode root, WhileLoopNode node, FlowValidationResult result)
         {
             if (node.Condition == null)
@@ -586,6 +667,10 @@ namespace VisionFlow.Validation
                 else if (node is SwitchNode switchNode && switchNode.Outputs.Count > 0)
                 {
                     name = switchNode.Name;
+                }
+                else if (node is SubFlowNode subFlow)
+                {
+                    name = subFlow.Name;
                 }
                 else if (node is FlowOutputNode outputNode && outputNode.Outputs.Count > 0)
                 {

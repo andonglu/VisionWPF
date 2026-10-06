@@ -285,6 +285,10 @@ namespace VisionFlow.WpfApp
             {
                 return "Switch: " + node.Name;
             }
+            if (node is SubFlowNode subFlowNode)
+            {
+                return "子流程: " + node.Name + (string.IsNullOrWhiteSpace(subFlowNode.FlowFile) ? string.Empty : "（" + Path.GetFileName(subFlowNode.FlowFile) + "）");
+            }
             if (node is SwitchCaseNode switchCase)
             {
                 return switchCase.IsDefault ? "默认: " + node.Name : $"分支: {node.Name}（{switchCase.Values}）";
@@ -366,6 +370,10 @@ namespace VisionFlow.WpfApp
 
             FlowNode added = _model.AddNode(toolboxId, selected, branch);
             NodeNaming.EnsureUniqueNewNodeName(_model.Root, added);
+            if (added is SubFlowNode subFlow && !string.IsNullOrWhiteSpace(_document.CurrentFlowPath))
+            {
+                subFlow.BaseDirectory = Path.GetDirectoryName(_document.CurrentFlowPath);
+            }
             RefreshFlowTree();
             SelectNode(added.Id);
             SetStatus("已添加节点：" + added.Name);

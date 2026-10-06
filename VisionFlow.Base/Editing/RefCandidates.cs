@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using VisionFlow.Core;
 using VisionFlow.Nodes;
+using VisionFlow.Runtime;
 using VisionFlow.Variables;
 
 namespace VisionFlow.Editing
@@ -220,6 +221,12 @@ namespace VisionFlow.Editing
                 return false;
             }
 
+            if (node is SubFlowNode subFlow)
+            {
+                AddSubFlowOutputs(subFlow, candidates);
+                return false;
+            }
+
             if (node is IfElseNode ifElse)
             {
                 if (!ContainsNode(ifElse, target))
@@ -303,6 +310,11 @@ namespace VisionFlow.Editing
                 AddFlowOutputs(outputNode, candidates);
                 return;
             }
+            if (node is SubFlowNode subFlow)
+            {
+                AddSubFlowOutputs(subFlow, candidates);
+                return;
+            }
             // 嵌套 IfElse 只暴露显式公共输出，不递归分支内部
             if (node is IfElseNode ifElse)
             {
@@ -379,6 +391,25 @@ namespace VisionFlow.Editing
                 {
                     Path = ifElse.Name + "." + output.Name,
                     ClrType = ClrTypeOf(output),
+                    IsCollection = output.Kind == VariableKind.Array
+                });
+            }
+        }
+
+        /// <summary>子流程顶层流程输出的输出，以子流程节点名为模块名；子流程文件无法加载时没有候选（由校验报告）。</summary>
+        private static void AddSubFlowOutputs(SubFlowNode subFlow, List<RefCandidate> candidates)
+        {
+            SubFlowDefinition definition = subFlow.TryLoadDefinition(out _);
+            if (definition == null)
+            {
+                return;
+            }
+            foreach (SubFlowOutputDef output in definition.Outputs)
+            {
+                candidates.Add(new RefCandidate
+                {
+                    Path = subFlow.Name + "." + output.Name,
+                    ClrType = ClrTypeOf(new BranchOutputDef { Kind = output.Kind, Type = output.Type, ClrTypeName = output.ClrTypeName }),
                     IsCollection = output.Kind == VariableKind.Array
                 });
             }

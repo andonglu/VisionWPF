@@ -75,7 +75,7 @@ namespace VisionFlow.Ui
         public FlowLoadResult Load(string fileName)
         {
             var loadWarnings = new List<string>();
-            SequenceNode root = FlowSerializer.Load(File.ReadAllText(fileName), loadWarnings);
+            SequenceNode root = FlowSerializer.LoadFile(fileName, loadWarnings);
             SequenceNode previous = _model.Root;
             _model.ReplaceRoot(root);
             CurrentFlowPath = Path.GetFullPath(fileName);
@@ -112,6 +112,8 @@ namespace VisionFlow.Ui
                 }
                 _model.MarkSaved();
                 CurrentFlowPath = fileName;
+                // 子流程的相对路径相对于流程文件所在目录
+                FlowSerializer.SetSubFlowBaseDirectory(_model.Root, Path.GetDirectoryName(fileName));
                 Saved?.Invoke(fileName);
                 return true;
             }

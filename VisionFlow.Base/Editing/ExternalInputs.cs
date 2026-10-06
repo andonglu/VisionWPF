@@ -52,14 +52,67 @@ namespace VisionFlow.Editing
         private static readonly Dictionary<string, ExternalInputDef> _items =
             new Dictionary<string, ExternalInputDef>(StringComparer.OrdinalIgnoreCase);
 
+        [ThreadStatic]
+        private static List<ExternalInputDef> _scoped;
+
         static ExternalInputRegistry()
         {
             ResetToDefaults();
         }
 
+        /// <summary>全部外部输入：全局注册项，加上当前线程临时声明的输入（见 <see cref="BeginScope"/>）。</summary>
         public static IReadOnlyList<ExternalInputDef> Items
         {
-            get { lock (_items) { return _items.Values.ToList(); } }
+            get
+            {
+                List<ExternalInputDef> items;
+                lock (_items)
+                {
+                    items = _items.Values.ToList();
+                }
+                if (_scoped != null)
+                {
+                    foreach (ExternalInputDef def in _scoped)
+                    {
+                        items.RemoveAll(i => string.Equals(i.Path, def.Path, StringComparison.OrdinalIgnoreCase));
+                        items.Add(def);
+                    }
+                }
+                return items;
+            }
+        }
+
+        /// <summary>
+        /// 在当前线程临时追加外部输入（如校验子流程时声明父流程映射进来的输入），释放返回值即撤销。
+        /// 不影响其他线程与全局注册。
+        /// </summary>
+        public static IDisposable BeginScope(IEnumerable<ExternalInputDef> inputs)
+        {
+            List<ExternalInputDef> previous = _scoped;
+            var scoped = previous == null ? new List<ExternalInputDef>() : new List<ExternalInputDef>(previous);
+            scoped.AddRange(inputs ?? Enumerable.Empty<ExternalInputDef>());
+            _scoped = scoped;
+            return new ScopeHandle(previous);
+        }
+
+        private sealed class ScopeHandle : IDisposable
+        {
+            private readonly List<ExternalInputDef> _previous;
+            private bool _disposed;
+
+            public ScopeHandle(List<ExternalInputDef> previous)
+            {
+                _previous = previous;
+            }
+
+            public void Dispose()
+            {
+                if (!_disposed)
+                {
+                    _scoped = _previous;
+                    _disposed = true;
+                }
+            }
         }
 
         /// <summary>注册（或按路径覆盖）一个外部输入。</summary>

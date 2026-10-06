@@ -566,6 +566,16 @@
         </Canvas>
     </Viewbox>
 
+    <!-- 手工追加：子流程（外框中嵌套的小流程） -->
+    <Viewbox x:Key="ToolIcon.subflow" x:Shared="False" Width="24" Height="24" Stretch="Uniform">
+        <Canvas Width="24" Height="24">
+            <Rectangle Canvas.Left="2.5" Canvas.Top="3.5" Width="19" Height="17" RadiusX="2.5" RadiusY="2.5" Stroke="{DynamicResource TextFillColorPrimaryBrush}" StrokeThickness="1.6" Fill="{x:Null}" />
+            <Rectangle Canvas.Left="6" Canvas.Top="8" Width="4.5" Height="4" RadiusX="1" RadiusY="1" Fill="{DynamicResource AccentFillColorDefaultBrush}" />
+            <Rectangle Canvas.Left="13.5" Canvas.Top="12" Width="4.5" Height="4" RadiusX="1" RadiusY="1" Fill="{DynamicResource AccentFillColorDefaultBrush}" />
+            <Path Data="M10.5,10 L12,10 L12,14 L13.5,14" Stroke="{DynamicResource TextFillColorPrimaryBrush}" StrokeThickness="1.4" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Fill="{x:Null}" />
+        </Canvas>
+    </Viewbox>
+
     <!-- 手工追加：Switch 多分支（一分多） -->
     <Viewbox x:Key="ToolIcon.switch" x:Shared="False" Width="24" Height="24" Stretch="Uniform">
         <Canvas Width="24" Height="24">
