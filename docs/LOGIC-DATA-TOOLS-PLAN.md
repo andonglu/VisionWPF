@@ -36,7 +36,7 @@
 |---|---|---|
 | LD-01 | 表达式引擎、动态输出、表达式引用校验 | 基础设施，供 LD-02 / LD-04 / LD-05 使用（**已完成**） |
 | LD-02 | 变量计算（数值、布尔、字符串表达式） | **新建工具**（**已完成**） |
-| LD-03 | 数组处理（统计、取元素、排序、筛选、拼接） | **新建工具** |
+| LD-03 | 数组处理（统计、取元素、排序、筛选、拼接） | **新建工具**（**已完成**） |
 | LD-04 | 综合判定（多检测项汇总为 OK/NG 与原因） | **新建工具**（**已完成**） |
 | LD-05 | IfElse 条件组（与 / 或、表达式条件、新比较符） | 增强现有节点（**已完成**） |
 | LD-06 | 多分支 Switch | **新建节点** |
@@ -123,25 +123,33 @@
 - 用途示例：`间隙|Double|{测量2.Row} - {测量1.Row}`、`条码正确|Bool|{读码1.FirstCode} == {Input.PartId}`、`显示文字|String|format("宽度 {0:F2} mm", {换算1.Value})`。
 - 测试：`VisionFlow.Tests\ExpressionCalcToolTests.cs`。
 
-### LD-03 数组处理（新工具）
+### LD-03 数组处理（新工具，已实现）
 
-- 工具箱：`07 数据与判定 / 数组处理`，ID `array-process`，类 `ArrayProcessTool`。
-- 输入：数组（必填，`AcceptsCollection`）；第二个数组（可选，仅拼接、逐元素运算需要）。
+- 工具箱：`07 数据与判定 / 数组处理`，ID `array-process`，类 `ArrayProcessTool : ToolBase, IDynamicOutputTool, IExpressionTool, IToolConfigurationCheck, INotFoundPolicy`（`VisionFlow.Tools\Tools\ArrayProcessTools.cs`）。
+- 输入：数组（必填，期望类型 `IEnumerable`，候选只列出数组输出）；第二个数组（可选，拼接、逐元素运算需要；逐元素运算时也可以是单个数值）。单个值按只有一个元素的数组处理。
+- 元素类型 `ElementType`：`Number`（默认，元素转为小数，非数值元素报错并提示改为文本）/ `Text`（元素转为文本）。
 - 操作 `Operation`：
 
 | 分组 | 操作 | 说明 |
 |---|---|---|
-| 统计 | `Statistics` | 一次输出 `Count`、`Sum`、`Mean`、`Max`、`Min`、`StdDev`、`Range`、`MaxIndex`、`MinIndex`；忽略 NaN 并输出 `ValidCount` |
-| 取值 | `ElementAt` | 按 `Index` 取一个元素（负数表示从末尾数），越界按“未找到”处理 |
-| 排序 | `Sort` | 升序 / 降序，输出排序后的数组和原序号数组 `Indices` |
-| 筛选 | `Filter` | 按表达式筛选，元素用 `{Item}`、序号用 `{ItemIndex}` 表示，例如 `{Item} > 10`；输出筛选结果和原序号 |
-| 变换 | `Map` | 按表达式逐元素计算，如 `{Item} * 0.0125` |
+| 统计 | `Statistics`（默认） | 不变换，只统计 |
+| 取值 | `ElementAt` | 按 `Index` 取一个元素（负数表示从末尾数，-1 为最后一个），越界按“未找到”处理 |
+| 排序 | `Sort` | 升序 / 降序（`Descending`），稳定排序，NaN 总在最后；文本按序数比较；输出原序号 `Indices` |
+| 筛选 | `Filter` | 按表达式筛选，元素用 `{Item}`、序号用 `{ItemIndex}` 表示，例如 `{Item} > 10`；结果必须为布尔；输出原序号 |
+| 变换 | `Map` | 按表达式逐元素计算，如 `{Item} * 0.0125`，可同时引用流程变量 |
 | 拼接 | `Concat` | 两个数组首尾相接 |
-| 逐元素 | `ElementWise` | 两个数组逐元素加减乘除，配对规则与 RG-07 一致（等长逐一、单元素对多、否则报错） |
-| 去重 | `Distinct` | 按值去重，保持首次出现顺序 |
+| 逐元素 | `ElementWise` | 加、减、乘、除（`ElementWiseOperator`），配对规则与 RG-07 一致（等长逐一、单元素对多、否则报错）；除数为 0 时结果为 NaN |
+| 去重 | `Distinct` | 按值去重，保持首次出现顺序，输出首次出现的序号 |
 
-- 输出：`Values`（数组）、`Value`（单值，取第一个或统计值）、`Indices`、统计类单值、`Count`、`Found`。数值数组输出类型为 `Double`；字符串数组只支持取值、排序、筛选、拼接、去重、计数。
-- `Filter` / `Map` 复用 LD-01 表达式引擎，`{Item}` / `{ItemIndex}` 作为保留引用。
+- 输出：
+  - `Values`（数组）、`Value`（结果的第一个元素，空结果时为 NaN 或空串）：类型随元素类型变化（`Double` / `String`），通过动态输出声明，下游候选类型随之变化。
+  - `Indices`（结果元素在输入中的序号）、`Count`、`Found`。
+  - 统计 `ValidCount`、`Sum`、`Mean`、`Max`、`Min`、`StdDev`（总体标准差）、`Range`、`MaxIndex`、`MinIndex`：总是针对结果数组计算并忽略 NaN，因此筛选后的数量、合计等可直接引用；文本数组或没有有效数值时为 NaN，序号为 -1。
+- `Filter` / `Map` 复用 LD-01 表达式引擎，`{Item}` / `{ItemIndex}` 为局部名称（不区分大小写），其他局部名称校验报错；其他操作不检查表达式。
+- 配置检查：拼接、逐元素运算未配置第二个数组；统计、逐元素运算选择了文本元素。
+- 结果为空时按 `FailWhenNotFound` 处理（默认失败，与其他工具一致）。
+- 编辑：使用通用编辑窗口（参数名为属性名，可运行预览）；如需更友好的界面，可后续增加专用窗口。
+- 测试：`VisionFlow.Tests\ArrayProcessToolTests.cs`。
 
 ### LD-04 综合判定（新工具，已实现）
 

@@ -575,6 +575,17 @@
         </Canvas>
     </Viewbox>
 
+    <!-- 手工追加：数组处理（数据格 + 排序箭头） -->
+    <Viewbox x:Key="ToolIcon.array-process" x:Shared="False" Width="24" Height="24" Stretch="Uniform">
+        <Canvas Width="24" Height="24">
+            <Rectangle Canvas.Left="3" Canvas.Top="4" Width="5" Height="5" RadiusX="1" RadiusY="1" Stroke="{DynamicResource TextFillColorPrimaryBrush}" StrokeThickness="1.6" Fill="{x:Null}" />
+            <Rectangle Canvas.Left="3" Canvas.Top="10" Width="5" Height="5" RadiusX="1" RadiusY="1" Stroke="{DynamicResource TextFillColorPrimaryBrush}" StrokeThickness="1.6" Fill="#B23366CC" />
+            <Rectangle Canvas.Left="3" Canvas.Top="16" Width="5" Height="5" RadiusX="1" RadiusY="1" Stroke="{DynamicResource TextFillColorPrimaryBrush}" StrokeThickness="1.6" Fill="{x:Null}" />
+            <Path Data="M11,6.5 L20,6.5 M11,12.5 L17,12.5 M11,18.5 L14,18.5" Stroke="{DynamicResource TextFillColorPrimaryBrush}" StrokeThickness="1.6" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Fill="{x:Null}" />
+            <Path Data="M20.5,10 L20.5,20 M18.5,18 L20.5,20 L22.5,18" Stroke="{DynamicResource AccentFillColorDefaultBrush}" StrokeThickness="1.5" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Fill="{x:Null}" />
+        </Canvas>
+    </Viewbox>
+
     <!-- 手工追加：综合判定（清单 + 勾与叉） -->
     <Viewbox x:Key="ToolIcon.result-judge" x:Shared="False" Width="24" Height="24" Stretch="Uniform">
         <Canvas Width="24" Height="24">
