@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using VisionFlow.Conditions;
 using VisionFlow.Core;
 using VisionFlow.Nodes;
 using VisionFlow.Tools;
@@ -190,6 +191,15 @@ namespace VisionFlow.Editing
                 ForLoopNode.Count("按次数循环", Operand.Const(1))));
             Register(new ToolboxItem("foreach", "逻辑控制", "For 循环(集合)", () =>
                 ForLoopNode.Each("遍历循环", string.Empty))); // 循环源由编辑器下拉选择
+            Register(new ToolboxItem("whileloop", "逻辑控制", "While 循环(条件)", () =>
+                new WhileLoopNode("条件循环", new ComparisonCondition
+                {
+                    Left = Operand.Ref("Loop.Index"),
+                    Operator = ComparisonOperator.Less,
+                    Right = Operand.Const(3)
+                })));
+            Register(new ToolboxItem("break", "逻辑控制", "跳出循环", () => new BreakNode("跳出循环")));
+            Register(new ToolboxItem("continue", "逻辑控制", "跳过本次", () => new ContinueNode("跳过本次")));
             Register(new ToolboxItem("flowoutput", "逻辑控制", "流程输出", () =>
                 new FlowOutputNode(NextModuleName("流程输出"))
                 {

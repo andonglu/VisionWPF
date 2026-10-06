@@ -83,6 +83,16 @@ namespace VisionFlow.WpfApp.Ui
             {
                 BuildLoopParameterPanel(loop);
             }
+            else if (node is WhileLoopNode whileLoop)
+            {
+                BuildWhileParameterPanel(whileLoop);
+            }
+            else if (node is LoopControlNode control)
+            {
+                AddInfo(control.Signal == LoopControlSignal.Break
+                    ? "执行到此处时跳出最内层循环，循环体中后续节点不再执行。只能放在循环体内（可放在 IfElse 分支中）。"
+                    : "执行到此处时结束最内层循环的本次迭代，直接进入下一次。只能放在循环体内（可放在 IfElse 分支中）。");
+            }
             else if (node is FlowOutputNode outputNode)
             {
                 AddInfo("流程输出节点的复杂输出表仍复用 WinForms 编辑页；可保存后继续用原编辑器精细配置。");
@@ -140,9 +150,58 @@ namespace VisionFlow.WpfApp.Ui
 
         private void BuildIfElseParameterPanel(IfElseNode node)
         {
+            AddConditionEditor(node.Condition, RefCandidateService.ForNode(_flowRoot(), node), condition => node.Condition = condition);
+        }
+
+        private void BuildWhileParameterPanel(WhileLoopNode node)
+        {
+            RefScope scope = RefCandidateService.ScopeForWhileCondition(_flowRoot(), node);
+            AddConditionEditor(node.Condition, scope.Candidates, condition => node.Condition = condition);
+            AddInfo("条件成立时重复执行循环体，条件中的 Loop.Index 为本循环的迭代序号（从 0 开始）。");
+
+            AddSection("循环设置");
+            var testAfter = new CheckBox
+            {
+                Content = "先执行一次再判断条件（条件可引用循环体的输出）",
+                IsChecked = node.TestAfterBody,
+                Margin = new Thickness(0, 0, 0, 16)
+            };
+            RoutedEventHandler toggle = (s, e) =>
+            {
+                bool value = testAfter.IsChecked == true;
+                if (value == node.TestAfterBody || !_ensureEditable("参数修改"))
+                {
+                    return;
+                }
+                node.TestAfterBody = value;
+                _markDirty();
+                // 作用域随之变化（循环体输出是否可用），重建面板刷新引用候选
+                Build(node);
+            };
+            testAfter.Checked += toggle;
+            testAfter.Unchecked += toggle;
+            _panel.Children.Add(testAfter);
+
+            AddNumberRow("最多执行次数", node.MaxIterations, value =>
+            {
+                int max = (int)Math.Round(value);
+                if (max <= 0)
+                {
+                    throw new ArgumentException("最多执行次数必须大于 0");
+                }
+                node.MaxIterations = max;
+            });
+            AddInfo("达到最多执行次数时条件仍成立，按可能的死循环中止并报错。");
+        }
+
+        /// <summary>
+        /// 条件编辑区：卡片式条件列表（比较 / 表达式 / 条件组，可嵌套），修改写入草稿，点“应用条件”才通过 apply 生效。
+        /// </summary>
+        private void AddConditionEditor(ICondition current, IEnumerable<RefCandidate> scopeCandidates, Action<ICondition> apply)
+        {
             AddSection("条件");
-            ConditionDraft root = ConditionDraft.RootFrom(node.Condition);
-            List<string> candidates = RefCandidateService.ForNode(_flowRoot(), node)
+            ConditionDraft root = ConditionDraft.RootFrom(current);
+            List<string> candidates = scopeCandidates
                 .Select(c => "ref:" + c.Path)
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToList();
@@ -164,7 +223,7 @@ namespace VisionFlow.WpfApp.Ui
                     _showWarning("条件未填写完整", incomplete);
                     return;
                 }
-                node.Condition = root.ToNodeCondition();
+                apply(root.ToNodeCondition());
                 _markDirty();
                 _setStatus("条件已更新");
             }, marksDirty: false);

@@ -185,7 +185,7 @@ namespace VisionFlow.Editing
             {
                 return branch == IfBranch.If ? ifElse.IfBranch : ifElse.ElseBranch;
             }
-            if (node is ForLoopNode loop)
+            if (node is LoopNodeBase loop)
             {
                 return loop.Body;
             }

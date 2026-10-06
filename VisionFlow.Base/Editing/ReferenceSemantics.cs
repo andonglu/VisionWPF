@@ -64,14 +64,22 @@ namespace VisionFlow.Editing
                 switch (reference.VarName)
                 {
                     case "Index":
+                        current = typeof(int);
+                        break;
                     case "Count":
+                        if (scope.LoopMode == RefLoopMode.While)
+                        {
+                            return RefTypeCheckResult.Fail(
+                                $"引用 '{reference}'：条件循环事先不知道总次数，不提供 Loop.Count，仅支持 Loop.Index");
+                        }
                         current = typeof(int);
                         break;
                     case "Current":
-                        if (scope.LoopMode == RefLoopMode.Count)
+                        if (scope.LoopMode == RefLoopMode.Count || scope.LoopMode == RefLoopMode.While)
                         {
-                            return RefTypeCheckResult.Fail(
-                                $"引用 '{reference}'：按次数循环不提供 Loop.Current，仅支持 Loop.Index / Loop.Count");
+                            return RefTypeCheckResult.Fail(scope.LoopMode == RefLoopMode.While
+                                ? $"引用 '{reference}'：条件循环不提供 Loop.Current，仅支持 Loop.Index"
+                                : $"引用 '{reference}'：按次数循环不提供 Loop.Current，仅支持 Loop.Index / Loop.Count");
                         }
                         current = scope.LoopCurrentElementType ?? typeof(object);
                         break;

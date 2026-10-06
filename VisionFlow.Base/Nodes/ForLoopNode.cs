@@ -19,7 +19,7 @@ namespace VisionFlow.Nodes
     /// Each  模式：额外可访问 Loop.Current（及其成员，如 Loop.Current.Score）。
     /// 循环体是子节点列表，支持任意嵌套。
     /// </summary>
-    public sealed class ForLoopNode : FlowNode
+    public sealed class ForLoopNode : LoopNodeBase
     {
         public ForLoopMode Mode { get; private set; }
 
@@ -28,13 +28,6 @@ namespace VisionFlow.Nodes
 
         /// <summary>Each 模式的集合来源（数组变量引用，如 "匹配1.Items"）。</summary>
         public string ItemsPath { get; set; }
-
-        public List<FlowNode> Body { get; } = new List<FlowNode>();
-
-        public override bool IsComposite
-        {
-            get { return true; }
-        }
 
         private ForLoopNode(string name) : base(name)
         {
@@ -87,18 +80,14 @@ namespace VisionFlow.Nodes
 
             for (int i = 0; i < count; i++)
             {
-                ctx.PushLoop(new LoopFrame(i, count, items == null ? null : items[i]));
-                try
+                NodeResult result = RunIteration(ctx, new LoopFrame(i, count, items == null ? null : items[i]), out bool breakLoop);
+                if (!result.IsSuccess)
                 {
-                    NodeResult result = RunChildren(Body, ctx);
-                    if (!result.IsSuccess)
-                    {
-                        return result;
-                    }
+                    return result;
                 }
-                finally
+                if (breakLoop)
                 {
-                    ctx.PopLoop();
+                    break;
                 }
             }
             return NodeResult.Ok;

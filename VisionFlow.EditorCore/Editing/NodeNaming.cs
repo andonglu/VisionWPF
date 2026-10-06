@@ -89,7 +89,7 @@ namespace VisionFlow.Editing
                     }
                 }
             }
-            else if (node is ForLoopNode loop)
+            else if (node is LoopNodeBase loop)
             {
                 foreach (FlowNode child in loop.Body)
                 {

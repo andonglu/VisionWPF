@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using VisionFlow.Core;
@@ -32,7 +32,9 @@ namespace VisionFlow.Editing
         /// <summary>最内层是按次数循环：可用 Loop.Index / Loop.Count，没有 Loop.Current。</summary>
         Count,
         /// <summary>最内层是按集合循环：额外可用 Loop.Current 及其成员。</summary>
-        Each
+        Each,
+        /// <summary>最内层是条件循环：只有 Loop.Index（总次数事先未知）。</summary>
+        While
     }
 
     /// <summary>
@@ -83,9 +85,14 @@ namespace VisionFlow.Editing
             // 循环上下文：只为最内层循环生成 Loop.* 候选（框架语义即最内层）
             RefLoopMode loopMode = RefLoopMode.None;
             Type loopCurrentElementType = null;
-            List<ForLoopNode> loopAncestors = FindLoopAncestors(root, target);
-            ForLoopNode innermost = loopAncestors.LastOrDefault();
-            if (innermost != null)
+            List<LoopNodeBase> loopAncestors = FindLoopAncestors(root, target);
+            LoopNodeBase innermostLoop = loopAncestors.LastOrDefault();
+            if (innermostLoop is WhileLoopNode)
+            {
+                loopMode = RefLoopMode.While;
+                candidates.Add(new RefCandidate { Path = "Loop.Index", ClrType = typeof(int) });
+            }
+            else if (innermostLoop is ForLoopNode innermost)
             {
                 loopMode = innermost.Mode == ForLoopMode.Each ? RefLoopMode.Each : RefLoopMode.Count;
                 candidates.Add(new RefCandidate { Path = "Loop.Index", ClrType = typeof(int) });
@@ -112,6 +119,26 @@ namespace VisionFlow.Editing
                 }
             }
             return new RefScope(candidates, loopMode, loopCurrentElementType);
+        }
+
+        /// <summary>
+        /// While 循环条件的作用域：条件在本循环的循环帧内求值，可用 Loop.Index（指向本循环）；
+        /// 先执行后判断时，循环体的输出（与循环体末尾可见的相同）也可引用。
+        /// </summary>
+        public static RefScope ScopeForWhileCondition(FlowNode root, WhileLoopNode loop)
+        {
+            List<RefCandidate> candidates = ScopeForNode(root, loop).Candidates
+                .Where(c => !c.Path.StartsWith("Loop.", StringComparison.OrdinalIgnoreCase))
+                .ToList();
+            if (loop.TestAfterBody)
+            {
+                foreach (FlowNode child in loop.Body)
+                {
+                    CollectSubtreeOutputs(child, candidates);
+                }
+            }
+            candidates.Add(new RefCandidate { Path = "Loop.Index", ClrType = typeof(int) });
+            return new RefScope(candidates, RefLoopMode.While, null);
         }
 
         /// <summary>IfElse 公共输出配置可用的候选：外部上游 + 指定分支内部输出。</summary>
@@ -201,7 +228,7 @@ namespace VisionFlow.Editing
                 return false;
             }
 
-            if (node is ForLoopNode loop)
+            if (node is LoopNodeBase loop)
             {
                 if (!ContainsNode(loop, target))
                 {
@@ -247,7 +274,7 @@ namespace VisionFlow.Editing
                 return;
             }
             // 循环体内部输出对外不可见，不递归循环体
-            if (node is ForLoopNode)
+            if (node is LoopNodeBase)
             {
                 return;
             }
@@ -334,22 +361,22 @@ namespace VisionFlow.Editing
         }
 
         /// <summary>找目标节点的循环祖先（外层→内层）。</summary>
-        private static List<ForLoopNode> FindLoopAncestors(FlowNode root, FlowNode target)
+        private static List<LoopNodeBase> FindLoopAncestors(FlowNode root, FlowNode target)
         {
-            var stack = new List<ForLoopNode>();
-            var result = new List<ForLoopNode>();
+            var stack = new List<LoopNodeBase>();
+            var result = new List<LoopNodeBase>();
             FindLoopAncestors(root, target, stack, result);
             return result;
         }
 
-        private static bool FindLoopAncestors(FlowNode node, FlowNode target, List<ForLoopNode> stack, List<ForLoopNode> path)
+        private static bool FindLoopAncestors(FlowNode node, FlowNode target, List<LoopNodeBase> stack, List<LoopNodeBase> path)
         {
             if (node == target)
             {
                 path.AddRange(stack);
                 return true;
             }
-            if (node is ForLoopNode loop)
+            if (node is LoopNodeBase loop)
             {
                 stack.Add(loop);
             }
@@ -360,7 +387,7 @@ namespace VisionFlow.Editing
                     return true;
                 }
             }
-            if (node is ForLoopNode)
+            if (node is LoopNodeBase)
             {
                 stack.RemoveAt(stack.Count - 1);
             }
@@ -377,7 +404,7 @@ namespace VisionFlow.Editing
             {
                 return ifElse.IfBranch.Concat(ifElse.ElseBranch);
             }
-            if (node is ForLoopNode loop)
+            if (node is LoopNodeBase loop)
             {
                 return loop.Body;
             }

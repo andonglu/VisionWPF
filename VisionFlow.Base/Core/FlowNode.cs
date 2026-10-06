@@ -162,7 +162,7 @@ namespace VisionFlow.Core
 
         protected abstract NodeResult OnExecute(FlowContext ctx);
 
-        /// <summary>顺序执行一组子节点，任一失败即中断并向上传播。</summary>
+        /// <summary>顺序执行一组子节点，任一失败即中断并向上传播；出现跳出循环 / 跳过本次信号时停止执行后续兄弟节点。</summary>
         protected static NodeResult RunChildren(IEnumerable<FlowNode> children, FlowContext ctx)
         {
             foreach (FlowNode node in children)
@@ -172,6 +172,10 @@ namespace VisionFlow.Core
                 if (!result.IsSuccess)
                 {
                     return result;
+                }
+                if (ctx.LoopControl != LoopControlSignal.None)
+                {
+                    return NodeResult.Ok;
                 }
             }
             return NodeResult.Ok;

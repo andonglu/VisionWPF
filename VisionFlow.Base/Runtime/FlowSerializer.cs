@@ -54,7 +54,8 @@ namespace VisionFlow.Editing
         public static int RequiredFormatVersion(FlowNode node)
         {
             int version = BaseFormatVersion;
-            if (node is IfElseNode ifElse && ifElse.Condition != null && RequiresVersion2(ifElse.Condition))
+            if ((node is IfElseNode ifElse && ifElse.Condition != null && RequiresVersion2(ifElse.Condition))
+                || node is WhileLoopNode || node is LoopControlNode)
             {
                 version = 2;
             }
@@ -334,6 +335,26 @@ namespace VisionFlow.Editing
                 };
                 dto.Children = loop.Body.Select(ToDto).ToList();
             }
+            else if (node is WhileLoopNode whileLoop)
+            {
+                dto.Kind = "WhileLoop";
+                dto.Condition = ToConditionDto(whileLoop.Condition);
+                dto.Loop = new LoopDto
+                {
+                    Mode = "While",
+                    MaxIterations = whileLoop.MaxIterations,
+                    TestAfterBody = whileLoop.TestAfterBody
+                };
+                dto.Children = whileLoop.Body.Select(ToDto).ToList();
+            }
+            else if (node is BreakNode)
+            {
+                dto.Kind = "Break";
+            }
+            else if (node is ContinueNode)
+            {
+                dto.Kind = "Continue";
+            }
             else if (node is FlowOutputNode outputNode)
             {
                 dto.Kind = "FlowOutput";
@@ -382,6 +403,21 @@ namespace VisionFlow.Editing
                     AddChildren(loop.Body, dto.Children, warnings);
                     node = loop;
                     break;
+                case "WhileLoop":
+                    var whileLoop = new WhileLoopNode(dto.Name ?? "条件循环", FromConditionDto(dto.Condition, warnings))
+                    {
+                        MaxIterations = dto.Loop?.MaxIterations ?? WhileLoopNode.DefaultMaxIterations,
+                        TestAfterBody = dto.Loop?.TestAfterBody ?? false
+                    };
+                    AddChildren(whileLoop.Body, dto.Children, warnings);
+                    node = whileLoop;
+                    break;
+                case "Break":
+                    node = new BreakNode(dto.Name ?? "跳出循环");
+                    break;
+                case "Continue":
+                    node = new ContinueNode(dto.Name ?? "跳过本次");
+                    break;
                 case "FlowOutput":
                     var outputNode = new FlowOutputNode(dto.Name ?? "流程输出");
                     foreach (FlowOutputDto output in dto.FlowOutputs ?? new List<FlowOutputDto>())
@@ -428,7 +464,7 @@ namespace VisionFlow.Editing
             {
                 return ifElse.IfBranch.Concat(ifElse.ElseBranch);
             }
-            if (node is ForLoopNode loop)
+            if (node is LoopNodeBase loop)
             {
                 return loop.Body;
             }
@@ -756,6 +792,10 @@ namespace VisionFlow.Editing
             public string Mode { get; set; }
             public OperandDto CountSource { get; set; }
             public string ItemsPath { get; set; }
+            [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+            public int? MaxIterations { get; set; }
+            [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+            public bool? TestAfterBody { get; set; }
         }
 
         private sealed class BranchOutputDto

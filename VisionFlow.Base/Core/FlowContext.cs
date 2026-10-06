@@ -7,6 +7,17 @@ using VisionFlow.Variables;
 namespace VisionFlow.Core
 {
     /// <summary>
+    /// 循环控制信号：跳出循环 / 跳过本次节点设置后，顺序执行的子节点立即停止，
+    /// 由最内层循环读取并清除。
+    /// </summary>
+    public enum LoopControlSignal
+    {
+        None,
+        Break,
+        Continue
+    }
+
+    /// <summary>
     /// 循环帧：进入循环时压栈，退出时弹栈。
     /// 嵌套循环中 Loop.Index / Loop.Current 始终指向最内层。
     /// </summary>
@@ -74,6 +85,9 @@ namespace VisionFlow.Core
         {
             get { return _loopStack.Count > 0 ? _loopStack.Peek() : null; }
         }
+
+        /// <summary>待处理的循环控制信号（由跳出循环 / 跳过本次节点设置，最内层循环消费）。</summary>
+        public LoopControlSignal LoopControl { get; set; }
 
         public void PushLoop(LoopFrame frame)
         {

@@ -165,6 +165,21 @@ namespace VisionFlow.Ui
                     return copy;
                 }
             }
+            else if (root is WhileLoopNode whileLoop)
+            {
+                FlowNode[] children = whileLoop.Body.Select(n => CopyScope(n, target, replacement)).ToArray();
+                if (children.Where((n, i) => n != whileLoop.Body[i]).Any())
+                {
+                    var copy = new WhileLoopNode(whileLoop.Name, whileLoop.Condition)
+                    {
+                        Id = whileLoop.Id,
+                        MaxIterations = whileLoop.MaxIterations,
+                        TestAfterBody = whileLoop.TestAfterBody
+                    };
+                    copy.Body.AddRange(children);
+                    return copy;
+                }
+            }
             else if (root is IfElseNode branch)
             {
                 FlowNode[] ifChildren = branch.IfBranch.Select(n => CopyScope(n, target, replacement)).ToArray();

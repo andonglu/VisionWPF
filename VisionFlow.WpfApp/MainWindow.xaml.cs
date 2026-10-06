@@ -234,7 +234,7 @@ namespace VisionFlow.WpfApp
                 item.Items.Add(ifItem);
                 item.Items.Add(elseItem);
             }
-            else if (node is ForLoopNode loop)
+            else if (node is LoopNodeBase loop)
             {
                 foreach (FlowNode child in loop.Body)
                 {
@@ -262,6 +262,18 @@ namespace VisionFlow.WpfApp
             if (node is ForLoopNode loop)
             {
                 return "For(" + (loop.Mode == ForLoopMode.Count ? "次数" : "集合") + "): " + node.Name;
+            }
+            if (node is WhileLoopNode)
+            {
+                return "While: " + node.Name;
+            }
+            if (node is BreakNode)
+            {
+                return "跳出循环: " + node.Name;
+            }
+            if (node is ContinueNode)
+            {
+                return "跳过本次: " + node.Name;
             }
             if (node is FlowOutputNode)
             {

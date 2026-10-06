@@ -40,7 +40,7 @@
 | LD-04 | 综合判定（多检测项汇总为 OK/NG 与原因） | **新建工具**（**已完成**） |
 | LD-05 | IfElse 条件组（与 / 或、表达式条件、新比较符） | 增强现有节点（**已完成**） |
 | LD-06 | 多分支 Switch | **新建节点** |
-| LD-07 | 条件循环 While、跳出循环、跳过本次 | **新建节点**（3 个） |
+| LD-07 | 条件循环 While、跳出循环、跳过本次 | **新建节点**（3 个，**已完成**） |
 | LD-08 | 子流程调用 | **新建节点** |
 
 工具箱分类“07 结果判定”改名为“07 数据与判定”，LD-02 ~ LD-04 与现有“数值区间分类”放在该分类；LD-06 ~ LD-08 放在“逻辑控制”。
@@ -199,15 +199,22 @@
 - 公共输出：与 IfElse 的 `BranchOutputs` 相同的机制，每个分支各自给出取值，节点之后的工具通过公共输出引用，不直接引用分支内部的变量。
 - 开发方法：参照 `IfElseNode` 的分支结构与公共输出实现；`FlowEditModel` 支持把节点拖入任一分支；`RefCandidateService` 中分支内部只能看到分支外上游与本分支内的输出；序列化 Kind 为 `Switch`，文件版本 2。
 
-### LD-07 While 循环、跳出循环、跳过本次（新节点）
+### LD-07 While 循环、跳出循环、跳过本次（新节点，已实现）
 
-- `WhileLoopNode`：条件（LD-05 的条件组）为真时重复执行循环体；`MaxIterations`（默认 100，必须大于 0）防止死循环，超过时按失败处理并给出中文提示。循环体内可用 `Loop.Index`。
-- `BreakNode`（跳出循环）、`ContinueNode`（跳过本次）：只能放在循环体内（直接或经 IfElse / Switch 嵌套），放在循环外时校验报错。
-- 开发方法：
-  - 在 `FlowContext` 增加循环控制标志（无 / 跳出 / 跳过本次）；`BreakNode` / `ContinueNode` 设置标志后返回成功。
-  - `FlowNode.RunChildren` 每执行完一个子节点检查标志，有标志则停止执行后续兄弟节点并返回。
-  - `ForLoopNode` 与 `WhileLoopNode` 每次迭代后读取并清除标志：跳出则结束循环，跳过本次则进入下一次。
-  - 序列化 Kind 为 `WhileLoop` / `Break` / `Continue`，文件版本 2。
+- `WhileLoopNode`（工具箱“逻辑控制 / While 循环(条件)”，ID `whileloop`）：条件（LD-05 的条件组、表达式或单条比较）成立时重复执行循环体。
+  - 默认先判断后执行；勾选“先执行一次再判断”（`TestAfterBody`）为 do-while，此时条件可以引用循环体的输出（如“重试直到找到”）。
+  - 条件在本循环的循环帧内求值，`Loop.Index` 指向本循环（先判断时为即将执行的序号，后判断时为刚执行完的序号）；循环体内同样可用 `Loop.Index`。条件循环不提供 `Loop.Count`（总次数事先未知）和 `Loop.Current`，引用时校验报错。
+  - `MaxIterations`（默认 100，必须大于 0）防止死循环：达到上限时条件仍成立按失败处理，并提示调大次数。
+  - 新建时默认条件为 `Loop.Index < 3`；每次判断都记录条件明细日志，结束时记录共执行次数。
+- `BreakNode`（跳出循环，ID `break`）、`ContinueNode`（跳过本次，ID `continue`）：作用于最内层循环（For 或 While），可放在循环体内的 IfElse 分支中（任意层）；放在循环外时校验报错，运行时也明确失败。
+- 实现：
+  - `FlowContext.LoopControl`（`LoopControlSignal`：无 / 跳出 / 跳过本次）；跳出 / 跳过本次节点设置信号后返回成功。
+  - `FlowNode.RunChildren` 每执行完一个子节点检查信号，有信号则停止执行后续兄弟节点；`IfElseNode` 在信号存在时不再计算公共输出（本次迭代已放弃，分支内被跳过的节点没有输出）。
+  - 新增 `LoopNodeBase`（`ForLoopNode`、`WhileLoopNode` 的基类）：持有循环体，`RunIteration` 统一压栈循环帧并在每次迭代后读取、清除信号。引用候选、校验、序列化、资源预热、编辑模型、节点命名、流程树等原来只认 `ForLoopNode` 循环体的地方改为按 `LoopNodeBase` 处理，循环体内部输出对外不可见的规则对两种循环一致。
+  - `RefLoopMode.While` 与 `RefCandidateService.ScopeForWhileCondition`：条件的作用域为循环前的上游，加上 `Loop.Index`；`TestAfterBody` 时再加上循环体输出。
+  - 序列化 Kind 为 `WhileLoop`（条件写在 `Condition`，`Loop` 中写 `MaxIterations` / `TestAfterBody`）、`Break`、`Continue`，任一出现时文件版本为 2；普通 For 循环的格式不变。
+  - 侧边参数面板：While 复用 IfElse 的卡片式条件编辑器（引用候选来自上述作用域），另有“先执行一次再判断”和“最多执行次数”；跳出 / 跳过本次显示用途说明。
+- 测试：`VisionFlow.Tests\LoopControlTests.cs`。
 
 ### LD-08 子流程（新节点）
 

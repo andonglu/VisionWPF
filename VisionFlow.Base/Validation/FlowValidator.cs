@@ -74,11 +74,11 @@ namespace VisionFlow.Validation
             }
 
             ValidateDuplicateNamespaces(root, result);
-            ValidateNode(root, root, result);
+            ValidateNode(root, root, result, 0);
             return result;
         }
 
-        private static void ValidateNode(FlowNode root, FlowNode node, FlowValidationResult result)
+        private static void ValidateNode(FlowNode root, FlowNode node, FlowValidationResult result, int loopDepth)
         {
             if (node is ToolNode toolNode)
             {
@@ -92,14 +92,24 @@ namespace VisionFlow.Validation
             {
                 ValidateLoop(root, loop, result);
             }
+            else if (node is WhileLoopNode whileLoop)
+            {
+                ValidateWhile(root, whileLoop, result);
+            }
+            else if (node is LoopControlNode && loopDepth == 0)
+            {
+                result.Add(new FlowValidationIssue(FlowValidationSeverity.Error, node, null,
+                    "跳出循环 / 跳过本次只能放在循环体内"));
+            }
             else if (node is FlowOutputNode outputNode)
             {
                 ValidateFlowOutput(root, outputNode, result);
             }
 
+            int childDepth = node is LoopNodeBase ? loopDepth + 1 : loopDepth;
             foreach (FlowNode child in EnumerateChildren(node))
             {
-                ValidateNode(root, child, result);
+                ValidateNode(root, child, result, childDepth);
             }
         }
 
@@ -169,7 +179,8 @@ namespace VisionFlow.Validation
         /// skipReference 返回 true 的引用不做作用域检查（如工具自身排在前面的结果）。
         /// </summary>
         private static void ValidateExpressionText(FlowNode root, FlowNode node, string text, string parameter,
-            IReadOnlyCollection<string> localNames, Func<VariableReference, bool> skipReference, FlowValidationResult result)
+            IReadOnlyCollection<string> localNames, Func<VariableReference, bool> skipReference, FlowValidationResult result,
+            RefScope scope = null)
         {
             if (!ExpressionParser.TryParse(text, out CompiledExpression expression, out ExpressionException error))
             {
@@ -191,7 +202,7 @@ namespace VisionFlow.Validation
                 {
                     continue;
                 }
-                ValidateReference(root, node, path, typeof(object), parameter, result, acceptsCollection: true);
+                ValidateReference(root, node, path, typeof(object), parameter, result, acceptsCollection: true, scope: scope);
             }
         }
 
@@ -267,10 +278,10 @@ namespace VisionFlow.Validation
 
         /// <summary>
         /// 递归检查条件。label 为条件在组中的位置（如“条件 2.1”），顶层条件为 null，
-        /// 此时单条比较沿用“左操作数 / 右操作数”参数名。
+        /// 此时单条比较沿用“左操作数 / 右操作数”参数名。scope 为 null 时按节点自身的上游作用域检查。
         /// </summary>
-        private static void ValidateCondition(FlowNode root, IfElseNode node, ICondition condition, string label,
-            FlowValidationResult result)
+        private static void ValidateCondition(FlowNode root, FlowNode node, ICondition condition, string label,
+            FlowValidationResult result, RefScope scope = null)
         {
             string prefix = label == null ? string.Empty : label + " ";
             switch (condition)
@@ -279,10 +290,10 @@ namespace VisionFlow.Validation
                     result.Add(new FlowValidationIssue(FlowValidationSeverity.Error, node, label ?? "条件", "条件为空"));
                     break;
                 case ComparisonCondition comparison:
-                    ValidateOperand(root, node, comparison.Left, null, prefix + "左操作数", result);
+                    ValidateOperand(root, node, comparison.Left, null, prefix + "左操作数", result, scope);
                     if (!ComparisonCondition.IsUnary(comparison.Operator))
                     {
-                        ValidateOperand(root, node, comparison.Right, null, prefix + "右操作数", result);
+                        ValidateOperand(root, node, comparison.Right, null, prefix + "右操作数", result, scope);
                     }
                     break;
                 case ConditionGroup group:
@@ -293,16 +304,32 @@ namespace VisionFlow.Validation
                     for (int i = 0; i < group.Items.Count; i++)
                     {
                         string itemLabel = label == null ? $"条件 {i + 1}" : $"{label}.{i + 1}";
-                        ValidateCondition(root, node, group.Items[i], itemLabel, result);
+                        ValidateCondition(root, node, group.Items[i], itemLabel, result, scope);
                     }
                     break;
                 case ExpressionCondition expression:
-                    ValidateExpressionText(root, node, expression.Expression, label ?? "条件表达式", null, null, result);
+                    ValidateExpressionText(root, node, expression.Expression, label ?? "条件表达式", null, null, result, scope);
                     break;
                 default:
                     result.Add(new FlowValidationIssue(FlowValidationSeverity.Error, node, label ?? "条件",
                         $"不支持的条件类型 {condition.GetType().Name}"));
                     break;
+            }
+        }
+
+        private static void ValidateWhile(FlowNode root, WhileLoopNode node, FlowValidationResult result)
+        {
+            if (node.Condition == null)
+            {
+                result.Add(new FlowValidationIssue(FlowValidationSeverity.Error, node, "条件", "未设置条件"));
+            }
+            else
+            {
+                ValidateCondition(root, node, node.Condition, null, result, RefCandidateService.ScopeForWhileCondition(root, node));
+            }
+            if (node.MaxIterations <= 0)
+            {
+                result.Add(new FlowValidationIssue(FlowValidationSeverity.Error, node, "最多执行次数", "必须大于 0"));
             }
         }
 
@@ -391,7 +418,7 @@ namespace VisionFlow.Validation
         }
 
         private static void ValidateOperand(FlowNode root, FlowNode node, Operand operand, Type expectedType,
-            string parameter, FlowValidationResult result)
+            string parameter, FlowValidationResult result, RefScope scope = null)
         {
             if (operand == null)
             {
@@ -400,12 +427,12 @@ namespace VisionFlow.Validation
             }
             if (!operand.IsConstant)
             {
-                ValidateReference(root, node, operand.Reference.ToString(), expectedType, parameter, result);
+                ValidateReference(root, node, operand.Reference.ToString(), expectedType, parameter, result, scope: scope);
             }
         }
 
         private static void ValidateReference(FlowNode root, FlowNode node, string path, Type expectedType,
-            string parameter, FlowValidationResult result, bool acceptsCollection = false)
+            string parameter, FlowValidationResult result, bool acceptsCollection = false, RefScope scope = null)
         {
             VariableReference reference;
             try
@@ -419,7 +446,7 @@ namespace VisionFlow.Validation
                 return;
             }
 
-            RefScope scope = RefCandidateService.ScopeForNode(root, node);
+            scope = scope ?? RefCandidateService.ScopeForNode(root, node);
             RefTypeCheckResult check = ReferenceSemantics.Check(reference, scope);
             if (!check.Success)
             {
@@ -508,7 +535,7 @@ namespace VisionFlow.Validation
             {
                 return ifElse.IfBranch.Concat(ifElse.ElseBranch);
             }
-            if (node is ForLoopNode loop)
+            if (node is LoopNodeBase loop)
             {
                 return loop.Body;
             }

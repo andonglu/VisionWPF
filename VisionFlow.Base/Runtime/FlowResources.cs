@@ -138,7 +138,7 @@ namespace VisionFlow.Runtime
             {
                 return ifElse.IfBranch.Concat(ifElse.ElseBranch);
             }
-            if (node is ForLoopNode loop)
+            if (node is LoopNodeBase loop)
             {
                 return loop.Body;
             }

@@ -61,6 +61,11 @@ namespace VisionFlow.Nodes
             {
                 return result;
             }
+            if (ctx.LoopControl != LoopControlSignal.None)
+            {
+                // 分支内跳出循环 / 跳过本次：本次迭代已放弃，不再计算公共输出
+                return NodeResult.Ok;
+            }
 
             foreach (BranchOutputDef output in Outputs)
             {

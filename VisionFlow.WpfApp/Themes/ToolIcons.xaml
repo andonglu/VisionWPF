@@ -566,6 +566,32 @@
         </Canvas>
     </Viewbox>
 
+    <!-- 手工追加：While 循环（循环箭头 + 问号判断） -->
+    <Viewbox x:Key="ToolIcon.whileloop" x:Shared="False" Width="24" Height="24" Stretch="Uniform">
+        <Canvas Width="24" Height="24">
+            <Path Data="M18.5,8.5 A7,7 0 1 0 19,15" Stroke="{DynamicResource TextFillColorPrimaryBrush}" StrokeThickness="1.8" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Fill="{x:Null}" />
+            <Path Data="M19,4.5 L19,9 L14.5,9" Stroke="{DynamicResource TextFillColorPrimaryBrush}" StrokeThickness="1.8" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Fill="{x:Null}" />
+            <Path Data="M10,9.5 C10,7.5 14,7.5 14,9.5 C14,11 12,11 12,13 M12,15.5 L12,15.6" Stroke="{DynamicResource AccentFillColorDefaultBrush}" StrokeThickness="1.6" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Fill="{x:Null}" />
+        </Canvas>
+    </Viewbox>
+
+    <!-- 手工追加：跳出循环（循环 + 向外箭头） -->
+    <Viewbox x:Key="ToolIcon.break" x:Shared="False" Width="24" Height="24" Stretch="Uniform">
+        <Canvas Width="24" Height="24">
+            <Path Data="M12,4 A8,8 0 1 0 20,12" Stroke="{DynamicResource TextFillColorPrimaryBrush}" StrokeThickness="1.8" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Fill="{x:Null}" />
+            <Path Data="M12,12 L21,3 M15.5,3 L21,3 L21,8.5" Stroke="{DynamicResource AccentFillColorDefaultBrush}" StrokeThickness="1.8" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Fill="{x:Null}" />
+        </Canvas>
+    </Viewbox>
+
+    <!-- 手工追加：跳过本次（跳过的节点 + 前进箭头） -->
+    <Viewbox x:Key="ToolIcon.continue" x:Shared="False" Width="24" Height="24" Stretch="Uniform">
+        <Canvas Width="24" Height="24">
+            <Rectangle Canvas.Left="9" Canvas.Top="9" Width="6" Height="6" RadiusX="1" RadiusY="1" Stroke="{DynamicResource TextFillColorSecondaryBrush}" StrokeThickness="1.4" StrokeDashArray="2 1.5" Fill="{x:Null}" />
+            <Path Data="M3,12 C3,4 21,4 21,12 M17.5,9.5 L21,12.5 L24,9" Stroke="{DynamicResource AccentFillColorDefaultBrush}" StrokeThickness="1.8" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Fill="{x:Null}" />
+            <Path Data="M3,12 L3,19 M21,12 L21,19" Stroke="{DynamicResource TextFillColorPrimaryBrush}" StrokeThickness="1.8" StrokeStartLineCap="Round" Fill="{x:Null}" />
+        </Canvas>
+    </Viewbox>
+
     <!-- 手工追加：变量计算（计算器：f(x) + 等号） -->
     <Viewbox x:Key="ToolIcon.expression-calc" x:Shared="False" Width="24" Height="24" Stretch="Uniform">
         <Canvas Width="24" Height="24">
