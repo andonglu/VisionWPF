@@ -4,6 +4,7 @@ using System.Linq;
 using VisionFlow.Conditions;
 using VisionFlow.Core;
 using VisionFlow.Editing;
+using VisionFlow.Expressions;
 using VisionFlow.Nodes;
 using VisionFlow.Variables;
 
@@ -120,6 +121,58 @@ namespace VisionFlow.Validation
             }
 
             ValidateDynamicOutputs(node, result);
+            ValidateExpressions(root, node, result);
+        }
+
+        /// <summary>
+        /// 检查工具参数中的表达式：语法、局部名称，以及其中的变量引用（与 [InputRef] 使用同一作用域规则，
+        /// 数组整体引用也允许，供 count / sum 等函数使用）。
+        /// </summary>
+        private static void ValidateExpressions(FlowNode root, ToolNode node, FlowValidationResult result)
+        {
+            if (!(node.Tool is IExpressionTool expressionTool))
+            {
+                return;
+            }
+
+            foreach (ToolExpressionDef def in expressionTool.GetExpressions() ?? new ToolExpressionDef[0])
+            {
+                if (def == null)
+                {
+                    continue;
+                }
+                if (!ExpressionParser.TryParse(def.Text, out CompiledExpression expression, out ExpressionException error))
+                {
+                    result.Add(new FlowValidationIssue(FlowValidationSeverity.Error, node, def.Parameter,
+                        "表达式错误：" + error.Message));
+                    continue;
+                }
+
+                foreach (string name in expression.LocalNames)
+                {
+                    if (!ContainsName(def.LocalNames, name))
+                    {
+                        result.Add(new FlowValidationIssue(FlowValidationSeverity.Error, node, def.Parameter,
+                            $"未定义的名称 {{{name}}}"));
+                    }
+                }
+
+                foreach (string path in expression.References)
+                {
+                    VariableReference reference = VariableReference.Parse(path);
+                    if (string.Equals(reference.ModuleName, node.Tool.ModuleName, StringComparison.OrdinalIgnoreCase)
+                        && ContainsName(def.SelfOutputs, reference.VarName))
+                    {
+                        continue;
+                    }
+                    ValidateReference(root, node, path, typeof(object), def.Parameter, result, acceptsCollection: true);
+                }
+            }
+        }
+
+        private static bool ContainsName(IReadOnlyCollection<string> names, string name)
+        {
+            return names != null && names.Contains(name, StringComparer.OrdinalIgnoreCase);
         }
 
         /// <summary>动态输出名必须可被引用，且不能与该工具的其他输出重名（引用按不区分大小写匹配）。</summary>

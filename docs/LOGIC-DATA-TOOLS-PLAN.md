@@ -34,7 +34,7 @@
 
 | 编号 | 内容 | 处理方式 |
 |---|---|---|
-| LD-01 | 表达式引擎、动态输出、文本内引用校验 | 基础设施，供 LD-02 / LD-04 / LD-05 使用 |
+| LD-01 | 表达式引擎、动态输出、表达式引用校验 | 基础设施，供 LD-02 / LD-04 / LD-05 使用（**已完成**） |
 | LD-02 | 变量计算（数值、布尔、字符串表达式） | **新建工具** |
 | LD-03 | 数组处理（统计、取元素、排序、筛选、拼接） | **新建工具** |
 | LD-04 | 综合判定（多检测项汇总为 OK/NG 与原因） | **新建工具** |
@@ -90,10 +90,15 @@
 - `FlowValidator` 对动态输出报告：输出名为空、含非法字符、与该工具的其他输出重名。
 - 测试：`VisionFlow.Tests\DynamicOutputTests.cs`。
 
-**文本内引用校验**
+**表达式引用校验**（已实现）
 
-- 新增接口 `IReferencingTool { IEnumerable<ToolTextReference> GetTextReferences(); }`（含引用路径、所在参数名、显示名）。
-- `FlowValidator.ValidateTool` 在检查 `[InputRef]` 之后，对这些引用执行同样的 `ValidateReference`（上游可见性、循环上下文）。表达式语法错误作为校验错误报告。
+- 接口 `IExpressionTool { IEnumerable<ToolExpressionDef> GetExpressions(); }`（`VisionFlow.Base\Expressions\ToolExpressions.cs`）。`ToolExpressionDef` 包含：`Parameter`（校验结果中显示的参数名，如“计算式 第 2 行”）、`Text`、`LocalNames`（允许的局部名称）、`SelfOutputs`（允许引用的本工具输出，如变量计算中排在前面的结果）。
+- `FlowValidator.ValidateTool` 在检查 `[InputRef]` 与动态输出之后，对每个表达式：
+  - 解析失败时报告“表达式错误：第 N 个字符处……”；
+  - 报告未声明的局部名称；
+  - 对 `{模块.变量}` 引用执行与 `[InputRef]` 相同的 `ValidateReference`（上游可见性、分支与循环作用域、成员与下标），允许数组整体引用；`{本模块名.输出名}` 在 `SelfOutputs` 中声明时跳过作用域检查。
+- 名称比较不区分大小写，与 `FlowContext` 的变量查找一致；工具在运行时提供局部名称取值时也应不区分大小写。
+- 测试：`VisionFlow.Tests\ExpressionValidationTests.cs`。
 
 **注意**
 
@@ -103,7 +108,7 @@
 
 ### LD-02 变量计算（新工具）
 
-- 工具箱：`07 数据与判定 / 变量计算`，ID `expression-calc`，类 `ExpressionCalcTool : ToolBase, IDynamicOutputTool, IReferencingTool`。
+- 工具箱：`07 数据与判定 / 变量计算`，ID `expression-calc`，类 `ExpressionCalcTool : ToolBase, IDynamicOutputTool, IExpressionTool`。
 - 一个工具内可写多条计算，每条产生一个输出，后面的计算可以引用前面的结果（`{本模块名.结果名}`）。
 - 参数：`Expressions`（多行字符串，每行 `名称|类型|表达式`，类型为 `Int` / `Double` / `Bool` / `String`）。编辑窗口以表格形式编辑，保存时拼成该字符串。
 - 输出：每条计算一个单值输出，名称即用户填写的名称；名称必须是合法标识符且不与其他行重复。
@@ -133,7 +138,7 @@
 
 ### LD-04 综合判定（新工具）
 
-- 工具箱：`07 数据与判定 / 综合判定`，ID `result-judge`，类 `ResultJudgeTool : ToolBase, IReferencingTool`。
+- 工具箱：`07 数据与判定 / 综合判定`，ID `result-judge`，类 `ResultJudgeTool : ToolBase, IExpressionTool`。
 - 把多个检测项汇总成一个 OK/NG 结论与不合格原因，对标 VisionPro `CogResultsAnalysisTool` 和 VisionMaster 条件检测。
 - 参数：`Items`（多行字符串，每行一项：`名称|取值表达式|下限|上限|NG代码|NG信息`；下限或上限留空表示不限制；取值为布尔时下限、上限留空，`true` 为合格）。`StopAtFirstNg`（默认 false，判完全部项）。`OkCode`（默认 0）、`OkMessage`（默认“OK”）。
 - 判定规则：取值为 NaN、引用无效均判为不合格并记录原因；区间为闭区间。
