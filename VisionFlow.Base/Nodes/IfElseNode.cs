@@ -22,7 +22,8 @@ namespace VisionFlow.Nodes
     /// </summary>
     public sealed class IfElseNode : FlowNode
     {
-        public ComparisonCondition Condition { get; set; }
+        /// <summary>分支条件：单条比较、条件组或布尔表达式。</summary>
+        public ICondition Condition { get; set; }
 
         public List<FlowNode> IfBranch { get; } = new List<FlowNode>();
         public List<FlowNode> ElseBranch { get; } = new List<FlowNode>();
@@ -33,7 +34,7 @@ namespace VisionFlow.Nodes
             get { return true; }
         }
 
-        public IfElseNode(string name, ComparisonCondition condition = null) : base(name)
+        public IfElseNode(string name, ICondition condition = null) : base(name)
         {
             Condition = condition;
         }
@@ -45,10 +46,15 @@ namespace VisionFlow.Nodes
                 return NodeResult.Fail($"{Name} 未设置条件");
             }
 
-            bool pass = Condition.Evaluate(ctx);
+            var trace = new List<string>();
+            bool pass = Condition.Evaluate(ctx, trace);
             ctx.AddLog(FlowLogLevel.Info,
                 $"[条件] {Name}：{Condition} → {(pass ? "成立，走 If 分支" : "不成立，走 Else 分支")}",
                 Id, Name);
+            if (trace.Count > 0)
+            {
+                ctx.AddLog(FlowLogLevel.Info, $"[条件明细] {Name}：{string.Join("；", trace)}", Id, Name);
+            }
 
             NodeResult result = RunChildren(pass ? IfBranch : ElseBranch, ctx);
             if (!result.IsSuccess)

@@ -157,32 +157,41 @@ namespace VisionFlow.Validation
                 {
                     continue;
                 }
-                if (!ExpressionParser.TryParse(def.Text, out CompiledExpression expression, out ExpressionException error))
+                ValidateExpressionText(root, node, def.Text, def.Parameter, def.LocalNames,
+                    reference => string.Equals(reference.ModuleName, node.Tool.ModuleName, StringComparison.OrdinalIgnoreCase)
+                        && ContainsName(def.SelfOutputs, reference.VarName),
+                    result);
+            }
+        }
+
+        /// <summary>
+        /// 检查一个表达式：语法、局部名称，以及其中的变量引用（与 [InputRef] 使用同一作用域规则，允许数组整体引用）。
+        /// skipReference 返回 true 的引用不做作用域检查（如工具自身排在前面的结果）。
+        /// </summary>
+        private static void ValidateExpressionText(FlowNode root, FlowNode node, string text, string parameter,
+            IReadOnlyCollection<string> localNames, Func<VariableReference, bool> skipReference, FlowValidationResult result)
+        {
+            if (!ExpressionParser.TryParse(text, out CompiledExpression expression, out ExpressionException error))
+            {
+                result.Add(new FlowValidationIssue(FlowValidationSeverity.Error, node, parameter, "表达式错误：" + error.Message));
+                return;
+            }
+
+            foreach (string name in expression.LocalNames)
+            {
+                if (!ContainsName(localNames, name))
                 {
-                    result.Add(new FlowValidationIssue(FlowValidationSeverity.Error, node, def.Parameter,
-                        "表达式错误：" + error.Message));
+                    result.Add(new FlowValidationIssue(FlowValidationSeverity.Error, node, parameter, $"未定义的名称 {{{name}}}"));
+                }
+            }
+
+            foreach (string path in expression.References)
+            {
+                if (skipReference != null && skipReference(VariableReference.Parse(path)))
+                {
                     continue;
                 }
-
-                foreach (string name in expression.LocalNames)
-                {
-                    if (!ContainsName(def.LocalNames, name))
-                    {
-                        result.Add(new FlowValidationIssue(FlowValidationSeverity.Error, node, def.Parameter,
-                            $"未定义的名称 {{{name}}}"));
-                    }
-                }
-
-                foreach (string path in expression.References)
-                {
-                    VariableReference reference = VariableReference.Parse(path);
-                    if (string.Equals(reference.ModuleName, node.Tool.ModuleName, StringComparison.OrdinalIgnoreCase)
-                        && ContainsName(def.SelfOutputs, reference.VarName))
-                    {
-                        continue;
-                    }
-                    ValidateReference(root, node, path, typeof(object), def.Parameter, result, acceptsCollection: true);
-                }
+                ValidateReference(root, node, path, typeof(object), parameter, result, acceptsCollection: true);
             }
         }
 
@@ -234,8 +243,7 @@ namespace VisionFlow.Validation
             }
             else
             {
-                ValidateOperand(root, node, node.Condition.Left, null, "左操作数", result);
-                ValidateOperand(root, node, node.Condition.Right, null, "右操作数", result);
+                ValidateCondition(root, node, node.Condition, null, result);
             }
 
             var outputNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -254,6 +262,47 @@ namespace VisionFlow.Validation
                 Type expected = ClrTypeOf(output);
                 ValidateBranchOutputOperand(root, node, output, IfBranch.If, output.IfValue, expected, result);
                 ValidateBranchOutputOperand(root, node, output, IfBranch.Else, output.ElseValue, expected, result);
+            }
+        }
+
+        /// <summary>
+        /// 递归检查条件。label 为条件在组中的位置（如“条件 2.1”），顶层条件为 null，
+        /// 此时单条比较沿用“左操作数 / 右操作数”参数名。
+        /// </summary>
+        private static void ValidateCondition(FlowNode root, IfElseNode node, ICondition condition, string label,
+            FlowValidationResult result)
+        {
+            string prefix = label == null ? string.Empty : label + " ";
+            switch (condition)
+            {
+                case null:
+                    result.Add(new FlowValidationIssue(FlowValidationSeverity.Error, node, label ?? "条件", "条件为空"));
+                    break;
+                case ComparisonCondition comparison:
+                    ValidateOperand(root, node, comparison.Left, null, prefix + "左操作数", result);
+                    if (!ComparisonCondition.IsUnary(comparison.Operator))
+                    {
+                        ValidateOperand(root, node, comparison.Right, null, prefix + "右操作数", result);
+                    }
+                    break;
+                case ConditionGroup group:
+                    if (group.Items.Count == 0)
+                    {
+                        result.Add(new FlowValidationIssue(FlowValidationSeverity.Error, node, label ?? "条件", "条件组为空"));
+                    }
+                    for (int i = 0; i < group.Items.Count; i++)
+                    {
+                        string itemLabel = label == null ? $"条件 {i + 1}" : $"{label}.{i + 1}";
+                        ValidateCondition(root, node, group.Items[i], itemLabel, result);
+                    }
+                    break;
+                case ExpressionCondition expression:
+                    ValidateExpressionText(root, node, expression.Expression, label ?? "条件表达式", null, null, result);
+                    break;
+                default:
+                    result.Add(new FlowValidationIssue(FlowValidationSeverity.Error, node, label ?? "条件",
+                        $"不支持的条件类型 {condition.GetType().Name}"));
+                    break;
             }
         }
 

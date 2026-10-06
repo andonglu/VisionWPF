@@ -38,7 +38,7 @@
 | LD-02 | 变量计算（数值、布尔、字符串表达式） | **新建工具**（**已完成**） |
 | LD-03 | 数组处理（统计、取元素、排序、筛选、拼接） | **新建工具** |
 | LD-04 | 综合判定（多检测项汇总为 OK/NG 与原因） | **新建工具**（**已完成**） |
-| LD-05 | IfElse 条件组（与 / 或、表达式条件、新比较符） | 增强现有节点 |
+| LD-05 | IfElse 条件组（与 / 或、表达式条件、新比较符） | 增强现有节点（**已完成**） |
 | LD-06 | 多分支 Switch | **新建节点** |
 | LD-07 | 条件循环 While、跳出循环、跳过本次 | **新建节点**（3 个） |
 | LD-08 | 子流程调用 | **新建节点** |
@@ -166,22 +166,22 @@
 
 ## 6. 流程节点
 
-### LD-05 IfElse 条件组
+### LD-05 IfElse 条件组（已实现）
 
 **功能**
 
-- 条件改为条件组：多条比较用“全部满足（与）”或“任一满足（或）”组合；组内可以再嵌套组，实现“(A 与 B) 或 C”。
-- 新增条件项类型“表达式”：直接写一个布尔表达式（LD-01），例如 `{匹配1.MatchCount} == 2 && isvalid({测量1.Row})`。
-- 比较符在末尾追加：`Contains`、`NotContains`、`StartsWith`、`EndsWith`（字符串）、`IsValid`、`IsInvalid`（一元，判断是否为 NaN 或无效，不需要右操作数）。
+- 条件可以是单条比较、条件组或布尔表达式：多个条件用“全部满足（且）”或“任一满足（或）”组合（短路求值）；组内可以再嵌套组，实现“(A 且 B) 或 C”。
+- 条件项类型“表达式”：直接写一个布尔表达式（LD-01），例如 `{匹配1.MatchCount} == 2 && isvalid({测量1.Row})`；结果不是布尔值时节点失败。
+- 比较符在末尾追加：`Contains`、`NotContains`、`StartsWith`、`EndsWith`（按文本比较，数值按其文本形式）、`IsValid`、`IsInvalid`（一元：非空且数值不是 NaN 或无穷为有效，不使用右操作数）。
 
-**开发方法**
+**实现**
 
-- 新增 `ICondition`（`Evaluate(ctx)`、`GetReferences()`），`ComparisonCondition`、新增的 `ConditionGroup`（`Logic`：`And` / `Or`，`Items`）、`ExpressionCondition` 实现该接口。
-- `IfElseNode.Condition` 类型由 `ComparisonCondition` 改为 `ICondition`；单条比较仍用 `ComparisonCondition`，旧代码与测试继续可用。
-- 序列化：`ConditionDto` 增加 `Kind`（`Compare` / `Group` / `Expression`）、`Logic`、`Items`、`Expression`。只有一条比较时按原格式写出，文件版本保持 1；用到组或表达式时文件版本写 2。读取时缺少 `Kind` 按原格式解析。
-- `FlowValidator.ValidateIfElse` 递归校验组内全部条件；空组报错。
-- `ParameterPanelBuilder` 的 IfElse 面板改为条件列表：每行一个条件，支持添加、删除、上移、下移、切换“与 / 或”，“添加分组”打开子列表。
-- 日志与单步调试：记录每个条件项的实际值与结果，便于定位为什么走了某个分支。
+- `VisionFlow.Base\Conditions\`：`ICondition`（`Evaluate(ctx, trace)`）、`ComparisonCondition`、`ConditionGroup`（`Logic`：`And` / `Or`，`Items`）、`ExpressionCondition`。`ComparisonCondition.Evaluate(ctx)` 保留，旧比较符的结果不变。
+- `IfElseNode.Condition` 类型改为 `ICondition`。运行时在原有“[条件]”日志之后增加“[条件明细]”日志，逐项记录实际值与结果，例如 `测量1.Count（2） == 2 → 成立`（引用显示实际值，常量只显示常量），单步调试暂停时可直接查看。
+- 序列化：`ConditionDto` 增加 `Kind`（省略表示单条比较、`Group`、`Expression`）、`Logic`、`Items`、`Expression`，新字段为空时不写出。`FlowSerializer.CurrentFormatVersion` 升为 2，新增 `BaseFormatVersion = 1` 与 `RequiredFormatVersion(node)`：保存时按流程实际用到的功能写最低所需版本——只有旧比较符的单条比较时写 1，文件与旧版完全一致；用到条件组、表达式条件或新增比较符（含任意嵌套位置）时写 2，旧编辑器打开时明确提示版本过高。
+- `FlowValidator` 递归校验：空组报“条件组为空”；嵌套条件按位置报告，如“条件 2.1 左操作数”；表达式条件按 LD-01 规则检查语法与引用；一元比较不检查右操作数；顶层单条比较沿用“左操作数 / 右操作数”参数名。
+- `ParameterPanelBuilder` 的 IfElse 面板：条件以卡片列表显示（条件 1、条件 2.1……），每项可上移、下移、删除；组和多条件时显示“全部满足（且）/ 任一满足（或）”；“+ 比较 / + 表达式 / + 条件组”添加条件；比较的左右操作数为可编辑下拉框，列出上游可用引用（`ref:模块.变量`）；一元比较符隐藏右操作数。修改先写入草稿，点“应用条件”才生效；有比较缺左操作数、表达式为空或组内无条件时拒绝应用并提示位置。顶层只有一项时保存为该项本身，单条比较因此仍按版本 1 保存。
+- 测试：`VisionFlow.Tests\ConditionGroupTests.cs`。
 
 ### LD-06 多分支 Switch（新节点）
 

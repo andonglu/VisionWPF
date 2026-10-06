@@ -4,6 +4,7 @@ using System.Linq;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using VisionFlow.Conditions;
 using VisionFlow.Core;
 using VisionFlow.Nodes;
@@ -15,15 +16,22 @@ namespace VisionFlow.Editing
     /// 流程 JSON 保存/加载。保存的是声明和参数，不保存运行期变量值。
     ///
     /// 兼容性约定：
-    /// - 文件携带 FormatVersion（当前为 1）；高于当前支持的版本明确失败，不静默降级。
+    /// - 文件携带 FormatVersion：按流程实际用到的功能写最低所需版本（未用版本 2 新增内容时为 1），
+    ///   高于当前支持的版本明确失败，不静默降级。
     /// - 工具优先按显式注册的稳定标识（或 ToolboxToolAttribute.Id / 类型全名）解析，
     ///   解析失败再退回旧版 TypeName；历史类型名、程序集限定名可注册为别名。
     /// - 文件中出现当前工具类型不存在的参数时产生警告（Load/LoadNode 的 warnings 参数），不静默丢失。
     /// </summary>
     public static class FlowSerializer
     {
-        /// <summary>当前流程文件格式版本。</summary>
-        public const int CurrentFormatVersion = 1;
+        /// <summary>当前支持的最高流程文件格式版本。</summary>
+        public const int CurrentFormatVersion = 2;
+
+        /// <summary>
+        /// 未使用版本 2 新增内容的流程按版本 1 保存，旧编辑器照常可读。
+        /// 版本 2 新增：IfElse 条件组、表达式条件、新增的比较符（包含、开头是、结尾是、有效、无效等）。
+        /// </summary>
+        public const int BaseFormatVersion = 1;
 
         private static readonly JsonSerializerOptions Options = new JsonSerializerOptions
         {
@@ -38,8 +46,28 @@ namespace VisionFlow.Editing
         public static string Save(SequenceNode root)
         {
             NodeDto dto = ToDto(root);
-            dto.FormatVersion = CurrentFormatVersion;
+            dto.FormatVersion = RequiredFormatVersion(root);
             return JsonSerializer.Serialize(dto, Options);
+        }
+
+        /// <summary>保存该节点（含子节点）所需的最低文件格式版本。</summary>
+        public static int RequiredFormatVersion(FlowNode node)
+        {
+            int version = BaseFormatVersion;
+            if (node is IfElseNode ifElse && ifElse.Condition != null && RequiresVersion2(ifElse.Condition))
+            {
+                version = 2;
+            }
+            foreach (FlowNode child in EnumerateChildren(node))
+            {
+                version = Math.Max(version, RequiredFormatVersion(child));
+            }
+            return version;
+        }
+
+        private static bool RequiresVersion2(ICondition condition)
+        {
+            return !(condition is ComparisonCondition comparison) || !ComparisonCondition.IsLegacyOperator(comparison.Operator);
         }
 
         public static SequenceNode Load(string json)
@@ -71,7 +99,7 @@ namespace VisionFlow.Editing
                 throw new ArgumentNullException(nameof(node));
             }
             NodeDto dto = ToDto(node);
-            dto.FormatVersion = CurrentFormatVersion;
+            dto.FormatVersion = RequiredFormatVersion(node);
             return JsonSerializer.Serialize(dto, Options);
         }
 
@@ -509,32 +537,64 @@ namespace VisionFlow.Editing
             throw new NotSupportedException($"不支持反序列化属性类型 {type.FullName}");
         }
 
-        private static ConditionDto ToConditionDto(ComparisonCondition condition)
+        private static ConditionDto ToConditionDto(ICondition condition)
         {
-            if (condition == null)
+            switch (condition)
             {
-                return null;
+                case null:
+                    return null;
+                case ComparisonCondition comparison:
+                    // 单条比较保持版本 1 的格式（不写 Kind）
+                    return new ConditionDto
+                    {
+                        Left = ToOperandDto(comparison.Left),
+                        Operator = comparison.Operator.ToString(),
+                        Right = ComparisonCondition.IsUnary(comparison.Operator) ? null : ToOperandDto(comparison.Right)
+                    };
+                case ConditionGroup group:
+                    return new ConditionDto
+                    {
+                        Kind = "Group",
+                        Logic = group.Logic.ToString(),
+                        Items = group.Items.Select(ToConditionDto).ToList()
+                    };
+                case ExpressionCondition expression:
+                    return new ConditionDto { Kind = "Expression", Expression = expression.Expression };
+                default:
+                    throw new NotSupportedException($"不支持保存条件类型 {condition.GetType().FullName}");
             }
-            return new ConditionDto
-            {
-                Left = ToOperandDto(condition.Left),
-                Operator = condition.Operator.ToString(),
-                Right = ToOperandDto(condition.Right)
-            };
         }
 
-        private static ComparisonCondition FromConditionDto(ConditionDto dto, IList<string> warnings)
+        private static ICondition FromConditionDto(ConditionDto dto, IList<string> warnings)
         {
             if (dto == null)
             {
                 return null;
             }
-            return new ComparisonCondition
+            switch (dto.Kind ?? "Compare")
             {
-                Left = FromOperandDto(dto.Left),
-                Operator = ParseEnum<ComparisonOperator>(dto.Operator, ComparisonOperator.Equal, warnings, "条件运算符"),
-                Right = FromOperandDto(dto.Right)
-            };
+                case "Compare":
+                    return new ComparisonCondition
+                    {
+                        Left = FromOperandDto(dto.Left),
+                        Operator = ParseEnum<ComparisonOperator>(dto.Operator, ComparisonOperator.Equal, warnings, "条件运算符"),
+                        Right = FromOperandDto(dto.Right)
+                    };
+                case "Group":
+                    var group = new ConditionGroup
+                    {
+                        Logic = ParseEnum<ConditionLogic>(dto.Logic, ConditionLogic.And, warnings, "条件组合方式")
+                    };
+                    foreach (ConditionDto item in dto.Items ?? new List<ConditionDto>())
+                    {
+                        group.Items.Add(FromConditionDto(item, warnings));
+                    }
+                    return group;
+                case "Expression":
+                    return new ExpressionCondition { Expression = dto.Expression };
+                default:
+                    throw new NotSupportedException($"不支持加载条件类型 {dto.Kind}");
+            }
         }
 
         private static BranchOutputDto ToBranchOutputDto(BranchOutputDef output)
@@ -677,9 +737,18 @@ namespace VisionFlow.Editing
 
         private sealed class ConditionDto
         {
+            /// <summary>条件类型：省略为单条比较（版本 1 格式），Group / Expression 为版本 2。</summary>
+            [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+            public string Kind { get; set; }
             public OperandDto Left { get; set; }
             public string Operator { get; set; }
             public OperandDto Right { get; set; }
+            [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+            public string Logic { get; set; }
+            [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+            public List<ConditionDto> Items { get; set; }
+            [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+            public string Expression { get; set; }
         }
 
         private sealed class LoopDto

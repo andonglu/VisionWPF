@@ -141,20 +141,298 @@ namespace VisionFlow.WpfApp.Ui
         private void BuildIfElseParameterPanel(IfElseNode node)
         {
             AddSection("条件");
-            TextBox left = AddTextRow("左操作数", OperandText(node.Condition?.Left), null);
-            ComboBox op = AddComboRow("比较符", Enum.GetNames(typeof(ComparisonOperator)), node.Condition?.Operator.ToString() ?? ComparisonOperator.Equal.ToString(), null);
-            TextBox right = AddTextRow("右操作数", OperandText(node.Condition?.Right), null);
+            ConditionDraft root = ConditionDraft.RootFrom(node.Condition);
+            List<string> candidates = RefCandidateService.ForNode(_flowRoot(), node)
+                .Select(c => "ref:" + c.Path)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            var host = new StackPanel();
+            _panel.Children.Add(host);
+            Action render = null;
+            render = () =>
+            {
+                host.Children.Clear();
+                RenderConditionGroup(host, root, string.Empty, 0, candidates, render);
+            };
+            render();
+
             AddButtonRow("应用条件", () =>
             {
-                node.Condition = new ComparisonCondition
+                string incomplete = root.FindIncomplete(string.Empty);
+                if (incomplete != null)
                 {
-                    Left = ParseOperand(left.Text),
-                    Operator = (ComparisonOperator)Enum.Parse(typeof(ComparisonOperator), op.Text),
-                    Right = ParseOperand(right.Text)
-                };
+                    _showWarning("条件未填写完整", incomplete);
+                    return;
+                }
+                node.Condition = root.ToNodeCondition();
+                _markDirty();
                 _setStatus("条件已更新");
-            });
-            AddInfo("引用请使用 ref:模块.变量；常量可直接输入数字、true/false 或文本。");
+            }, marksDirty: false);
+            AddInfo("比较条件的操作数：引用写 ref:模块.变量，常量直接输入数字、true/false 或文本。"
+                + "表达式条件：引用写在花括号内，如 {匹配1.MatchCount} == 2 && isvalid({测量1.Row})。");
+        }
+
+        /// <summary>按草稿渲染一组条件；结构变化（增删、移动、切换组合方式）后调用 rerender 整体重绘。</summary>
+        private void RenderConditionGroup(Panel host, ConditionDraft group, string path, int depth,
+            IReadOnlyList<string> candidates, Action rerender)
+        {
+            if (group.Items.Count > 1 || depth > 0)
+            {
+                var logic = new ComboBox { Margin = new Thickness(0, 0, 0, 8) };
+                logic.Items.Add("全部满足（且）");
+                logic.Items.Add("任一满足（或）");
+                logic.SelectedIndex = group.Logic == ConditionLogic.And ? 0 : 1;
+                logic.SelectionChanged += (s, e) => group.Logic = logic.SelectedIndex == 0 ? ConditionLogic.And : ConditionLogic.Or;
+                host.Children.Add(logic);
+            }
+
+            for (int i = 0; i < group.Items.Count; i++)
+            {
+                int index = i;
+                ConditionDraft item = group.Items[i];
+                string itemPath = path.Length == 0 ? (i + 1).ToString(CultureInfo.InvariantCulture) : path + "." + (i + 1);
+                var card = new Border
+                {
+                    BorderThickness = new Thickness(1),
+                    CornerRadius = new CornerRadius(6),
+                    Padding = new Thickness(8),
+                    Margin = new Thickness(0, 0, 0, 8)
+                };
+                card.SetResourceReference(Border.BorderBrushProperty, "ControlStrokeColorDefaultBrush");
+                var body = new StackPanel();
+                card.Child = body;
+
+                var header = new DockPanel { Margin = new Thickness(0, 0, 0, 6), LastChildFill = true };
+                header.Children.Add(SmallButton("删除", () => { group.Items.RemoveAt(index); rerender(); }, Dock.Right));
+                header.Children.Add(SmallButton("下移", () => { MoveItem(group.Items, index, 1); rerender(); }, Dock.Right));
+                header.Children.Add(SmallButton("上移", () => { MoveItem(group.Items, index, -1); rerender(); }, Dock.Right));
+                string kindText = item.Kind == ConditionDraftKind.Compare ? "比较" : item.Kind == ConditionDraftKind.Expression ? "表达式" : "条件组";
+                var title = new TextBlock { Text = $"条件 {itemPath}（{kindText}）", VerticalAlignment = VerticalAlignment.Center };
+                title.SetResourceReference(TextBlock.ForegroundProperty, "TextFillColorSecondaryBrush");
+                header.Children.Add(title);
+                body.Children.Add(header);
+
+                switch (item.Kind)
+                {
+                    case ConditionDraftKind.Compare:
+                        RenderComparison(body, item, candidates);
+                        break;
+                    case ConditionDraftKind.Expression:
+                        var expression = new TextBox
+                        {
+                            Text = item.Expression,
+                            FontFamily = new System.Windows.Media.FontFamily("Consolas, Microsoft YaHei UI"),
+                            TextWrapping = TextWrapping.Wrap
+                        };
+                        expression.TextChanged += (s, e) => item.Expression = expression.Text;
+                        body.Children.Add(expression);
+                        break;
+                    default:
+                        RenderConditionGroup(body, item, itemPath, depth + 1, candidates, rerender);
+                        break;
+                }
+                host.Children.Add(card);
+            }
+
+            var addRow = new WrapPanel { Margin = new Thickness(0, 0, 0, 8) };
+            addRow.Children.Add(SmallButton("+ 比较", () => { group.Items.Add(ConditionDraft.NewComparison()); rerender(); }, null));
+            addRow.Children.Add(SmallButton("+ 表达式", () => { group.Items.Add(new ConditionDraft { Kind = ConditionDraftKind.Expression }); rerender(); }, null));
+            addRow.Children.Add(SmallButton("+ 条件组", () =>
+            {
+                var nested = new ConditionDraft { Kind = ConditionDraftKind.Group };
+                nested.Items.Add(ConditionDraft.NewComparison());
+                group.Items.Add(nested);
+                rerender();
+            }, null));
+            host.Children.Add(addRow);
+        }
+
+        private static void RenderComparison(Panel body, ConditionDraft item, IReadOnlyList<string> candidates)
+        {
+            ComboBox left = CandidateCombo(item.Left, candidates);
+            left.AddHandler(System.Windows.Controls.Primitives.TextBoxBase.TextChangedEvent,
+                new TextChangedEventHandler((s, e) => item.Left = left.Text));
+            left.SelectionChanged += (s, e) => item.Left = left.SelectedItem as string ?? left.Text;
+            body.Children.Add(left);
+
+            var op = new ComboBox { Margin = new Thickness(0, 6, 0, 6) };
+            foreach (ComparisonOperator value in Enum.GetValues(typeof(ComparisonOperator)))
+            {
+                op.Items.Add(new ComboBoxItem { Content = ComparisonCondition.ToSymbol(value), Tag = value });
+                if (value == item.Operator)
+                {
+                    op.SelectedIndex = op.Items.Count - 1;
+                }
+            }
+            body.Children.Add(op);
+
+            ComboBox right = CandidateCombo(item.Right, candidates);
+            right.AddHandler(System.Windows.Controls.Primitives.TextBoxBase.TextChangedEvent,
+                new TextChangedEventHandler((s, e) => item.Right = right.Text));
+            right.SelectionChanged += (s, e) => item.Right = right.SelectedItem as string ?? right.Text;
+            right.Visibility = ComparisonCondition.IsUnary(item.Operator) ? Visibility.Collapsed : Visibility.Visible;
+            body.Children.Add(right);
+
+            op.SelectionChanged += (s, e) =>
+            {
+                if (op.SelectedItem is ComboBoxItem selected)
+                {
+                    item.Operator = (ComparisonOperator)selected.Tag;
+                    right.Visibility = ComparisonCondition.IsUnary(item.Operator) ? Visibility.Collapsed : Visibility.Visible;
+                }
+            };
+        }
+
+        private static ComboBox CandidateCombo(string text, IReadOnlyList<string> candidates)
+        {
+            var combo = new ComboBox { IsEditable = true };
+            foreach (string candidate in candidates)
+            {
+                combo.Items.Add(candidate);
+            }
+            combo.Text = text ?? string.Empty;
+            return combo;
+        }
+
+        private static Button SmallButton(string text, Action click, Dock? dock)
+        {
+            var button = new Button
+            {
+                Content = text,
+                MinWidth = 0,
+                Padding = new Thickness(8, 2, 8, 2),
+                Margin = new Thickness(6, 0, 0, 0)
+            };
+            button.Click += (s, e) => click();
+            if (dock.HasValue)
+            {
+                DockPanel.SetDock(button, dock.Value);
+            }
+            return button;
+        }
+
+        private static void MoveItem(List<ConditionDraft> items, int index, int offset)
+        {
+            int target = index + offset;
+            if (target < 0 || target >= items.Count)
+            {
+                return;
+            }
+            ConditionDraft item = items[index];
+            items.RemoveAt(index);
+            items.Insert(target, item);
+        }
+
+        private enum ConditionDraftKind
+        {
+            Compare,
+            Expression,
+            Group
+        }
+
+        /// <summary>条件编辑草稿：面板中的修改先写入草稿，点“应用条件”时才转换为节点条件。</summary>
+        private sealed class ConditionDraft
+        {
+            public ConditionDraftKind Kind { get; set; }
+            public string Left { get; set; } = string.Empty;
+            public ComparisonOperator Operator { get; set; }
+            public string Right { get; set; } = string.Empty;
+            public string Expression { get; set; } = string.Empty;
+            public ConditionLogic Logic { get; set; }
+            public List<ConditionDraft> Items { get; } = new List<ConditionDraft>();
+
+            public static ConditionDraft NewComparison()
+            {
+                return new ConditionDraft { Kind = ConditionDraftKind.Compare };
+            }
+
+            /// <summary>顶层总是一个组；节点条件为单条比较或表达式时作为组内唯一一项。</summary>
+            public static ConditionDraft RootFrom(ICondition condition)
+            {
+                if (condition is ConditionGroup)
+                {
+                    return From(condition);
+                }
+                var root = new ConditionDraft { Kind = ConditionDraftKind.Group };
+                root.Items.Add(condition == null ? NewComparison() : From(condition));
+                return root;
+            }
+
+            private static ConditionDraft From(ICondition condition)
+            {
+                switch (condition)
+                {
+                    case ComparisonCondition comparison:
+                        return new ConditionDraft
+                        {
+                            Kind = ConditionDraftKind.Compare,
+                            Left = OperandText(comparison.Left),
+                            Operator = comparison.Operator,
+                            Right = OperandText(comparison.Right)
+                        };
+                    case ExpressionCondition expression:
+                        return new ConditionDraft { Kind = ConditionDraftKind.Expression, Expression = expression.Expression ?? string.Empty };
+                    case ConditionGroup group:
+                        var draft = new ConditionDraft { Kind = ConditionDraftKind.Group, Logic = group.Logic };
+                        draft.Items.AddRange(group.Items.Select(From));
+                        return draft;
+                    default:
+                        return NewComparison();
+                }
+            }
+
+            /// <summary>找出未填写完整的条件（比较缺左操作数、表达式为空、组内无条件），返回提示；都完整时返回 null。</summary>
+            public string FindIncomplete(string path)
+            {
+                if (Kind == ConditionDraftKind.Compare)
+                {
+                    return string.IsNullOrWhiteSpace(Left) ? $"条件 {path} 的左操作数为空" : null;
+                }
+                if (Kind == ConditionDraftKind.Expression)
+                {
+                    return string.IsNullOrWhiteSpace(Expression) ? $"条件 {path} 的表达式为空" : null;
+                }
+                if (Items.Count == 0)
+                {
+                    return path.Length == 0 ? "请至少添加一个条件" : $"条件组 {path} 中没有条件";
+                }
+                for (int i = 0; i < Items.Count; i++)
+                {
+                    string itemPath = path.Length == 0 ? (i + 1).ToString(CultureInfo.InvariantCulture) : path + "." + (i + 1);
+                    string message = Items[i].FindIncomplete(itemPath);
+                    if (message != null)
+                    {
+                        return message;
+                    }
+                }
+                return null;
+            }
+
+            /// <summary>转换为节点条件；顶层只有一项时直接使用该项，单条比较因此保持流程文件版本 1 的格式。</summary>
+            public ICondition ToNodeCondition()
+            {
+                return Items.Count == 1 ? Items[0].ToCondition() : ToCondition();
+            }
+
+            private ICondition ToCondition()
+            {
+                switch (Kind)
+                {
+                    case ConditionDraftKind.Compare:
+                        return new ComparisonCondition
+                        {
+                            Left = ParseOperand(Left),
+                            Operator = Operator,
+                            Right = ComparisonCondition.IsUnary(Operator) ? null : ParseOperand(Right)
+                        };
+                    case ConditionDraftKind.Expression:
+                        return new ExpressionCondition { Expression = Expression.Trim() };
+                    default:
+                        var group = new ConditionGroup { Logic = Logic };
+                        group.Items.AddRange(Items.Select(i => i.ToCondition()));
+                        return group;
+                }
+            }
         }
 
         private void BuildLoopParameterPanel(ForLoopNode node)

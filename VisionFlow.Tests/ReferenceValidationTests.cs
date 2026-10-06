@@ -414,7 +414,7 @@ public class ReferenceValidationTests
     {
         var branch = IfElse("分支", n =>
         {
-            n.Condition.Right = Operand.Const(takeIf ? 1 : 0);
+            ((ComparisonCondition)n.Condition).Right = Operand.Const(takeIf ? 1 : 0);
             n.Outputs.Add(new BranchOutputDef
             {
                 Name = "Index",

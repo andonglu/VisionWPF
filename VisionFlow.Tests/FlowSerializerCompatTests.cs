@@ -88,7 +88,7 @@ public class FlowSerializerCompatTests
     {
         string json = FlowSerializer.Save(SampleFlow());
         using var doc = JsonDocument.Parse(json);
-        Assert.Equal(FlowSerializer.CurrentFormatVersion, doc.RootElement.GetProperty("FormatVersion").GetInt32());
+        Assert.Equal(FlowSerializer.BaseFormatVersion, doc.RootElement.GetProperty("FormatVersion").GetInt32());
 
         JsonElement tool = doc.RootElement.GetProperty("Children")[0].GetProperty("Tool");
         Assert.Equal(typeof(ParamTool).FullName, tool.GetProperty("ToolId").GetString());
@@ -144,7 +144,7 @@ public class FlowSerializerCompatTests
     public void 单节点保存_携带版本且拒绝高版本()
     {
         var node = JsonNode.Parse(FlowSerializer.SaveNode(new ToolNode(new ParamTool("节点"))))!;
-        Assert.Equal(FlowSerializer.CurrentFormatVersion, node["FormatVersion"]!.GetValue<int>());
+        Assert.Equal(FlowSerializer.BaseFormatVersion, node["FormatVersion"]!.GetValue<int>());
         Assert.IsType<ToolNode>(FlowSerializer.LoadNode(node.ToJsonString()));
         node["FormatVersion"] = FlowSerializer.CurrentFormatVersion + 1;
         Assert.Throws<NotSupportedException>(() => FlowSerializer.LoadNode(node.ToJsonString()));
