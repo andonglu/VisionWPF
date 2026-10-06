@@ -141,6 +141,18 @@ namespace VisionFlow.Editing
             return new RefScope(candidates, RefLoopMode.While, null);
         }
 
+        /// <summary>Switch 某个分支的公共输出取值可用的作用域：Switch 上游 + 该分支内部输出，保留所在循环上下文。</summary>
+        public static RefScope ScopeForSwitchCaseOutput(FlowNode root, SwitchNode switchNode, SwitchCaseNode switchCase)
+        {
+            RefScope scope = ScopeForNode(root, switchNode);
+            List<RefCandidate> candidates = scope.Candidates;
+            foreach (FlowNode child in switchCase.Children)
+            {
+                CollectSubtreeOutputs(child, candidates);
+            }
+            return new RefScope(candidates, scope.LoopMode, scope.LoopCurrentElementType);
+        }
+
         /// <summary>IfElse 公共输出配置可用的候选：外部上游 + 指定分支内部输出。</summary>
         public static List<RefCandidate> ForBranchOutput(FlowNode root, IfElseNode ifElse, IfBranch branch)
         {
@@ -228,6 +240,30 @@ namespace VisionFlow.Editing
                 return false;
             }
 
+            if (node is SwitchNode switchNode)
+            {
+                if (!ContainsNode(switchNode, target))
+                {
+                    // 分支外只暴露公共输出
+                    AddSwitchOutputs(switchNode, candidates);
+                    return false;
+                }
+                // 目标在某个分支内：只收集该分支的上游，其他分支的私有输出不可见
+                SwitchCaseNode owner = switchNode.CaseNodes.FirstOrDefault(c => c == target || ContainsNode(c, target));
+                if (owner == null || owner == target)
+                {
+                    return true;
+                }
+                foreach (FlowNode child in owner.Children)
+                {
+                    if (CollectUpstream(child, target, candidates))
+                    {
+                        return true;
+                    }
+                }
+                return false;
+            }
+
             if (node is LoopNodeBase loop)
             {
                 if (!ContainsNode(loop, target))
@@ -271,6 +307,11 @@ namespace VisionFlow.Editing
             if (node is IfElseNode ifElse)
             {
                 AddBranchOutputs(ifElse, candidates);
+                return;
+            }
+            if (node is SwitchNode switchNode)
+            {
+                AddSwitchOutputs(switchNode, candidates);
                 return;
             }
             // 循环体内部输出对外不可见，不递归循环体
@@ -343,6 +384,19 @@ namespace VisionFlow.Editing
             }
         }
 
+        private static void AddSwitchOutputs(SwitchNode switchNode, List<RefCandidate> candidates)
+        {
+            foreach (SwitchOutputDef output in switchNode.Outputs)
+            {
+                candidates.Add(new RefCandidate
+                {
+                    Path = switchNode.Name + "." + output.Name,
+                    ClrType = ClrTypeOf(new BranchOutputDef { Kind = output.Kind, Type = output.Type, ClrTypeName = output.ClrTypeName }),
+                    IsCollection = output.Kind == VariableKind.Array
+                });
+            }
+        }
+
         private static bool ContainsNode(FlowNode node, FlowNode target)
         {
             return ContainsNodeIn(EnumerateChildren(node), target);
@@ -407,6 +461,14 @@ namespace VisionFlow.Editing
             if (node is LoopNodeBase loop)
             {
                 return loop.Body;
+            }
+            if (node is SwitchNode switchNode)
+            {
+                return switchNode.Cases;
+            }
+            if (node is SwitchCaseNode switchCase)
+            {
+                return switchCase.Children;
             }
             return Enumerable.Empty<FlowNode>();
         }

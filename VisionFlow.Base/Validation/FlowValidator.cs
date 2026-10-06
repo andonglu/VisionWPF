@@ -96,6 +96,10 @@ namespace VisionFlow.Validation
             {
                 ValidateWhile(root, whileLoop, result);
             }
+            else if (node is SwitchNode switchNode)
+            {
+                ValidateSwitch(root, switchNode, result);
+            }
             else if (node is LoopControlNode && loopDepth == 0)
             {
                 result.Add(new FlowValidationIssue(FlowValidationSeverity.Error, node, null,
@@ -317,6 +321,93 @@ namespace VisionFlow.Validation
             }
         }
 
+        private static void ValidateSwitch(FlowNode root, SwitchNode node, FlowValidationResult result)
+        {
+            if (node.Selector == null)
+            {
+                result.Add(new FlowValidationIssue(FlowValidationSeverity.Error, node, "选择值", "未设置选择值"));
+            }
+            else
+            {
+                ValidateOperand(root, node, node.Selector, null, "选择值", result);
+            }
+
+            if (node.Cases.Any(c => !(c is SwitchCaseNode)))
+            {
+                result.Add(new FlowValidationIssue(FlowValidationSeverity.Error, node, "分支", "Switch 下只能直接放分支，其他节点请放到某个分支内"));
+            }
+            List<SwitchCaseNode> cases = node.CaseNodes.ToList();
+            if (cases.Count(c => c.IsDefault) != 1 || !cases.Last().IsDefault)
+            {
+                result.Add(new FlowValidationIssue(FlowValidationSeverity.Error, node, "分支", "必须有且只有一个默认分支，并放在最后"));
+            }
+            if (!cases.Any(c => !c.IsDefault))
+            {
+                result.Add(new FlowValidationIssue(FlowValidationSeverity.Error, node, "分支", "至少需要一个普通分支"));
+            }
+
+            var seenValues = new Dictionary<string, SwitchCaseNode>(StringComparer.Ordinal);
+            foreach (SwitchCaseNode switchCase in cases.Where(c => !c.IsDefault))
+            {
+                if (switchCase.MatchValues.Count == 0)
+                {
+                    result.Add(new FlowValidationIssue(FlowValidationSeverity.Error, switchCase, "匹配值", "未设置匹配值"));
+                }
+                foreach (string value in switchCase.MatchValues)
+                {
+                    if (seenValues.TryGetValue(value, out SwitchCaseNode earlier))
+                    {
+                        result.Add(new FlowValidationIssue(FlowValidationSeverity.Error, switchCase, "匹配值",
+                            $"匹配值“{value}”已用于分支“{earlier.Name}”，后面的分支永远不会因该值命中"));
+                    }
+                    else
+                    {
+                        seenValues[value] = switchCase;
+                    }
+                }
+            }
+
+            var outputNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (SwitchOutputDef output in node.Outputs)
+            {
+                if (string.IsNullOrWhiteSpace(output.Name))
+                {
+                    result.Add(new FlowValidationIssue(FlowValidationSeverity.Error, node, "公共输出", "输出名不能为空"));
+                    continue;
+                }
+                if (!outputNames.Add(output.Name))
+                {
+                    result.Add(new FlowValidationIssue(FlowValidationSeverity.Error, node, output.Name, "公共输出名重复"));
+                }
+                Type expected = ClrTypeOf(output.Kind, output.Type, output.ClrTypeName);
+                foreach (SwitchCaseNode switchCase in cases)
+                {
+                    if (!switchCase.OutputValues.TryGetValue(output.Name, out Operand operand) || operand == null)
+                    {
+                        result.Add(new FlowValidationIssue(FlowValidationSeverity.Error, node, output.Name,
+                            $"分支“{switchCase.Name}”未配置取值"));
+                        continue;
+                    }
+                    if (operand.IsConstant)
+                    {
+                        continue;
+                    }
+                    RefScope scope = RefCandidateService.ScopeForSwitchCaseOutput(root, node, switchCase);
+                    RefTypeCheckResult check = ReferenceSemantics.Check(operand.Reference, scope);
+                    if (!check.Success)
+                    {
+                        result.Add(new FlowValidationIssue(FlowValidationSeverity.Error, node, output.Name,
+                            $"分支“{switchCase.Name}”{check.Error}"));
+                    }
+                    else if (!IsTypeCompatible(expected, check))
+                    {
+                        result.Add(new FlowValidationIssue(FlowValidationSeverity.Error, node, output.Name,
+                            $"分支“{switchCase.Name}”引用 '{operand.Reference}' 类型为 {check.ClrType.Name}，不能作为 {expected.Name} 输出"));
+                    }
+                }
+            }
+        }
+
         private static void ValidateWhile(FlowNode root, WhileLoopNode node, FlowValidationResult result)
         {
             if (node.Condition == null)
@@ -492,6 +583,10 @@ namespace VisionFlow.Validation
                 {
                     name = ifElse.Name;
                 }
+                else if (node is SwitchNode switchNode && switchNode.Outputs.Count > 0)
+                {
+                    name = switchNode.Name;
+                }
                 else if (node is FlowOutputNode outputNode && outputNode.Outputs.Count > 0)
                 {
                     name = outputNode.Name;
@@ -538,6 +633,14 @@ namespace VisionFlow.Validation
             if (node is LoopNodeBase loop)
             {
                 return loop.Body;
+            }
+            if (node is SwitchNode switchNode)
+            {
+                return switchNode.Cases;
+            }
+            if (node is SwitchCaseNode switchCase)
+            {
+                return switchCase.Children;
             }
             if (node is FlowOutputNode)
             {

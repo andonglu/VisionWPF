@@ -55,7 +55,7 @@ namespace VisionFlow.Editing
         {
             int version = BaseFormatVersion;
             if ((node is IfElseNode ifElse && ifElse.Condition != null && RequiresVersion2(ifElse.Condition))
-                || node is WhileLoopNode || node is LoopControlNode)
+                || node is WhileLoopNode || node is LoopControlNode || node is SwitchNode || node is SwitchCaseNode)
             {
                 version = 2;
             }
@@ -347,6 +347,27 @@ namespace VisionFlow.Editing
                 };
                 dto.Children = whileLoop.Body.Select(ToDto).ToList();
             }
+            else if (node is SwitchNode switchNode)
+            {
+                dto.Kind = "Switch";
+                dto.Selector = ToOperandDto(switchNode.Selector);
+                dto.SwitchOutputs = switchNode.Outputs.Select(o => new SwitchOutputDto
+                {
+                    Name = o.Name,
+                    Kind = o.Kind.ToString(),
+                    Type = o.Type.ToString(),
+                    ClrTypeName = o.ClrTypeName
+                }).ToList();
+                dto.Children = switchNode.Cases.Select(ToDto).ToList();
+            }
+            else if (node is SwitchCaseNode switchCase)
+            {
+                dto.Kind = "SwitchCase";
+                dto.Values = switchCase.Values;
+                dto.IsDefault = switchCase.IsDefault;
+                dto.OutputValues = switchCase.OutputValues.ToDictionary(p => p.Key, p => ToOperandDto(p.Value));
+                dto.Children = switchCase.Children.Select(ToDto).ToList();
+            }
             else if (node is BreakNode)
             {
                 dto.Kind = "Break";
@@ -412,6 +433,30 @@ namespace VisionFlow.Editing
                     AddChildren(whileLoop.Body, dto.Children, warnings);
                     node = whileLoop;
                     break;
+                case "Switch":
+                    var switchNode = new SwitchNode(dto.Name ?? "多分支", FromOperandDto(dto.Selector));
+                    foreach (SwitchOutputDto output in dto.SwitchOutputs ?? new List<SwitchOutputDto>())
+                    {
+                        switchNode.Outputs.Add(new SwitchOutputDef
+                        {
+                            Name = output.Name,
+                            Kind = ParseEnum<VariableKind>(output.Kind, VariableKind.Single, warnings, $"分支输出 '{output.Name}' 的形态"),
+                            Type = ParseEnum<VariableType>(output.Type, VariableType.Object, warnings, $"分支输出 '{output.Name}' 的类型"),
+                            ClrTypeName = output.ClrTypeName
+                        });
+                    }
+                    AddChildren(switchNode.Cases, dto.Children, warnings);
+                    node = switchNode;
+                    break;
+                case "SwitchCase":
+                    var switchCase = new SwitchCaseNode(dto.Name ?? "分支", dto.Values, dto.IsDefault ?? false);
+                    foreach (KeyValuePair<string, OperandDto> value in dto.OutputValues ?? new Dictionary<string, OperandDto>())
+                    {
+                        switchCase.OutputValues[value.Key] = FromOperandDto(value.Value);
+                    }
+                    AddChildren(switchCase.Children, dto.Children, warnings);
+                    node = switchCase;
+                    break;
                 case "Break":
                     node = new BreakNode(dto.Name ?? "跳出循环");
                     break;
@@ -467,6 +512,14 @@ namespace VisionFlow.Editing
             if (node is LoopNodeBase loop)
             {
                 return loop.Body;
+            }
+            if (node is SwitchNode switchNode)
+            {
+                return switchNode.Cases;
+            }
+            if (node is SwitchCaseNode switchCase)
+            {
+                return switchCase.Children;
             }
             return Enumerable.Empty<FlowNode>();
         }
@@ -761,6 +814,24 @@ namespace VisionFlow.Editing
             public List<NodeDto> Children { get; set; }
             public List<NodeDto> IfBranch { get; set; }
             public List<NodeDto> ElseBranch { get; set; }
+            [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+            public OperandDto Selector { get; set; }
+            [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+            public List<SwitchOutputDto> SwitchOutputs { get; set; }
+            [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+            public string Values { get; set; }
+            [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+            public bool? IsDefault { get; set; }
+            [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+            public Dictionary<string, OperandDto> OutputValues { get; set; }
+        }
+
+        private sealed class SwitchOutputDto
+        {
+            public string Name { get; set; }
+            public string Kind { get; set; }
+            public string Type { get; set; }
+            public string ClrTypeName { get; set; }
         }
 
         private sealed class ToolDto

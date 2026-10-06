@@ -566,6 +566,15 @@
         </Canvas>
     </Viewbox>
 
+    <!-- 手工追加：Switch 多分支（一分多） -->
+    <Viewbox x:Key="ToolIcon.switch" x:Shared="False" Width="24" Height="24" Stretch="Uniform">
+        <Canvas Width="24" Height="24">
+            <Ellipse Canvas.Left="2.5" Canvas.Top="9.5" Width="5" Height="5" Stroke="{DynamicResource TextFillColorPrimaryBrush}" StrokeThickness="1.6" Fill="{DynamicResource AccentFillColorDefaultBrush}" />
+            <Path Data="M7.5,12 L11,12 M11,5 L11,19 M11,5 L20,5 M11,12 L20,12 M11,19 L20,19" Stroke="{DynamicResource TextFillColorPrimaryBrush}" StrokeThickness="1.6" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Fill="{x:Null}" />
+            <Path Data="M18,3 L20,5 L18,7 M18,10 L20,12 L18,14 M18,17 L20,19 L18,21" Stroke="{DynamicResource AccentFillColorDefaultBrush}" StrokeThickness="1.4" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Fill="{x:Null}" />
+        </Canvas>
+    </Viewbox>
+
     <!-- 手工追加：While 循环（循环箭头 + 问号判断） -->
     <Viewbox x:Key="ToolIcon.whileloop" x:Shared="False" Width="24" Height="24" Stretch="Uniform">
         <Canvas Width="24" Height="24">

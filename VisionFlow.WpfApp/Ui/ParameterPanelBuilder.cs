@@ -87,6 +87,14 @@ namespace VisionFlow.WpfApp.Ui
             {
                 BuildWhileParameterPanel(whileLoop);
             }
+            else if (node is SwitchNode switchNode)
+            {
+                BuildSwitchParameterPanel(switchNode);
+            }
+            else if (node is SwitchCaseNode switchCase)
+            {
+                BuildSwitchCaseParameterPanel(switchCase);
+            }
             else if (node is LoopControlNode control)
             {
                 AddInfo(control.Signal == LoopControlSignal.Break
@@ -151,6 +159,79 @@ namespace VisionFlow.WpfApp.Ui
         private void BuildIfElseParameterPanel(IfElseNode node)
         {
             AddConditionEditor(node.Condition, RefCandidateService.ForNode(_flowRoot(), node), condition => node.Condition = condition);
+        }
+
+        private void BuildSwitchParameterPanel(SwitchNode node)
+        {
+            AddSection("选择值");
+            List<string> candidates = RefCandidateService.ForNode(_flowRoot(), node)
+                .Select(c => "ref:" + c.Path)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            AddComboRow("选择值", candidates, OperandText(node.Selector), value =>
+            {
+                if (string.IsNullOrWhiteSpace(value))
+                {
+                    throw new ArgumentException("选择值不能为空");
+                }
+                node.Selector = ParseOperand(value);
+            });
+            AddInfo("按顺序执行第一个匹配值相等的分支，都不匹配时执行默认分支。选择值为数值时按数值比较，否则按文本比较。");
+
+            AddSection("分支");
+            foreach (SwitchCaseNode switchCase in node.CaseNodes)
+            {
+                AddInfo(switchCase.IsDefault ? $"{switchCase.Name}（默认）" : $"{switchCase.Name}：{switchCase.Values}");
+            }
+            AddButtonRow("添加分支", () =>
+            {
+                SwitchCaseNode added = node.AddCase();
+                _refreshFlowTree();
+                _setStatus("已添加分支：" + added.Name);
+            });
+            AddInfo("在流程树中选中分支可修改名称和匹配值、上移下移或删除（默认分支不能删除）；把节点放进分支即可在该分支执行。");
+
+            if (node.Outputs.Count > 0)
+            {
+                AddSection("公共输出");
+                foreach (SwitchOutputDef output in node.Outputs)
+                {
+                    AddInfo($"{node.Name}.{output.Name}（{output.Kind}/{output.Type}）");
+                }
+                AddInfo("各分支的取值在选中分支后设置。");
+            }
+        }
+
+        private void BuildSwitchCaseParameterPanel(SwitchCaseNode node)
+        {
+            SwitchNode owner = NodeNaming.EnumerateNodes(_flowRoot()).OfType<SwitchNode>().FirstOrDefault(s => s.Cases.Contains(node));
+            if (node.IsDefault)
+            {
+                AddInfo("默认分支：选择值与所有分支都不匹配时执行。默认分支固定在最后，不能删除。");
+            }
+            else
+            {
+                AddTextRow("匹配值", node.Values, value =>
+                {
+                    node.Values = value ?? string.Empty;
+                    _refreshFlowTree();
+                });
+                AddInfo("多个值用逗号分隔，任一值与选择值相等即执行本分支。");
+            }
+
+            if (owner == null || owner.Outputs.Count == 0)
+            {
+                return;
+            }
+            AddSection("公共输出取值");
+            RefScope scope = RefCandidateService.ScopeForSwitchCaseOutput(_flowRoot(), owner, node);
+            List<string> candidates = scope.Candidates.Select(c => "ref:" + c.Path).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            foreach (SwitchOutputDef output in owner.Outputs)
+            {
+                node.OutputValues.TryGetValue(output.Name, out Operand current);
+                string name = output.Name;
+                AddComboRow($"{owner.Name}.{name}", candidates, OperandText(current), value => node.OutputValues[name] = ParseOperand(value));
+            }
         }
 
         private void BuildWhileParameterPanel(WhileLoopNode node)

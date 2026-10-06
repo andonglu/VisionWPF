@@ -99,6 +99,26 @@ namespace VisionFlow.Editing
                     }
                 }
             }
+            else if (node is SwitchNode switchNode)
+            {
+                foreach (FlowNode child in switchNode.Cases)
+                {
+                    foreach (FlowNode nested in EnumerateNodes(child))
+                    {
+                        yield return nested;
+                    }
+                }
+            }
+            else if (node is SwitchCaseNode switchCase)
+            {
+                foreach (FlowNode child in switchCase.Children)
+                {
+                    foreach (FlowNode nested in EnumerateNodes(child))
+                    {
+                        yield return nested;
+                    }
+                }
+            }
         }
 
         public static string ModuleNameBase(string moduleName)

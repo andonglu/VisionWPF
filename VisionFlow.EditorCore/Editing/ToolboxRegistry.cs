@@ -200,6 +200,14 @@ namespace VisionFlow.Editing
                 })));
             Register(new ToolboxItem("break", "逻辑控制", "跳出循环", () => new BreakNode("跳出循环")));
             Register(new ToolboxItem("continue", "逻辑控制", "跳过本次", () => new ContinueNode("跳过本次")));
+            Register(new ToolboxItem("switch", "逻辑控制", "Switch 多分支", () =>
+            {
+                var node = new SwitchNode("多分支");
+                node.Cases.Add(new SwitchCaseNode("分支 1", "1"));
+                node.Cases.Add(new SwitchCaseNode("分支 2", "2"));
+                node.Cases.Add(new SwitchCaseNode("默认", isDefault: true));
+                return node;
+            }));
             Register(new ToolboxItem("flowoutput", "逻辑控制", "流程输出", () =>
                 new FlowOutputNode(NextModuleName("流程输出"))
                 {

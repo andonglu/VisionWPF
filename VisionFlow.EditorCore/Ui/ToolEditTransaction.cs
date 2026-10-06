@@ -180,6 +180,31 @@ namespace VisionFlow.Ui
                     return copy;
                 }
             }
+            else if (root is SwitchNode switchNode)
+            {
+                FlowNode[] cases = switchNode.Cases.Select(n => CopyScope(n, target, replacement)).ToArray();
+                if (cases.Where((n, i) => n != switchNode.Cases[i]).Any())
+                {
+                    var copy = new SwitchNode(switchNode.Name, switchNode.Selector) { Id = switchNode.Id };
+                    copy.Cases.AddRange(cases);
+                    copy.Outputs.AddRange(switchNode.Outputs);
+                    return copy;
+                }
+            }
+            else if (root is SwitchCaseNode switchCase)
+            {
+                FlowNode[] children = switchCase.Children.Select(n => CopyScope(n, target, replacement)).ToArray();
+                if (children.Where((n, i) => n != switchCase.Children[i]).Any())
+                {
+                    var copy = new SwitchCaseNode(switchCase.Name, switchCase.Values, switchCase.IsDefault) { Id = switchCase.Id };
+                    copy.Children.AddRange(children);
+                    foreach (var value in switchCase.OutputValues)
+                    {
+                        copy.OutputValues[value.Key] = value.Value;
+                    }
+                    return copy;
+                }
+            }
             else if (root is IfElseNode branch)
             {
                 FlowNode[] ifChildren = branch.IfBranch.Select(n => CopyScope(n, target, replacement)).ToArray();

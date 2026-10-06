@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using VisionFlow.Core;
 using VisionFlow.Nodes;
 using VisionFlow.Runtime;
@@ -77,7 +78,7 @@ namespace VisionFlow.Editing
             FlowInsertPosition position = FlowInsertPosition.Into)
         {
             FlowNode node = ToolboxRegistry.Find(toolboxId).Factory();
-            if (!ResolveInsertLocation(target, branch, position, out IList<FlowNode> list, out int index))
+            if (!ResolvePlacement(node, target, branch, position, out IList<FlowNode> list, out int index))
             {
                 throw new InvalidOperationException("无法解析节点插入位置。");
             }
@@ -96,7 +97,7 @@ namespace VisionFlow.Editing
 
             IList<FlowNode> sourceList = GetParentList(node);
             int oldIndex = sourceList.IndexOf(node);
-            ResolveInsertLocation(target, branch, position, out IList<FlowNode> targetList, out int newIndex);
+            ResolvePlacement(node, target, branch, position, out IList<FlowNode> targetList, out int newIndex);
 
             sourceList.RemoveAt(oldIndex);
             if (sourceList == targetList && oldIndex < newIndex)
@@ -114,17 +115,33 @@ namespace VisionFlow.Editing
             {
                 return false;
             }
+            if (node is SwitchCaseNode movingCase && movingCase.IsDefault)
+            {
+                return false;
+            }
             if (target != null && IsDescendant(node, target))
             {
                 return false;
             }
-            return ResolveInsertLocation(target, branch, position, out _, out _);
+            return ResolvePlacement(node, target, branch, position, out _, out _);
         }
 
-        /// <summary>删除节点（项目不提供撤销）。根节点不可删除；被删子树中工具的缓存资源随即释放。</summary>
+        /// <summary>在默认分支之前新增一个普通分支（名称“分支 N”，匹配值 N），返回新分支。</summary>
+        public SwitchCaseNode AddSwitchCase(SwitchNode switchNode)
+        {
+            if (switchNode == null)
+            {
+                throw new ArgumentNullException(nameof(switchNode));
+            }
+            SwitchCaseNode switchCase = switchNode.AddCase();
+            OnStructureChanged();
+            return switchCase;
+        }
+
+        /// <summary>删除节点（项目不提供撤销）。根节点与 Switch 的默认分支不可删除；被删子树中工具的缓存资源随即释放。</summary>
         public bool RemoveNode(FlowNode node)
         {
-            if (node == null || node == Root)
+            if (node == null || node == Root || (node is SwitchCaseNode switchCase && switchCase.IsDefault))
             {
                 return false;
             }
@@ -145,7 +162,7 @@ namespace VisionFlow.Editing
             {
                 return false;
             }
-            if (!ResolveInsertLocation(target, branch, position, out IList<FlowNode> list, out int index))
+            if (!ResolvePlacement(node, target, branch, position, out IList<FlowNode> list, out int index))
             {
                 return false;
             }
@@ -154,7 +171,7 @@ namespace VisionFlow.Editing
             return true;
         }
 
-        /// <summary>在同级列表中移动节点（delta 为 -1 上移 / +1 下移）。</summary>
+        /// <summary>在同级列表中移动节点（delta 为 -1 上移 / +1 下移）。Switch 的默认分支不移动，其他分支不能移到默认分支之后。</summary>
         public bool MoveNode(FlowNode node, int delta)
         {
             IList<FlowNode> parentList = GetParentList(node);
@@ -165,6 +182,11 @@ namespace VisionFlow.Editing
             int index = parentList.IndexOf(node);
             int newIndex = index + delta;
             if (index < 0 || newIndex < 0 || newIndex >= parentList.Count)
+            {
+                return false;
+            }
+            if ((node is SwitchCaseNode switchCase && switchCase.IsDefault)
+                || (parentList[newIndex] is SwitchCaseNode neighbor && neighbor.IsDefault))
             {
                 return false;
             }
@@ -188,6 +210,80 @@ namespace VisionFlow.Editing
             if (node is LoopNodeBase loop)
             {
                 return loop.Body;
+            }
+            if (node is SwitchNode switchNode)
+            {
+                return switchNode.Cases;
+            }
+            if (node is SwitchCaseNode switchCase)
+            {
+                return switchCase.Children;
+            }
+            return null;
+        }
+
+        /// <summary>
+        /// 按要放置的节点解析位置，并执行 Switch 的结构规则：
+        /// Switch 的分支列表只放分支（<see cref="SwitchCaseNode"/>），分支只能放在 Switch 的分支列表中；
+        /// 普通节点“放入” Switch 时放进第一个分支；普通分支插入位置不超过默认分支（默认分支总在最后）。
+        /// </summary>
+        private bool ResolvePlacement(FlowNode node, FlowNode target, IfBranch branch, FlowInsertPosition position,
+            out IList<FlowNode> list, out int index)
+        {
+            if (position == FlowInsertPosition.Into && target is SwitchNode intoSwitch && !(node is SwitchCaseNode))
+            {
+                SwitchCaseNode firstCase = intoSwitch.CaseNodes.FirstOrDefault();
+                list = firstCase?.Children;
+                index = list?.Count ?? 0;
+                return list != null;
+            }
+            if (!ResolveInsertLocation(target, branch, position, out list, out index))
+            {
+                return false;
+            }
+
+            SwitchNode owner = FindSwitchOwningCaseList(Root, list);
+            if ((owner != null) != (node is SwitchCaseNode))
+            {
+                return false;
+            }
+            if (owner != null)
+            {
+                var switchCase = (SwitchCaseNode)node;
+                int defaultIndex = owner.Cases.FindIndex(c => c is SwitchCaseNode existing && existing.IsDefault);
+                if (switchCase.IsDefault || (defaultIndex >= 0 && index > defaultIndex))
+                {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        private static SwitchNode FindSwitchOwningCaseList(FlowNode current, IList<FlowNode> list)
+        {
+            if (current is SwitchNode switchNode && ReferenceEquals(switchNode.Cases, list))
+            {
+                return switchNode;
+            }
+            foreach (IfBranch branch in new[] { IfBranch.If, IfBranch.Else })
+            {
+                IList<FlowNode> children = GetChildList(current, branch);
+                if (children == null)
+                {
+                    break;
+                }
+                foreach (FlowNode child in children)
+                {
+                    SwitchNode found = FindSwitchOwningCaseList(child, list);
+                    if (found != null)
+                    {
+                        return found;
+                    }
+                }
+                if (!(current is IfElseNode))
+                {
+                    break;
+                }
             }
             return null;
         }

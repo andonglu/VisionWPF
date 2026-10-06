@@ -241,6 +241,20 @@ namespace VisionFlow.WpfApp
                     item.Items.Add(CreateFlowItem(child));
                 }
             }
+            else if (node is SwitchNode switchNode)
+            {
+                foreach (FlowNode switchCase in switchNode.Cases)
+                {
+                    item.Items.Add(CreateFlowItem(switchCase));
+                }
+            }
+            else if (node is SwitchCaseNode switchCaseNode)
+            {
+                foreach (FlowNode child in switchCaseNode.Children)
+                {
+                    item.Items.Add(CreateFlowItem(child));
+                }
+            }
 
             return item;
         }
@@ -266,6 +280,14 @@ namespace VisionFlow.WpfApp
             if (node is WhileLoopNode)
             {
                 return "While: " + node.Name;
+            }
+            if (node is SwitchNode)
+            {
+                return "Switch: " + node.Name;
+            }
+            if (node is SwitchCaseNode switchCase)
+            {
+                return switchCase.IsDefault ? "默认: " + node.Name : $"分支: {node.Name}（{switchCase.Values}）";
             }
             if (node is BreakNode)
             {

@@ -142,6 +142,14 @@ namespace VisionFlow.Runtime
             {
                 return loop.Body;
             }
+            if (node is SwitchNode switchNode)
+            {
+                return switchNode.Cases;
+            }
+            if (node is SwitchCaseNode switchCase)
+            {
+                return switchCase.Children;
+            }
             return Enumerable.Empty<FlowNode>();
         }
     }
