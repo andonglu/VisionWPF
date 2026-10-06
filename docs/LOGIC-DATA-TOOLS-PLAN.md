@@ -37,7 +37,7 @@
 | LD-01 | 表达式引擎、动态输出、表达式引用校验 | 基础设施，供 LD-02 / LD-04 / LD-05 使用（**已完成**） |
 | LD-02 | 变量计算（数值、布尔、字符串表达式） | **新建工具**（**已完成**） |
 | LD-03 | 数组处理（统计、取元素、排序、筛选、拼接） | **新建工具** |
-| LD-04 | 综合判定（多检测项汇总为 OK/NG 与原因） | **新建工具** |
+| LD-04 | 综合判定（多检测项汇总为 OK/NG 与原因） | **新建工具**（**已完成**） |
 | LD-05 | IfElse 条件组（与 / 或、表达式条件、新比较符） | 增强现有节点 |
 | LD-06 | 多分支 Switch | **新建节点** |
 | LD-07 | 条件循环 While、跳出循环、跳过本次 | **新建节点**（3 个） |
@@ -143,17 +143,26 @@
 - 输出：`Values`（数组）、`Value`（单值，取第一个或统计值）、`Indices`、统计类单值、`Count`、`Found`。数值数组输出类型为 `Double`；字符串数组只支持取值、排序、筛选、拼接、去重、计数。
 - `Filter` / `Map` 复用 LD-01 表达式引擎，`{Item}` / `{ItemIndex}` 作为保留引用。
 
-### LD-04 综合判定（新工具）
+### LD-04 综合判定（新工具，已实现）
 
-- 工具箱：`07 数据与判定 / 综合判定`，ID `result-judge`，类 `ResultJudgeTool : ToolBase, IExpressionTool`。
+- 工具箱：`07 数据与判定 / 综合判定`，ID `result-judge`，类 `ResultJudgeTool : ToolBase, IExpressionTool, IToolConfigurationCheck`（`VisionFlow.Tools\Tools\ResultJudgeTools.cs`）。
 - 把多个检测项汇总成一个 OK/NG 结论与不合格原因，对标 VisionPro `CogResultsAnalysisTool` 和 VisionMaster 条件检测。
-- 参数：`Items`（多行字符串，每行一项：`名称|取值表达式|下限|上限|NG代码|NG信息`；下限或上限留空表示不限制；取值为布尔时下限、上限留空，`true` 为合格）。`StopAtFirstNg`（默认 false，判完全部项）。`OkCode`（默认 0）、`OkMessage`（默认“OK”）。
-- 判定规则：取值为 NaN、引用无效均判为不合格并记录原因；区间为闭区间。
+- 参数：
+  - `Items`（多行字符串，每行一项：`名称|取值表达式|下限|上限|NG代码|NG信息`）。从行尾向前取后四个 `|` 分隔，取值表达式中可以写 `||`；名称和 NG 信息不能含 `|`。下限或上限留空表示不限制；NG 代码留空为 1；NG 信息留空为“名称不合格”。
+  - `StopAtFirstNg`（默认 false，判完全部项）、`OkCode`（默认 0）、`OkMessage`（默认“OK”）。
+- 判定规则：
+  - 取值为数值时按闭区间判定；为布尔时 `true` 为合格，此时不能设置上下限。
+  - NaN 或无穷、引用无法取值（含除零等求值错误）、取值类型不是数值或布尔，都判为不合格并记录原因。
+  - 判定结果是数据而不是失败：只有配置错误（格式、上下限非数值或下限大于上限、NG 代码非整数、名称重复、NG 代码与合格代码相同、表达式语法错误）时工具运行失败。
 - 输出：
-  - `Ok`（bool）、`Code`（int，第一个不合格项的 NG 代码，合格为 `OkCode`）、`Message`（string，第一个不合格项的 NG 信息）。
-  - `NgCount`、`NgNames`（数组）、`NgMessages`（数组）、`Values`（每项实测值数组）、`ItemOks`（每项是否合格数组）。
+  - `Ok`（bool）、`Code`（int，第一个不合格项的 NG 代码，合格为 `OkCode`）、`Message`（string，第一个不合格项的 NG 信息，合格为 `OkMessage`）。
+  - `NgCount`、`NgNames`、`NgMessages`、`NgDetails`（如“宽度：实测 4，要求 [4.5, 5]”），以及与判定项一一对应的 `Values`（布尔记为 1 / 0，无法取值为 NaN）和 `ItemOks`。`StopAtFirstNg` 时未判定的项 `Values` 为 NaN、`ItemOks` 为 false，且不计入不合格项。
 - 输出名与 `FlowOutputNode` 默认的 `Ok` / `Code` / `Message` 对应，流程输出可直接引用。
-- 编辑窗口：表格编辑各项，显示上次运行的实测值和每项判定结果（合格绿色，不合格红色）。
+- 编辑窗口 `WpfResultJudgeToolEditWindow`：
+  - 上方设置合格代码、合格信息和停止策略；表格列出名称、取值、合格范围、代码、实测值、判定（OK 绿色、NG 红色、未判定灰色）和检查结果，可添加、删除、上移、下移；下方编辑所选项。
+  - 每次修改调用 `ResultJudgeTool.CheckItem` 实时检查，外部引用按与流程校验相同的作用域判断；新增项自动分配未使用的 NG 代码。
+  - 右侧可双击插入变量和函数；“运行预览”基于上次流程运行结果显示每项实测值与判定，并在状态栏给出总结论。
+- 测试：`VisionFlow.Tests\ResultJudgeToolTests.cs`。
 
 ## 6. 流程节点
 

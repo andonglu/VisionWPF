@@ -575,6 +575,15 @@
         </Canvas>
     </Viewbox>
 
+    <!-- 手工追加：综合判定（清单 + 勾与叉） -->
+    <Viewbox x:Key="ToolIcon.result-judge" x:Shared="False" Width="24" Height="24" Stretch="Uniform">
+        <Canvas Width="24" Height="24">
+            <Rectangle Canvas.Left="3" Canvas.Top="3" Width="18" Height="18" RadiusX="2.5" RadiusY="2.5" Stroke="{DynamicResource TextFillColorPrimaryBrush}" StrokeThickness="1.8" Fill="{x:Null}" />
+            <Path Data="M6,8 L7.5,9.5 L10,7 M6,15.5 L9.5,19 M9.5,15.5 L6,19" Stroke="{DynamicResource AccentFillColorDefaultBrush}" StrokeThickness="1.6" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Fill="{x:Null}" />
+            <Path Data="M12.5,8.5 L18,8.5 M12.5,17 L18,17" Stroke="{DynamicResource TextFillColorPrimaryBrush}" StrokeThickness="1.6" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Fill="{x:Null}" />
+        </Canvas>
+    </Viewbox>
+
     <!-- 手工追加：数值区间分类（数轴分段 + 标签） -->
     <Viewbox x:Key="ToolIcon.range-classify" x:Shared="False" Width="24" Height="24" Stretch="Uniform">
         <Canvas Width="24" Height="24">

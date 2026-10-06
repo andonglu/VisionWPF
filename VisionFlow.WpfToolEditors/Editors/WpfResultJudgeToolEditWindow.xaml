@@ -1,0 +1,219 @@
+<Window x:Class="VisionFlow.WpfToolEditors.Editors.WpfResultJudgeToolEditWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="综合判定"
+        Width="1180"
+        Height="760"
+        MinWidth="1040"
+        MinHeight="680"
+        WindowStartupLocation="CenterOwner">
+    <Window.Resources>
+        <Style x:Key="CheckTextStyle" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource SystemFillColorSuccessBrush}" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding HasError}" Value="True">
+                    <Setter Property="Foreground" Value="{DynamicResource SystemFillColorCriticalBrush}" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+    </Window.Resources>
+    <Grid Margin="24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="340" />
+        </Grid.ColumnDefinitions>
+
+        <Grid Grid.Row="0" Grid.Column="0" Margin="0,0,12,0">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <!-- 基础与合格输出 -->
+            <Border Grid.Row="0" Style="{StaticResource EditorCardStyle}">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="72" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="16" />
+                        <ColumnDefinition Width="72" />
+                        <ColumnDefinition Width="72" />
+                        <ColumnDefinition Width="16" />
+                        <ColumnDefinition Width="72" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="10" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+                    <TextBlock Grid.Column="0" Text="模块名" Style="{StaticResource EditorFieldLabelStyle}" />
+                    <TextBox x:Name="ModuleNameText" Grid.Column="1" Height="32" VerticalContentAlignment="Center" />
+                    <TextBlock Grid.Column="3" Text="合格代码" Style="{StaticResource EditorFieldLabelStyle}" />
+                    <TextBox x:Name="OkCodeText" Grid.Column="4" Height="32" VerticalContentAlignment="Center" TextChanged="OkCodeText_TextChanged" />
+                    <TextBlock Grid.Column="6" Text="合格信息" Style="{StaticResource EditorFieldLabelStyle}" />
+                    <TextBox x:Name="OkMessageText" Grid.Column="7" Height="32" VerticalContentAlignment="Center" />
+                    <CheckBox x:Name="StopAtFirstNgCheck" Grid.Row="2" Grid.Column="1" Grid.ColumnSpan="7"
+                              Content="遇到第一个不合格项即停止判定（不勾选时判完全部项）" />
+                </Grid>
+            </Border>
+
+            <!-- 判定项列表 -->
+            <Border Grid.Row="1" Style="{StaticResource EditorCardStyle}">
+                <DockPanel>
+                    <DockPanel DockPanel.Dock="Top" Margin="0,0,0,10" LastChildFill="False">
+                        <TextBlock Text="判定项" Style="{StaticResource EditorSectionTitleStyle}" Margin="0" VerticalAlignment="Center" />
+                        <Button DockPanel.Dock="Right" Content="下移" MinWidth="64" Margin="8,0,0,0" Click="MoveDown_Click" />
+                        <Button DockPanel.Dock="Right" Content="上移" MinWidth="64" Margin="8,0,0,0" Click="MoveUp_Click" />
+                        <Button DockPanel.Dock="Right" Content="删除" MinWidth="64" Margin="8,0,0,0" Click="Remove_Click" />
+                        <Button DockPanel.Dock="Right" Content="添加" MinWidth="64" Margin="8,0,0,0" Click="Add_Click" />
+                    </DockPanel>
+                    <DataGrid x:Name="RowsGrid"
+                              AutoGenerateColumns="False"
+                              IsReadOnly="True"
+                              CanUserAddRows="False"
+                              CanUserDeleteRows="False"
+                              CanUserSortColumns="False"
+                              SelectionMode="Single"
+                              RowHeight="28"
+                              HeadersVisibility="Column"
+                              SelectionChanged="RowsGrid_SelectionChanged">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="名称" Binding="{Binding Name}" Width="96" />
+                            <DataGridTextColumn Header="取值" Binding="{Binding Expression}" Width="2*" />
+                            <DataGridTextColumn Header="合格范围" Binding="{Binding RangeText}" Width="88" />
+                            <DataGridTextColumn Header="代码" Binding="{Binding NgCodeText}" Width="48" />
+                            <DataGridTextColumn Header="实测值" Binding="{Binding ValueText}" Width="72" />
+                            <DataGridTemplateColumn Header="判定" Width="56">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="{Binding JudgeText}" VerticalAlignment="Center" FontWeight="SemiBold">
+                                            <TextBlock.Style>
+                                                <Style TargetType="TextBlock">
+                                                    <Setter Property="Foreground" Value="{DynamicResource TextFillColorSecondaryBrush}" />
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding JudgeText}" Value="OK">
+                                                            <Setter Property="Foreground" Value="{DynamicResource SystemFillColorSuccessBrush}" />
+                                                        </DataTrigger>
+                                                        <DataTrigger Binding="{Binding JudgeText}" Value="NG">
+                                                            <Setter Property="Foreground" Value="{DynamicResource SystemFillColorCriticalBrush}" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBlock.Style>
+                                        </TextBlock>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                            <DataGridTemplateColumn Header="检查" Width="1.3*">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="{Binding Status}" ToolTip="{Binding Status}" Style="{StaticResource CheckTextStyle}" />
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </DockPanel>
+            </Border>
+
+            <!-- 所选判定项 -->
+            <Border Grid.Row="2" x:Name="DetailCard" Style="{StaticResource EditorCardStyle}" IsEnabled="False">
+                <StackPanel>
+                    <TextBlock Text="编辑所选判定项" Style="{StaticResource EditorSectionTitleStyle}" />
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="72" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="16" />
+                            <ColumnDefinition Width="48" />
+                            <ColumnDefinition Width="88" />
+                            <ColumnDefinition Width="16" />
+                            <ColumnDefinition Width="48" />
+                            <ColumnDefinition Width="88" />
+                            <ColumnDefinition Width="16" />
+                            <ColumnDefinition Width="56" />
+                            <ColumnDefinition Width="84" />
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="10" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="10" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+                        <TextBlock Grid.Row="0" Grid.Column="0" Text="名称" Style="{StaticResource EditorFieldLabelStyle}" />
+                        <TextBox Grid.Row="0" Grid.Column="1" Height="32" VerticalContentAlignment="Center"
+                                 Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}" />
+                        <TextBlock Grid.Row="0" Grid.Column="3" Text="下限" Style="{StaticResource EditorFieldLabelStyle}" />
+                        <TextBox Grid.Row="0" Grid.Column="4" Height="32" VerticalContentAlignment="Center" ToolTip="留空表示不限制"
+                                 Text="{Binding LowerText, UpdateSourceTrigger=PropertyChanged}" />
+                        <TextBlock Grid.Row="0" Grid.Column="6" Text="上限" Style="{StaticResource EditorFieldLabelStyle}" />
+                        <TextBox Grid.Row="0" Grid.Column="7" Height="32" VerticalContentAlignment="Center" ToolTip="留空表示不限制"
+                                 Text="{Binding UpperText, UpdateSourceTrigger=PropertyChanged}" />
+                        <TextBlock Grid.Row="0" Grid.Column="9" Text="NG代码" Style="{StaticResource EditorFieldLabelStyle}" />
+                        <TextBox Grid.Row="0" Grid.Column="10" Height="32" VerticalContentAlignment="Center"
+                                 Text="{Binding NgCodeText, UpdateSourceTrigger=PropertyChanged}" />
+                        <TextBlock Grid.Row="2" Grid.Column="0" Text="取值" Style="{StaticResource EditorFieldLabelStyle}" />
+                        <TextBox x:Name="ExpressionText" Grid.Row="2" Grid.Column="1" Grid.ColumnSpan="10" Height="32"
+                                 VerticalContentAlignment="Center" FontFamily="Consolas, Microsoft YaHei UI"
+                                 ToolTip="结果为数值时按上下限判定（闭区间），为布尔时 true 为合格"
+                                 Text="{Binding Expression, UpdateSourceTrigger=PropertyChanged}" />
+                        <TextBlock Grid.Row="4" Grid.Column="0" Text="NG信息" Style="{StaticResource EditorFieldLabelStyle}" />
+                        <TextBox Grid.Row="4" Grid.Column="1" Grid.ColumnSpan="10" Height="32" VerticalContentAlignment="Center"
+                                 ToolTip="留空时为“名称不合格”"
+                                 Text="{Binding NgMessage, UpdateSourceTrigger=PropertyChanged}" />
+                        <TextBlock Grid.Row="5" Grid.Column="1" Grid.ColumnSpan="10" Margin="0,8,0,0" TextWrapping="Wrap"
+                                   Text="{Binding Status}" Style="{StaticResource CheckTextStyle}" />
+                    </Grid>
+                </StackPanel>
+            </Border>
+        </Grid>
+
+        <!-- 可插入的变量与函数 -->
+        <Border Grid.Row="0" Grid.Column="1" Style="{StaticResource EditorCardStyle}" Margin="0">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+                <TextBlock Grid.Row="0" Text="可用变量（双击插入）" Style="{StaticResource EditorSectionTitleStyle}" />
+                <ListBox x:Name="ReferenceList" Grid.Row="1" MouseDoubleClick="ReferenceList_MouseDoubleClick" />
+                <TextBlock Grid.Row="2" Text="函数（双击插入）" Style="{StaticResource EditorSectionTitleStyle}" Margin="0,16,0,8" />
+                <ListBox x:Name="FunctionList" Grid.Row="3" MouseDoubleClick="FunctionList_MouseDoubleClick">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <StackPanel ToolTip="{Binding Description}">
+                                <TextBlock Text="{Binding Signature}" FontFamily="Consolas, Microsoft YaHei UI" />
+                                <TextBlock Text="{Binding Description}" FontSize="11" TextTrimming="CharacterEllipsis"
+                                           Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                            </StackPanel>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+                <TextBlock Grid.Row="4" Margin="0,12,0,0" TextWrapping="Wrap" FontSize="11"
+                           Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                           Text="取值为数值时在上下限（含）之间为合格，为布尔时 true 为合格；NaN 或无法取值判为不合格。输出 Ok / Code / Message 可直接接流程输出。" />
+            </Grid>
+        </Border>
+
+        <DockPanel Grid.Row="1" Grid.ColumnSpan="2" LastChildFill="False" Margin="0,24,0,0">
+            <TextBlock x:Name="StatusText" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" MaxWidth="700"
+                       Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+            <Button DockPanel.Dock="Right" Content="取消" MinWidth="96" Margin="8,0,0,0" Click="Cancel_Click" />
+            <Button DockPanel.Dock="Right" Content="确定" MinWidth="96" Margin="8,0,0,0" Style="{StaticResource AccentButtonStyle}" Click="Ok_Click" />
+            <Button DockPanel.Dock="Right" Content="运行预览" MinWidth="96" Click="RunPreview_Click" />
+        </DockPanel>
+    </Grid>
+</Window>

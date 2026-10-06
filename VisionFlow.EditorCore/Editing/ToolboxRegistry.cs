@@ -180,6 +180,8 @@ namespace VisionFlow.Editing
                 new ToolNode(new RangeClassifyTool(NextModuleName("区间分类")))));
             Register(new ToolboxItem("expression-calc", "07 数据与判定", "变量计算", () =>
                 new ToolNode(new ExpressionCalcTool(NextModuleName("变量计算")))));
+            Register(new ToolboxItem("result-judge", "07 数据与判定", "综合判定", () =>
+                new ToolNode(new ResultJudgeTool(NextModuleName("综合判定")))));
             Register(new ToolboxItem("ifelse", "逻辑控制", "IfElse 分支", () =>
                 new IfElseNode("条件分支")));
             Register(new ToolboxItem("forcount", "逻辑控制", "For 循环(次数)", () =>
