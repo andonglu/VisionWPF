@@ -62,6 +62,10 @@ namespace VisionFlow.WpfToolEditors
             {
                 return new WpfArrayProcessToolEditWindow(arrayProcessTool, context);
             }
+            if (tool is VariationInspectTool variationTool)
+            {
+                return new WpfVariationInspectToolEditWindow(variationTool, context);
+            }
             return IsVisualPreviewTool(tool)
                 ? (Window)new WpfVisualToolEditWindow(tool, context)
                 : new WpfGenericToolEditWindow(tool, context);

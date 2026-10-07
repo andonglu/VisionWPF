@@ -217,6 +217,8 @@ namespace VisionFlow.Editing
                 new ToolNode(new ArrayProcessTool(NextModuleName("数组处理")))));
             Register(new ToolboxItem("result-judge", "07 数据与判定", "综合判定", () =>
                 new ToolNode(new ResultJudgeTool(NextModuleName("综合判定")))));
+            Register(new ToolboxItem("variation-inspect", "08 缺陷检测", "差分检测", () =>
+                new ToolNode(new VariationInspectTool(NextModuleName("差分检测")))));
             Register(new ToolboxItem("ifelse", "逻辑控制", "IfElse 分支", () =>
                 new IfElseNode("条件分支")));
             Register(new ToolboxItem("forcount", "逻辑控制", "For 循环(次数)", () =>

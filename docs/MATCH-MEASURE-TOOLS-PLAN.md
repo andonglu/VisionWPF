@@ -1,7 +1,7 @@
 # 定位匹配与几何测量补充开发计划
 
 编写日期：2026-10-06
-状态：第一批 MT-01 / MS-01 已实现（分支 `feature/match-measure-batch1`，见第 10 节）；第二批 MS-02 / MS-07（Fixed）已实现并修复第一批“执行测试”回归（分支 `feature/match-measure-batch2`，见第 11 节）；第三批 MT-02 / MT-03 已实现（分支 `feature/match-measure-batch3`，见第 12、13 节）；第四批 MS-06（找角）/ MS-05（灰度投影）已实现（分支 `feature/match-measure-batch4`，见第 14、15 节）；其余各项待开发，动工前各做一次小评审。
+状态：第一批 MT-01 / MS-01 已实现（分支 `feature/match-measure-batch1`，见第 10 节）；第二批 MS-02 / MS-07（Fixed）已实现并修复第一批“执行测试”回归（分支 `feature/match-measure-batch2`，见第 11 节）；第三批 MT-02 / MT-03 已实现（分支 `feature/match-measure-batch3`，见第 12、13 节）；第四批 MS-06（找角）/ MS-05（灰度投影）已实现（分支 `feature/match-measure-batch4`，见第 14、15 节）；第五批 MT-06（差分检测）已实现（分支 `feature/match-measure-batch5`，见第 16、17 节），至此本线主体完成；其余各项（MT-04、MT-05、MS-03、MS-04）按现场需求排期，动工前各做一次小评审。
 范围：工具箱“01 定位匹配”和“05 几何测量”中的模板匹配类、测量类工具（`HalconTools.cs`、`DescriptorMatchTools.cs`、`MeasureTools.cs`、`FollowMeasureTools.cs`、`AngleTools.cs`），以及新增的差分检测。
 HALCON 版本基线：**22.11 及以上**（第三批起）。原文写“通用形状模型是 20.11 引入的算子”有误：`create_generic_shape_model` 等算子不在 20.11 中，仓库原先引用的 `halcondotnet.dll` 20.11.1 没有这些方法；第三批经使用方确认把编译引用换成 22.11.1（`HALCON-22.11-Steady\bin\dotnet35\halcondotnet.dll`），整个应用的最低 HALCON 版本随之提高到 22.11（见第 12 节）。
 关联文档：
@@ -271,6 +271,18 @@ HALCON 版本基线：**22.11 及以上**（第三批起）。原文写“通用
 - 模型句柄按 `VariationModelData` 哈希或文件路径加修改时间缓存，支持预热和释放。
 - 检测时图像尺寸必须与模型一致，否则明确失败。
 - 编辑窗口：新建 `WpfVariationInspectToolEditWindow`，提供“加入当前图像为训练样本”“从文件夹批量加入”“清空样本”“训练”，显示已训练样本数、标准图和偏差图预览，以及当前图像的检测结果叠加。训练样本图像不保存进流程文件，只保存训练结果。
+
+**实现说明（第五批已完成）**
+
+- 类型（`VariationInspectTools.cs`）：`VariationInspectTool : ToolBase, IToolResourceLifecycle, IToolConfigurationCheck`；枚举 `VariationModelMode`（standard / robust / direct）、`VariationCompareMode`（absolute / light / dark / light_dark），成员名即 HALCON 参数值，按数字保存；模型数据容器 `VariationModelPackage`；训练、预览与体积提示 `VariationModelTraining`；阈值解析 `VariationThresholds`。
+- 阈值在 prepare 时生效（22.11 实测，见第 16 节，纠正原计划与评审 B5-1-1 的前提）：不只是 direct，standard / robust 的 `AbsThreshold` / `VarThreshold` 也是 `prepare_variation_model` 的参数，`compare_ext_variation_model` 没有阈值参数。因此任何模式改阈值都要重新 prepare；而 `clear_train_data_variation_model` 之后不能再 prepare，所以训练数据必须保留。
+- 持久化：`VariationModelData` 为带版本的容器（`VFVM`、版本 1、建模方式、宽、高、样本数、载荷）。standard / robust 的载荷是保留训练数据、未 prepare 的 `serialize_variation_model`；direct 的载荷是良品图本身（`serialize_image`），加载时重新求边缘幅值图（`sobel_amp`，sum_abs，3）再 `prepare_direct_variation_model`。实测体积：standard / robust 约 12 字节 / 像素（原计划估算的 8 字节偏小），direct 约 1 字节 / 像素（byte 图）。格式错误、版本不符、建模方式与 `ModelMode` 不一致都给出明确的中文校验错误（后者提示需要重新训练）。
+- 缓存（评审 B5-1-1）：模型句柄按模型来源缓存——内嵌数据按数组引用（训练 / 改为内嵌整体替换数组），外部文件按“完整路径 + 修改时间 + 大小”；`ModelMode` 与模型不一致时拒绝运行。阈值不进加载键：缓存的句柄记下上次 prepare 用的阈值元组，元组变化时就地重新 prepare（日志“按阈值 … 准备模型（不需要重新训练）”），所有模式都不重新训练、不重新加载。`Prepare()` 预热时加载并按当前阈值 prepare；`ReleaseResources()` 释放模型句柄与 direct 的两幅图，编辑窗口执行测试的一次性副本由 `ToolTestRun` 经 `FlowResources.Release` 释放。
+- 运行：读图像 → 定位矩阵（`FollowMatrixResolver`，只接受单个矩阵；为“示教位姿 → 当前位姿”，按逆矩阵 `affine_trans_image` 对齐，对齐后定义域为图像内部分）→ 尺寸校验（错误信息带当前与模型两个尺寸，注明“输入”或“对齐后”）→ 检测区域 → `compare_ext_variation_model` → `union1` + `connection` → `MinDefectArea` 面积筛选 → 有定位矩阵时用该矩阵把缺陷区域变换回当前图像坐标。输出 `DefectRegion` / `DefectCount` / `DefectAreas` / `MaxDefectArea`（无缺陷为 0）/ `HasDefect`，另借用输出 `Image`（主窗口叠加显示的底图）。差分算子没有 timeout 参数，不存在 #9400 超时映射。
+- 检测区域（评审 B5-2-2）：在模型（对齐后）坐标中，用 `reduce_domain`（与对齐后的有效定义域求交）而不是裁剪——图像与模型保持同尺寸、不用平移坐标，区域外的差异不参与比较。区域为空按**失败**处理：配置了检测区域却为空几乎必然是上游配置错误，若按“无缺陷”输出会把错误静默放行成合格。
+- 外部模型文件（评审 B5-1-2）：`ModelFile` 与内嵌数据互斥，同时存在时流程校验报错并说明以哪个为准；编辑窗口“导出为外部文件”“选择外部文件”清空内嵌数据，“改为内嵌”与重新训练清空 `ModelFile`（`UseEmbeddedModel` / `UseModelFile`）。
+- 体积提示：模型超过 10 MB（10·1024·1024 字节）时，编辑窗口训练后在状态区和模型信息下方提示改用外部文件；运行时加载超过 10 MB 的内嵌模型也写一条警告日志（编辑窗口没有流程日志通道）。
+- 编辑窗口：左侧图像预览可切换当前图像 / 标准图 / 偏差图 / 检测结果（偏差图为 real 图，按 0 ~ 最大值线性显示），右侧输入、训练样本、模型存储、检测参数、检测结果五张卡片。训练样本只存活于本次编辑会话；“加入当前图像”在配置了定位矩阵时按上次运行的矩阵对齐；批量加入按扩展名（png / bmp / jpg / jpeg / tif / tiff）过滤，读不出的文件汇总报错后继续；训练后显示样本数、模型字节数与内嵌 / 外部文件；改建模方式未重训时提示需要重新训练。执行测试经 `ToolTestRun`。
 
 ### 4.7 暂缓
 
@@ -674,3 +686,48 @@ HALCON 版本基线：**22.11 及以上**（第三批起）。原文写“通用
 - 单元/集成测试：新增 `MatchMeasureBatch4Tests` 12 个用例（找角交点 / 夹角精度含旋转 10° 的矩形角、跟随与多矩阵、平行与单边未找到、实例数固定与基类输出、metrology 拆分回归、投影曲线与导数及反向、平滑与平坦曲线与平滑过大、多矩阵与出界、保存加载校验显隐、命名守卫、新工具登记），全量 `dotnet test`（`Category!=Soak`）853 个通过。找角实测：轴向矩形角交点误差 < 0.2 像素、夹角误差 < 0.1°；旋转 10° 的矩形角同样满足。
 - 界面验收：脚本经 Windows UI Automation 驱动真实的 `VisionFlow.WpfApp.exe`，31 项检查全部通过：工具箱 `05 几何测量` 新建找角、灰度投影；侧栏显隐（找角隐藏实例数，投影隐藏卡尺边缘参数）；找角窗口“高级参数”不含实例数，“绘制/重绘两条边基准”用真实鼠标点击放置两条边，并拖动边 2 的两个端点到左边缘上，执行测试结果表交点 (99.5, 99.5)、夹角 -90°；灰度投影窗口隐藏卡尺参数、显示曲线区，画好测量矩形后曲线即时显示（161 点，最小 30 在序号 80、最大 210 在序号 0），平滑改为 2 后曲线与摘要刷新；两个摘要与无界面对同一矩形的计算逐字一致，运行输出 `Profile` 与无界面计算逐项相同，编辑窗口结果表与无界面结果逐字一致；界面运行 25 个单值、7 个数组长度与无界面运行保存的文件逐字一致；找角交点误差 < 0.2 像素、夹角误差 < 0.1°；两种显示轮廓叠加在图像上；文件含两个固定 ID、`TeachLine*` 与平滑系数；重新加载后再运行逐字一致，两条边与平滑曲线回显一致。
 - 验证中发现并修复的应用问题：跟随测量窗口与模板匹配窗口的“示教图像”下拉选中上游图像（如 `图像1.Image`）时，`SelectionChanged` 读到的还是下拉框更新前的文字，示教图像不切换（既有问题，挡住了从上游图像示教两个新工具）。改为等选择生效后再取图（与第三批通用形状匹配窗口的写法一致）。
+
+## 16. 第五批算子探测结论（MT-06）
+
+**探测环境**：HALCON 22.11 Steady（原生库与 .NET 库均为 22.11，见第 12 节）；部署到其他版本前需复核。
+
+| 问题 | 结论 |
+|---|---|
+| `create_variation_model` 的 Mode 取值 | `standard`、`robust`、`direct` 都是参数值本身（`create_variation_model(宽, 高, "byte", Mode, …)` 三者均可创建）；22.11 的 `get_param_info(…, "value_list")` 对该参数返回空，取值靠实际调用确认 |
+| `prepare_direct_variation_model` 是否免 train | 是：签名 `prepare_direct_variation_model(RefImage, VarImage, ModelID, AbsThreshold, VarThreshold)`，`direct` 模型不经 `train_variation_model` 直接可比较（偏差图用 `sobel_amp(良品图, "sum_abs", 3)`，byte）。对 `direct` 模型调 `train_variation_model`、对 `standard` 模型调 `prepare_direct_variation_model` 都报 #8542；`prepare_direct` 之后 `get_variation_model` 与 `prepare_variation_model` 报 #8545（不保留训练数据），所以 direct 改阈值只能保留良品图重新 `prepare_direct` |
+| 阈值语义 | 阈值**在 prepare 时写进模型，各模式都是**：`prepare_variation_model(Model, AbsThreshold, VarThreshold)`（standard / robust）与 `prepare_direct_variation_model`（direct）带阈值，`compare_ext_variation_model` 只有 Mode 参数、没有阈值。两个值依次为 [亮, 暗]：绝对阈值 [20, 200]、相对阈值 [3, 50] 时亮缺陷检出、暗缺陷不检出。允许偏差 = max(绝对阈值, 相对阈值 × 偏差图)（不是二者之和：偏差图 11.55、绝对 5、相对 2 时偏离 25 被检出，按和应为 28.1 而不检出） |
+| `compare_ext_variation_model` 的 Mode | `absolute` / `light` / `dark` / `light_dark` 都可用；`light_dark` 返回两个区域 [亮, 暗]，工具先 `union1` 再拆连通域。未 prepare 就比较报 #8541，图像尺寸与模型不同报 #8540（工具在比较前自行校验尺寸并给出两个尺寸） |
+| 重新 prepare | 同一句柄可以用新阈值反复 prepare，序列化 / 反序列化之后同样可以（无论序列化前是否 prepare 过）；`clear_train_data_variation_model` 之后再 prepare 报 #8545。因此内嵌数据保留训练数据，改阈值免重训 |
+| `get_variation_model` 读回 | standard / robust 在保留训练数据时可读回标准图（byte）与偏差图（real）；direct 读不回（#8545），编辑窗口直接显示良品图与其边缘幅值图 |
+| 模型字节体积 | standard / robust（保留训练数据）约 12.00 字节 / 像素，与 prepare 与否无关：320×240 → 921640、640×480 → 3686440、1024×1024 → 12582952 字节；`clear_train_data` 后约 2 字节 / 像素；direct prepare 后约 2 字节 / 像素（工具改存良品图，约 1 字节 / 像素）。原计划“宽 × 高 × 8 字节”偏小；1024×1024 的 standard 模型即超过 10 MB 提示阈值 |
+
+## 17. 第五批（MT-06）评审处理与验收记录
+
+**评审意见处理**（[MATCH-MEASURE-TOOLS-PLAN-REVIEW.md](MATCH-MEASURE-TOOLS-PLAN-REVIEW.md) 第五批评审意见）
+
+| 条目 | 处理 |
+|---|---|
+| B5-1-1 缓存键覆盖 prepare 参数 | 评审前提“standard / robust 的阈值是比较时参数”与 22.11 实测不符（第 16 节：所有模式的阈值都在 prepare 时写入）。实现按实测处理：加载键 = 模型来源（内嵌数组引用，或外部文件路径 + 修改时间 + 大小）+ `ModelMode` 一致性检查；阈值元组变化时在缓存句柄上就地重新 prepare。direct 改阈值结果随之变化、不重新训练不重新加载；standard / robust 同样免重训（用例按“加载次数 1、prepare 次数 3”固定） |
+| B5-1-2 `ModelFile` 互斥 | 两者同时存在报流程校验错误（说明以哪个为准）；导出 / 选择外部文件清空内嵌数据，重新训练与改为内嵌清空 `ModelFile`（用例 + 界面验收） |
+| B5-1-3 阈值 CSV | 1 个值共用、2 个值依次为亮、暗，必须为正数（中英文逗号都可）；校验与运行都执行，错误信息带“如 20”“如 20,30”示例 |
+| B5-1-4 对齐后尺寸 | 尺寸不符明确失败，错误信息带当前与模型两个尺寸并注明“输入”或“对齐后”；不裁剪 |
+| B5-2-1 后处理与输出 | `union1` + `connection` + `MinDefectArea` 筛选；`DefectRegion` / `DefectCount` / `DefectAreas` / `MaxDefectArea` / `HasDefect` 一致；无缺陷是正常结果，不实现 `INotFoundPolicy` |
+| B5-2-2 检测区域 | `reduce_domain`（取舍与“区域为空按失败”的理由见 MT-06 实现说明）；引用无效同样失败 |
+| B5-2-3 训练样本 | 只存活于编辑会话；批量加入按扩展名过滤、坏文件汇总报错后继续；样本数与模型字节实时显示；超过 10 MB 在状态区提示改用 `ModelFile`，运行时同时写警告日志 |
+| B5-2-4 新窗口 | `WpfVariationInspectToolEditWindow`，执行测试经 `ToolTestRun`；标准图 / 偏差图用 `get_variation_model` 读回（direct 用良品图与边缘幅值图） |
+| B5-2-5 登记 | `BuiltinToolIdentities`（`variation-inspect`）、`ToolboxRegistry`（新分类 `08 缺陷检测 / 差分检测`）、`WpfToolEditorRouter`、README 工具表“缺陷检测”行与外部文件约定、`ToolIcons.xaml` 手绘图标 |
+| B5-2-6 资源生命周期 | `Prepare` / `ReleaseResources` 与匹配工具同模式（锁内加载、释放模型句柄与 direct 的两幅图）；编辑事务与执行测试副本经 `FlowResources.Release` 释放 |
+| B5-2-7 守卫测试 | 5 个输出名与参数名不冲突，第二批守卫测试保持通过 |
+| B5-2-8 体积上限 | 不设硬上限；10 MB 提示用构造字节数验证逻辑，并用 1024×1024 实际模型（12 MB）验证运行日志提示 |
+| 任务说明中的 #9400 超时映射 | 差分模型算子没有 timeout 参数，不存在超时错误，未加映射（代码注释说明） |
+| B5-3 文档 | 头部状态、MT-06 实现说明、第 16 节探测结论、README |
+
+**验收结果**
+
+- 单元/集成测试：新增 `MatchMeasureBatch5Tests` 33 个用例（标准模型连通域拆分与面积筛选、良品无缺陷、robust、四种比较方式与亮暗两值阈值、允许偏差取较大者、direct 改阈值结果变化且不重训不重载、standard 改阈值免重训、替换数组重新加载与建模方式不符要求重训、预热 / 释放 / 损坏数据、阈值 CSV 正反例共 11 个、外部文件互斥 / 加载 / 文件变化重载 / 重训清空 / 文件不存在 / 文件损坏、容器格式与版本、尺寸不符两种信息、定位矩阵对齐 + 检测区域且缺陷回到当前图像坐标、空检测区域与无效引用失败、三种建模方式经流程文件往返后与直接算子调用逐项一致、训练校验、标准图 / 偏差图预览、模型体积与 10 MB 提示逻辑、超过 10 MB 的运行日志提示、保存加载、命名守卫、工具箱登记），全量 `dotnet test`（`Category!=Soak`）886 个通过。
+- 界面验收：脚本经 Windows UI Automation 驱动真实的 `VisionFlow.WpfApp.exe`，47 项检查全部通过：在正常文件对话框打开流程（良品图 + 待检图两个图像加载节点）并运行；从工具箱 `08 缺陷检测` 新建差分检测，侧栏参数齐全；编辑窗口加入当前图像（良品）、经系统文件夹对话框批量加入（`.txt` 被过滤、损坏 png 报错后继续，样本 4 张），训练 standard 模型（3.52 MB、3686468 字节，不提示外部文件），训练后自动预览标准图且训练结果留在状态栏，切换偏差图显示不同；改建模方式提示需要重新训练、改回后提示消失；当前图像执行测试“缺陷 2 个，最大面积 200”，检测结果叠加缺陷区域；绝对阈值改 100 不重训结果变为 1 个；界面运行 3 个单值、2 个数组长度与无界面运行保存的文件逐字一致，编辑窗口缺陷表与无界面 `DefectAreas` 逐字一致；`DefectRegion` 在主窗口叠加显示；侧栏填 `ModelFile` 后运行被流程校验阻止并给出互斥说明，清空后恢复运行；经保存对话框导出外部文件（内嵌数据清空，流程文件 2.7 KB）后预览、执行测试、运行结果与内嵌模型对照一致，侧栏显示外部路径；改为内嵌、经打开对话框选择外部文件、改选 direct 重新训练后 `ModelFile` 清空并改用内嵌新模型，direct 改阈值 100 结果随之变化；保存 → 重新加载 → 再运行与无界面对照逐字一致，重新打开窗口模型信息、建模方式、阈值回显正确，训练样本不保留。
+- 验证中发现并修复的问题（均在本批新代码内，提交前已改）：
+  1. 训练后自动切到标准图预览时，预览说明写进状态栏，把“训练完成 … 模型 … MB”与 10 MB 提示覆盖掉。改为预览说明单独显示在图像下方。
+  2. 偏差图原先用 `scale_image_max` 拉伸显示：偏差几乎处处相同（合成样本两处标准差都约 1.58）时，浮点误差被拉伸成黑白对比，误导判断。改为按 0 ~ 最大值线性显示。
+  3. 阈值说明原写“允许偏差 = 绝对阈值 + 相对阈值 × 偏差图”，补测后按实测改为取二者较大者，并加用例固定。
+- 脚本问题（已修脚本）：系统保存对话框不认 UI Automation 写入的文件名（按默认名存到对话框记住的目录），直接按键又会被中文输入法转换，改为经剪贴板粘贴并在确认前核对输入框内容；探索过程中两次误存到对话框记住的其他目录的导出文件，已核对创建时间后删除。

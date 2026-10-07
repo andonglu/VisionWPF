@@ -768,6 +768,15 @@
         </Canvas>
     </Viewbox>
 
+    <!-- 手工追加：差分检测（良品与待检两张叠放的图，待检图上的缺陷斑点为强调色） -->
+    <Viewbox x:Key="ToolIcon.variation-inspect" x:Shared="False" Width="24" Height="24" Stretch="Uniform">
+        <Canvas Width="24" Height="24">
+            <Rectangle Canvas.Left="3" Canvas.Top="3" Width="12" Height="12" RadiusX="1.5" RadiusY="1.5" Stroke="{DynamicResource TextFillColorPrimaryBrush}" StrokeThickness="1.8" Fill="{x:Null}" />
+            <Rectangle Canvas.Left="9" Canvas.Top="9" Width="12" Height="12" RadiusX="1.5" RadiusY="1.5" Stroke="{DynamicResource TextFillColorPrimaryBrush}" StrokeThickness="1.8" Fill="{DynamicResource LayerFillColorDefaultBrush}" />
+            <Ellipse Canvas.Left="13.5" Canvas.Top="13.5" Width="4" Height="4" Fill="{DynamicResource AccentFillColorDefaultBrush}" />
+        </Canvas>
+    </Viewbox>
+
     <Viewbox x:Key="ToolIcon._default" x:Shared="False" Width="24" Height="24" Stretch="Uniform">
         <Canvas Width="24" Height="24">
             <Rectangle Canvas.Left="4" Canvas.Top="4" Width="16" Height="16" RadiusX="2" RadiusY="2" Stroke="{DynamicResource TextFillColorPrimaryBrush}" StrokeThickness="1.8" Fill="{x:Null}" />

@@ -173,3 +173,40 @@
 ## B4-4. 开工顺序确认
 
 第四批：MS-06 + MS-05。第五批候选：MT-06（差分检测）；之后 MT-05 / MT-04 / MS-03 / MS-04 与标定批（CB-01~07 + MS-07 Calibration）按现场需求排。
+
+---
+
+# 第五批评审意见（MT-06 差分检测）
+
+评审日期：2026-10-07
+评审对象：计划 MT-06（差分检测新工具）。
+评审方式：与第四批实现后的代码核对（`ToolboxRegistry` 分类编号、`IToolResourceLifecycle` / `FlowResources` 资源机制、匹配工具的模型缓存先例、README 外部文件约定）。
+评审结论：**可以开工，第五批 = MT-06（新工具 `VariationInspectTool` + 新窗口）。分类编号 `08 缺陷检测` 与现有 00~07 衔接，无冲突。本批的特殊风险集中在差分模型的缓存键（阈值烘焙）与模型体积（≥ 8 字节/像素）两处。**
+
+## B5-1. P1：动工前确认
+
+1. **缓存键必须覆盖 prepare 时参数（本批最容易错的点）**：`direct` 模式下 `AbsThreshold` / `VarThreshold` 在 `prepare_direct_variation_model` 时**烘焙进模型**；而 `standard` / `robust` 模式下阈值是每次 `compare_ext_variation_model` 的运行参数。用户改阈值后 `VariationModelData` 字节不变，若缓存键只看字节引用，`direct` 模型不会重新 prepare，拿到旧结果。**缓存键 = `VariationModelData` 引用 + `ModelMode` + direct 模式下的阈值元组**；`ModelFile` 外部文件路径 + 修改时间 + 大小。用例固定：direct 模式改阈值后不重新训练、比较结果按新阈值变化。`standard` / `robust` 模式改阈值不需要重新训练（阈值在比较时生效）。
+2. **`ModelFile` 与内嵌数据互斥**：配置 `ModelFile` 后 `VariationModelData` 应清空并优先从文件加载；两者同时存在时报流程校验错误，指明以哪个为准。**重新训练后必须清空 `ModelFile`**（否则内嵌新模型被外部旧文件覆盖）。
+3. **CSV 阈值解析双路径**：`AbsThreshold` / `VarThreshold` 接受 1 个值（亮暗共用）或 2 个值（亮、暗分开）；解析与"正数"校验在 `CheckConfiguration` 与运行时都执行，格式错误给出中文示例。
+4. **对齐后尺寸校验**：配置定位矩阵后 `affine_trans_image` 对齐，对齐结果尺寸 ≠ 模型尺寸时明确失败并给出两者尺寸（计划已写"明确失败"，要把尺寸数字带进错误信息）；不静默裁剪。
+
+## B5-2. P2：开发中落实
+
+1. **compare 后处理**：`connection` 拆分连通域后按 `MinDefectArea` 筛选，`DefectRegion` 只含存活区域；`DefectAreas` / `DefectCount` / `MaxDefectArea` / `HasDefect` 与之一致；无缺陷是正常结果（不写 `Found` / 不用 `FailWhenNotFound`）。
+2. **检测区域**：配置后只在该区域内比较（`reduce_domain` 或比较前裁剪，选一种并在注释里说明取舍）；区域为空按无缺陷还是失败，需明确——**建议按失败**（配置了一个空区域几乎必然是配置错误），并写进实现说明。
+3. **训练样本管理**：样本只存活于编辑窗口会话，训练后即弃（计划已写）；批量加入按图像扩展名过滤，读不出的文件明确报错并继续；样本数、模型字节大小实时显示，**超过 10 MB 在训练后提示建议改用 `ModelFile` 外部文件**（提示写在窗口状态区与日志）。
+4. **新窗口**：`WpfVariationInspectToolEditWindow`，测试运行必须经 `ToolTestRun`（不直写工具）；标准图 / 偏差图预览用 `get_variation_model` 读回显示。
+5. **登记四件套 + README 新分类**：`BuiltinToolIdentities` / `ToolboxRegistry`（`08 缺陷检测`，编号衔接 00~07）/ `WpfToolEditorRouter` / README 工具表新增"08 缺陷检测"行；图标加进 `ToolIcons.xaml`（参照第三批做法）。
+6. **资源生命周期**：`IToolResourceLifecycle.Prepare` / `ReleaseResources` 与匹配工具同模式；句柄释放覆盖编辑事务 Dispose 路径（`FlowResources.Release`）。
+7. **守卫测试**：输出名（`DefectRegion` 等 5 个）不与参数名相同；第二批守卫测试保持绿。
+8. **模型字节上限**：`VariationModelData` 不设硬上限，但 10 MB 提示必须真实生效（用例：构造大模型验证提示逻辑，不必真的训 10 MB）。
+
+## B5-3. P3：文档维护
+
+1. 计划头部状态、MT-06 实现说明（含 P1-1 的缓存键结论、检测区域为空的行为、体积提示的实际阈值）。
+2. README：新增"08 缺陷检测"行（差分检测：标准图 + 允许偏差图，检出超出偏差的区域）；外部文件约定处补 `ModelFile`。
+3. HALCON 探测结论（`create_variation_model` 的 mode 取值、`prepare_direct_variation_model` 是否免 train、`compare_ext_variation_model` 阈值语义、`get_variation_model` 读回方式、模型字节体积实测）记入计划新一节，沿用第 12 节模式。
+
+## B5-4. 开工顺序确认
+
+第五批：MT-06。至此 MATCH-MEASURE 线剩余 MT-04（透视变形）、MT-05（组件匹配）、MS-03（沿圆弧）、MS-04（模糊测量），均为现场需求驱动或与其他线耦合，完成本批后本线主体收官；后续按现场需求或并入标定批（CB-01~07 + MS-07 Calibration）排期。
