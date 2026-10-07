@@ -203,8 +203,6 @@ namespace VisionFlow.Editing
                 new ToolNode(new ContourDistanceTool(NextModuleName("轮廓距离")))));
             Register(new ToolboxItem("geometry-relation", "05 几何测量", "几何关系测量", () =>
                 new ToolNode(new GeometryRelationTool(NextModuleName("几何关系")))));
-            Register(new ToolboxItem("affine-point", "05 几何测量", "图像坐标转世界坐标", () =>
-                new ToolNode(new AffinePointTool(NextModuleName("坐标转换")))));
             Register(new ToolboxItem("angle-convert", "05 几何测量", "单位换算", () =>
                 new ToolNode(new AngleConvertTool(NextModuleName("角度换算")))));
             Register(new ToolboxItem("barcode1d", "06 识别工具", "一维码", () =>
@@ -219,6 +217,9 @@ namespace VisionFlow.Editing
                 new ToolNode(new ResultJudgeTool(NextModuleName("综合判定")))));
             Register(new ToolboxItem("variation-inspect", "08 缺陷检测", "差分检测", () =>
                 new ToolNode(new VariationInspectTool(NextModuleName("差分检测")))));
+            // 工具分类调整只影响工具箱显示，工具 ID 与类型名不变，历史流程照常加载
+            Register(new ToolboxItem("affine-point", "09 标定", "图像坐标转世界坐标", () =>
+                new ToolNode(new AffinePointTool(NextModuleName("坐标转换")))));
             Register(new ToolboxItem("ifelse", "逻辑控制", "IfElse 分支", () =>
                 new IfElseNode("条件分支")));
             Register(new ToolboxItem("forcount", "逻辑控制", "For 循环(次数)", () =>

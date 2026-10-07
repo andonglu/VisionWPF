@@ -66,6 +66,10 @@ namespace VisionFlow.WpfToolEditors
             {
                 return new WpfVariationInspectToolEditWindow(variationTool, context);
             }
+            if (tool is AffinePointTool affinePointTool)
+            {
+                return new WpfAffinePointToolEditWindow(affinePointTool, context);
+            }
             return IsVisualPreviewTool(tool)
                 ? (Window)new WpfVisualToolEditWindow(tool, context)
                 : new WpfGenericToolEditWindow(tool, context);
@@ -103,8 +107,7 @@ namespace VisionFlow.WpfToolEditors
                 || tool is XldFeaturesTool
                 || tool is FitLineTool
                 || tool is FitCircleTool
-                || tool is IntersectionLinesTool
-                || tool is AffinePointTool;
+                || tool is IntersectionLinesTool;
         }
     }
 }

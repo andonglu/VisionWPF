@@ -320,6 +320,11 @@ namespace VisionFlow.WpfApp
 
         private void OpenToolEditor(ToolNode node)
         {
+            OpenToolEditor(node, false);
+        }
+
+        private void OpenToolEditor(ToolNode node, bool openCalibrationAssistant)
+        {
             if (!EnsureEditable("打开工具编辑器"))
             {
                 return;
@@ -337,6 +342,10 @@ namespace VisionFlow.WpfApp
 
                 Window window = WpfToolEditorRouter.Create(transaction.WorkingCopy, transaction.Context);
                 window.Owner = this;
+                if (openCalibrationAssistant && window is WpfAffinePointToolEditWindow affineWindow)
+                {
+                    affineWindow.ShowCalibrationAssistant();
+                }
                 if (window.ShowDialog() == true)
                 {
                     transaction.Commit();
@@ -794,6 +803,30 @@ namespace VisionFlow.WpfApp
             OutputDisplayCombo.SelectedItem = null;
             DisplayCurrentImage();
             SetStatus("正在显示输入图像。");
+        }
+
+        /// <summary>
+        /// 标定助手（CB-02）：选中“图像坐标转世界坐标”节点时打开其编辑窗口的 N 点标定页（结果可内嵌到该工具）；
+        /// 否则单独打开助手，结果只能保存为标定文件。
+        /// </summary>
+        private void CalibrationAssistant_Click(object sender, RoutedEventArgs e)
+        {
+            if (GetSelectedFlowNode() is ToolNode node && node.Tool is AffinePointTool)
+            {
+                OpenToolEditor(node, openCalibrationAssistant: true);
+                return;
+            }
+            var window = new WpfAffinePointToolEditWindow(new AffinePointTool("标定助手"), new ToolEditContext
+            {
+                Root = _model.Root,
+                InputImage = _inputImage,
+                InputImagePath = _inputImagePath,
+                LastRunContext = _runSession.LastRunContext
+            }, standalone: true)
+            {
+                Owner = this
+            };
+            window.ShowDialog();
         }
 
         private void DisplaySettings_Click(object sender, RoutedEventArgs e)

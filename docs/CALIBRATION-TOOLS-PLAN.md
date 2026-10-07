@@ -1,9 +1,9 @@
 # 标定补充开发计划
 
 编写日期：2026-10-06
-状态：待开发
+状态：第一批 CB-01 / CB-02 / CB-05 已实现（分支 `feature/calibration-batch1`，见第 11、12 节）；CB-03 / CB-07（第二批）、CB-04 / CB-06（第三批）待开发，动工前各做一次小评审。
 范围：图像坐标与物理坐标之间的标定、换算和纠偏，涉及 `VisionFlow.Tools\Tools\GeometryTools.cs`（`AffinePointTool`）、编辑器标定界面，以及供上层调用的标定接口。
-HALCON 版本基线：20.11 及以上。
+HALCON 版本基线：22.11 及以上（与仓库现行基线一致，见 MATCH-MEASURE 计划第 12 节；原文写 20.11）。
 关联文档：
 
 - [定位匹配与几何测量补充开发计划](MATCH-MEASURE-TOOLS-PLAN.md)：MS-07 单位换算读取本文的标定结果。
@@ -74,6 +74,14 @@ HALCON 版本基线：20.11 及以上。
 - 运行工具通过 `CalibrationFile`（路径）引用标定结果，与现有 `AffinePointTool.CalibrationFile` 一致，多个流程可共用同一工位的标定文件。
 - 另支持把标定结果内嵌在工具中（字符串属性 `CalibrationData`，保存 JSON 内容），用于单流程自包含的场景；`CalibrationSource` 枚举选择 `File`（默认）/ `Embedded`。
 
+**实现说明（第一批已完成）**
+
+- 代码：`VisionFlow.Tools\Calibration\CalibrationService.cs`（命名空间 `VisionFlow.Tools.Calibration`）。静态类、纯计算，不依赖 FlowContext 与界面：`SolveAffine(points, transformType)`、`ValidatePoints`、`TransformPoint`、`FromAffine`、`ToJson` / `Parse`（内嵌数据）、`Save` / `Load`（文件）、`TryGetWorldPlaneScale`。`SolveRotationCenter`、`CalibrateCamera` 留到第二、三批。
+- 坐标约定：图像 (行, 列) 经矩阵得到物理 (X, Y)，即 `vector_to_hom_mat2d(Px = 行, Py = 列, Qx = X, Qy = Y)`；坐标转换的 `WorldRow` = X、`WorldColumn` = Y（沿用现有输出名与含义）。
+- 文件格式 `.vfcal.json`（UTF-8 无 BOM、缩进、中文不转义）：公共字段 `FormatVersion`（1）、`Kind`、`CreatedAt`（带时区）、`Description`、`Unit`；载荷 `Affine2D`（`HomMat2D` 6 个数、`Points`（`Row` / `Column` / `X` / `Y` / `Residual`）、`RmsError`、`MaxError`、`TransformType`）、`RotationCenter`（`Row` / `Column` / `X` / `Y` / `Radius` / `Points`（`Row` / `Column` / `Angle`）/ `RmsError`）、`Camera`（`CamParam` 名称与值列表、`Pose` 7 个数、`PlaneThickness`、`RmsError`、`PlateDescription`、`ImageCount`）。没有数据的段不写；枚举按名称写（文件给人读，与流程文件里工具枚举按数字保存不同）。`Kind` 为主要类型，必须带对应的段；一个文件可同时带 `Affine2D` 与 `RotationCenter`。`RotationCenter` / `Camera` 本批只定义格式与读写校验。
+- 读取：文件内容（跳过 BOM 与空白）以 `{` 开头按 JSON 解析，否则按旧版 `write_tuple` 读取（必须是 6 个数，视为 `Affine2D`，没有点对与误差）。格式错误、版本过高、`Kind` 缺段、矩阵 / 位姿个数不对都抛 `InvalidDataException`，信息带文件名（或“内嵌标定数据”）。
+- 相机参数：`get_cam_par_names` 是 HDevelop 过程，.NET 中没有对应算子，按 HALCON 文档内置 area_scan_division / polynomial、area_scan_telecentric_division / polynomial、line_scan_division / polynomial 的参数名表；其他类型（如 tilt）明确报“暂不支持”，留到 CB-04 补充。`image_width` / `image_height` 回到 HALCON 元组时为整数。
+
 ## 5. 编辑器标定助手
 
 三个助手放在“图像坐标转世界坐标”工具的编辑窗口中（以选项卡区分），也可从主窗口“工具”菜单单独打开。生成结果后可“保存为标定文件”或“内嵌到当前工具”。
@@ -89,6 +97,14 @@ HALCON 版本基线：20.11 及以上。
 - 变换类型：`affine`（默认，允许不同方向比例不同）/ `similarity`（等比例，无剪切）/ `rigid`（只有旋转平移，用于已知比例为 1 的场景）。
 - 计算后显示每个点的残差、均方根误差与最大误差，残差超过阈值的点标红，可删除后重算。
 - 至少 3 个点；少于 3 个或点共线时明确提示。
+
+**实现说明（第一批已完成）**
+
+- 宿主窗口（评审 P1-5）：新建 `WpfAffinePointToolEditWindow`（`VisionFlow.WpfToolEditors\Editors`），选项卡“运行参数”与“N 点标定”；CB-03 / CB-04 的助手页在后续批次加入同一窗口。主窗口没有“工具”菜单，改为工具栏“标定助手”按钮：选中“图像坐标转世界坐标”节点时打开其编辑窗口并直接显示 N 点标定页；否则单独打开助手（只有 N 点标定页，结果只能保存为标定文件）。
+- 取点：“取当前值”从上次运行结果读行 / 列变量，必须是单值，数组明确拒绝并提示引用元素（如 `排序1.Rows[0]`，评审 P2-4）；“在图像上点击取点”在标定图像上按下即加入一点、按住拖动微调；手动输入四个数加入一点。物理坐标可在表格中修改，或从 CSV 导入：每行“X,Y”依次写入各点（“序号,X,Y”同样可用），“行,列,X,Y”四列时整行导入；非数值行（标题）跳过。
+- 计算：调用 `CalibrationService.SolveAffine`，显示每点残差、RMS、最大误差与矩阵；残差超过阈值的点整行标红并在“状态”列标“超阈”，可“删除选中点 / 删除超阈点”后重算。点对有任何改动即作废上次结果，必须重新计算才能保存或内嵌。表格显示按位数格式化（图像坐标 3 位、物理坐标与残差 4 位），编辑框绑定原值，不会因显示位数截断数据。
+- 前置校验（22.11 实测，见第 11 节）：affine 对两点重合的 3 个点不报错而返回无意义矩阵，similarity / rigid 对共线点、甚至 2 个点也不报错，因此在调用算子前统一检查——至少 3 个点对、数值有限、图像点与物理点各自不重复的点不少于 3 个、且不共线（垂直主方向的分布不到主方向的 0.1% 视为共线），三种变换类型同样要求；算子仍报 #9211 时转成中文。rigid 用于有比例的点对时算子不报错，残差会直接暴露问题。
+- 结果：“保存为标定文件…”写 `.vfcal.json` 并让当前工具改用该文件（清空内嵌数据）；“内嵌到当前工具”把同样的 JSON 写入 `CalibrationData` 并清空 `CalibrationFile`。两者都先作用于窗口内的待提交状态，确定时写回；执行测试经 `ToolTestRun`。打开窗口时若当前标定带点对，载入表格与残差，便于继续调整。
 
 ### CB-03 旋转中心标定
 
@@ -119,6 +135,16 @@ HALCON 版本基线：20.11 及以上。
   - `Camera`：用点和沿角度方向的第二点分别换算后求方向角。
 - 输出：现有 `WorldRow` / `WorldColumn` 不变；新增 `WorldRows` / `WorldColumns`（数组）、`WorldAngle` / `WorldAngles`（弧度）、`WorldAngleDeg`、`Count`、`Matrix`（`Affine2D` 时输出所用矩阵，供 MS-07 单位换算等下游引用）。
 - `OriginRow` / `OriginColumn` 的偏移含义不变。
+
+**实现说明（第一批已完成）**
+
+- 输入：`Row` / `Column` / 新增“角度”（`AnglePath`，弧度，可选）均为 `AcceptsCollection`；个数按 `PairingHelper` 配对（相等逐一对应、一侧为 1 个时一对多、其他报错，任一侧为空时数量为 0 并输出 NaN / 空数组）。单值输入时输出与旧版逐项一致（回归用例）。
+- 标定来源：`CalibrationKind`（`Affine2D` 默认 / `Camera`）、`CalibrationSource`（`File` 默认 / `Embedded`）按数字保存；`Affine2D` 方式引用了变换矩阵时直接用该矩阵（现有行为，优先于标定来源）。文件按“完整路径 + 修改时间 + 大小”缓存，内嵌数据按内容缓存。互斥沿用第五批差分检测的做法（评审 P2-2）：`UseCalibrationFile` / `UseEmbeddedCalibration` 切换来源时清空另一侧，编辑窗口切换来源也走这两个方法；侧栏只改 `CalibrationSource`、手工改流程文件造成两侧同时有值时，流程校验与运行都报错并说明以哪个为准。内嵌数据只在编辑窗口生成与查看，侧栏隐藏 `CalibrationData`，来源为内嵌时同时隐藏 `CalibrationFile`；`Camera` 方式隐藏变换矩阵输入与 `Matrix` 输出。
+- 类型校验（评审 P1-4）：`Camera` 方式要求标定内容带 `Camera` 段，`Affine2D` 方式要求带 `Affine2D` 段（旧版矩阵文件视为 `Affine2D`）；不符时流程校验、运行、预热都报“来源（文件名或内嵌标定数据）+ 实际类型（含哪些段）+ 期望类型”，旧版矩阵文件用于 `Camera` 方式时单独说明。`Camera` 方式配置了变换矩阵引用时报错。文件缺失仍不在校验阶段报（沿用现有行为，文件可能部署时才放置），由预热与运行报告；文件存在时校验阶段即检查格式与类型。
+- 换算：`Affine2D` 用 `HomMat2D.TransformPose`（点与“沿角度方向 1 个单位”的第二点同时变换求方向）；`Camera` 用 `image_points_to_world_plane` 对点与沿角度方向 1 像素的第二点分别换算，`Scale` 取标定内容的 `Unit`（m / cm / mm / um，空为 m，其他单位明确报错）。
+- 角度约定（开工时与使用方确认）：`WorldAngle` 与图像角度同一约定——在 (`WorldRow`, `WorldColumn`) 坐标中，方向向量 (ΔWorldRow, ΔWorldColumn) 的 `WorldAngle` = atan2(−ΔWorldRow, ΔWorldColumn)。单位矩阵时等于输入角度，纯旋转 θ 时为 φ + θ；方向向量直接经变换求得，镜像（行列式为负）时自然正确（列镜像得 π − φ、行镜像得 −φ，用例固定），不用“φ + 矩阵旋转量”。注意 `Camera` 方式下测量平面 X 轴沿图像列方向（第 11 节），因此近正对的相机 `WorldAngle` ≈ 输入角度 − 90°，这是同一约定在 WorldRow = X 时的结果。
+- 输出：`WorldRow` / `WorldColumn`（第一个点，没有点时 NaN）、`WorldRows` / `WorldColumns`、`WorldAngle` / `WorldAngles` / `WorldAngleDeg`（没有角度输入时为 NaN / 空数组）、`Count`、`Matrix`（`Affine2D` 时为所用矩阵；引用的矩阵按借用语义写出；`Camera` 方式不写）。输出名均不与参数名相同（第二批守卫测试）。
+- 分类：工具箱移入新分类 `09 标定`，ID `affine-point`、类型名与图标不变；编辑器路由改到新窗口（原走通用视觉预览窗口）。
 
 ### CB-06 畸变校正（新工具）
 
@@ -173,3 +199,51 @@ HALCON 版本基线：20.11 及以上。
 1. CB-01（文件格式与服务）、CB-02（N 点标定助手）、CB-05（坐标转换增强）：最常用的 9 点标定闭环。
 2. CB-03（旋转中心）、CB-07（纠偏计算）：机器人对位闭环。
 3. CB-04（相机标定）、CB-06（畸变校正）。
+
+## 11. 第一批算子探测结论（CB-01 / CB-02 / CB-05）
+
+**探测环境**：HALCON 22.11 Steady（原生库与 .NET 库均为 22.11，见 MATCH-MEASURE 计划第 12 节）；部署到其他版本前需复核。
+
+| 问题 | 结论 |
+|---|---|
+| `image_points_to_world_plane` 的 `Scale` | 是“输出单位”，不是“物理单位 / 像素”：`m` / `cm` / `mm` / `um` 时世界坐标即以该单位输出；数值 s 时输出为“米 ÷ s”（0.001 与 `mm` 相同，1000 得到千米级）。默认 `m`，`get_param_info` 的取值列表为空。位姿的长度单位为米。例：焦距 16 mm、像元 5 µm、平面在 0.5 m 处，100 像素 → 0.015625 m = 15.625 mm。测量平面 X 轴沿图像列方向、Y 轴沿行方向（正对时列 +100 → X 增加，行 +100 → Y 增加） |
+| `vector_to_hom_mat2d` 共线 / 重复 | 3 点或 4 点共线、3 点全部重合：#9211（Matrix is not positive definite）；**3 点中两点重合（只有 2 个不同点）不报错，返回无意义矩阵**；少于 3 点 #1401；图像点与物理点个数不同 #1403 |
+| `vector_to_similarity` / `vector_to_rigid` | 共线点、甚至只有 2 个点都能求解（相似、刚体变换 2 点即确定）；全部重合 #9211；1 点 #1401。rigid 用于有比例的点对不报错，返回比例为 1 的矩阵与错误的平移，只有残差能暴露 |
+| 结论 | 服务在调用算子前统一做中文前置检查（第 5 节 CB-02 实现说明），#9211 仍转成中文 |
+| `vector_to_hom_mat2d` 可复现性（界面验收中发现） | 同一组输入在同一进程内反复调用，会得到两种结果（300 次中 231 / 69 次），差 1~2 ULP（如 0.001800549770709211 与 0.0018005497707092102），跨进程同样。运行时只用标定文件中保存的矩阵，换算结果确定；但“用相同点对重新求解得到逐位相同的矩阵”不成立，比较重解结果要按相对 1e-12 |
+| `get_cam_par_names` | 是 HDevelop 过程，.NET 的 `HOperatorSet` 中没有；参数名按 HALCON 文档内置（CB-01 实现说明） |
+
+## 12. 第一批（CB-01 + CB-02 + CB-05）评审处理与验收记录
+
+**评审意见处理**（[CALIBRATION-TOOLS-PLAN-REVIEW.md](CALIBRATION-TOOLS-PLAN-REVIEW.md)）
+
+| 条目 | 处理 |
+|---|---|
+| P1-1 CB-06 `PixelSize` 同名 | 属第三批；CB-06 输出届时改名 `ActualPixelSize`。本批新增输出均不与参数同名（守卫用例） |
+| P1-2 CB-07 符号约定 | 属第二批，动工前补“符号约定”一节；本批先钉死 CB-05 的角度约定（第 6 节实现说明），CB-07 在其上定义 |
+| P1-3 CB-04 示例图像 | 属第三批，届时探测 |
+| P1-4 Camera 校验双路径 | 流程校验、运行、预热都报“来源 + 实际类型 + 期望类型”（用例覆盖文件、旧版矩阵文件、内嵌三种来源）；`Scale` 语义见第 11 节并在代码中注释 |
+| P1-5 新建宿主窗口 | `WpfAffinePointToolEditWindow`（运行参数页 + N 点标定页），执行测试经 `ToolTestRun`；主窗口没有“工具”菜单，以工具栏“标定助手”按钮代替 |
+| P2-1 服务形态 | 静态、纯计算、不依赖 FlowContext；旧版 `write_tuple` 按内容识别放在 `Load` |
+| P2-2 内嵌 / 文件互斥 | `UseCalibrationFile` / `UseEmbeddedCalibration` 切换清空另一侧；校验与运行拦截手工改出的冲突；内嵌 JSON 在流程文件中按既有行为转义为 `\uXXXX`（README 已注明） |
+| P2-4 取当前值 | 要求单值，数组明确拒绝并提示引用元素 |
+| P2-5 登记与分类 | 新分类 `09 标定`，`affine-point` 移入，ID / 类型名 / 图标不变；`BuiltinToolIdentities` 已有固定 ID、`ToolIcons.xaml` 已有图标，无需新增；路由改到新窗口；README 新增“标定”行 |
+| P2-6 枚举 | `CalibrationKind` / `CalibrationSource` 按数字保存、默认值为现有行为（历史流程加载用例）；文件内的 `Kind` / `TransformType` 按名称写 |
+| P2-7 守卫测试 | 保持通过 |
+| P3 文档 | 计划头部、CB-01 / CB-02 / CB-05 实现说明、第 11 节、README（工具表、`.vfcal.json` 约定） |
+
+**验收结果**
+
+- 单元/集成测试：新增 `CalibrationBatch1Tests` 32 个用例：`.vfcal.json` 全字段保存读取一致（含 RotationCenter / Camera 段、中文可读、重新序列化逐字相同）；旧版 `write_tuple` 文件、BOM 与前导空白识别；5 种格式错误；相机参数名表往返；已知仿射加 ±0.1 像素噪声求解（网格内与真值之差 < 0.005 mm，即噪声 × 比例）；相似 / 刚体变换恢复真值；三种变换类型 × 5 种退化（少于 3 点、共线、重复、物理点共线、NaN）共 15 例；数组与逐个单值一致、一对多配对、个数不符、空数组；单位矩阵 / 旋转 / 列镜像 / 行镜像 / 镜像加转置的角度；Camera 方式与直接调用 `image_points_to_world_plane` 逐位一致及不支持的单位；三种来源的类型不符在校验、运行、预热中给出相同信息；互斥与冲突拦截；旧矩阵文件单值、引用矩阵优先、未配置与文件缺失提示、文件替换重读、历史流程默认值（回归门禁）；保存加载、命名守卫、工具箱 `09 标定`。全量 `dotnet test`（`Category!=Soak`）923 个通过。
+- 界面验收：脚本经 Windows UI Automation 驱动真实的 `VisionFlow.WpfApp.exe`，35 项检查全部通过（修复后连续三次）：
+  - 用正常文件对话框打开流程（图像加载 → 阈值 → 区域排序 → 方向特征，9 个旋转 20° 的目标），从工具箱 `09 标定` 新建坐标转换；选中该节点点工具栏“标定助手”，直接打开其编辑窗口的 N 点标定页。
+  - 三种取点：数组变量“取当前值”被拒绝并提示引用元素，改为 `排序1.Rows[0]` 后取到的值与目标中心逐位相同；在图像上真实鼠标点击取点（与真值差 < 1.5 像素）；手动输入 7 个点。
+  - 经系统打开对话框导入 CSV（标题行跳过），网格中心点物理 X 故意偏 1 mm：计算后只有该点超阈（残差 0.89 mm，其余约 0.11 mm），整行标红；删除超阈点重算后 8 个点无超阈。
+  - 经保存对话框保存 `.vfcal.json`，运行参数页回写来源与路径；以数组输入（9 个中心 + 方向角）执行测试，结果表与无界面输出逐字一致；界面运行 6 个单值、3 个数组长度与无界面运行保存的文件逐字一致；文件中的点对与输入逐位相同，矩阵与用同样点对无界面求解一致（相对 1e-12，见第 11 节可复现性）；9 个中心换算与真值最大偏差 0.005 ~ 0.012 mm、角度偏差 0.002° ~ 0.012°（真值 = 图像方向 + 2°；随每次点击取点的位置变化，各次运行均在 0.08 mm 的验收界内）。
+  - “内嵌到当前工具”后来源为内嵌、标定文件框隐藏，侧栏隐藏 `CalibrationFile` / `CalibrationData`；运行结果与文件标定一致；侧栏只把来源改回 File 时运行被流程校验拦截（内嵌数据仍在），改回后恢复。
+  - 保存 → 重新加载 → 再运行与无界面对照逐字一致，重新打开窗口来源、角度输入与标定摘要回显正确；未选中坐标转换节点时，工具栏按钮单独打开助手（只有 N 点标定页，“内嵌到当前工具”不可用）。
+- 验证中发现并处理的问题：
+  1. `InvalidDataException` 不是 `IOException` 的子类，内嵌数据损坏时流程校验抛出异常而不是报告问题（单元测试发现）；校验、运行与编辑窗口的捕获补上该类型。
+  2. 点对表格直接显示完整精度的双精度数，在助手页的列宽下全部被截断成“240....”（界面截图发现）；改为按位数格式化显示、编辑框绑定原值，并加宽右栏。
+  3. `vector_to_hom_mat2d` 结果不可逐位复现（见第 11 节）：属 HALCON 行为，不是应用问题；验收脚本原先要求重解矩阵逐位相同，改为相对 1e-12 并记录在案。
+- 脚本问题（已修脚本）：区域方向特征以 180° 为周期（实测 −160.92° 与 20° 同一方向轴）；DataGrid 按需生成行，读取与截图前先滚动到目标行；运行后侧栏不再显示该工具，需要重新选中节点；PowerShell 数组字面量中逗号优先于 `+`，批量替换脚本丢失了几行，改用编辑工具。

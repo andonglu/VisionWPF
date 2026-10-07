@@ -1,0 +1,319 @@
+<Window x:Class="VisionFlow.WpfToolEditors.Editors.WpfAffinePointToolEditWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:wfi="clr-namespace:System.Windows.Forms.Integration;assembly=WindowsFormsIntegration"
+        xmlns:vfc="clr-namespace:VisionFlow.Controls;assembly=VisionFlow.Controls"
+        Title="图像坐标转世界坐标"
+        Width="1320"
+        Height="880"
+        MinWidth="1180"
+        MinHeight="760"
+        WindowStartupLocation="CenterOwner">
+    <Grid Margin="24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <TabControl x:Name="MainTabs" Grid.Row="0">
+            <TabItem x:Name="RunTab" Header="运行参数">
+                <Grid Margin="0,16,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="420" />
+                    </Grid.ColumnDefinitions>
+
+                    <Border Grid.Column="0" Style="{StaticResource PanelBorderStyle}" Margin="0,0,24,0">
+                        <DockPanel>
+                            <TextBlock DockPanel.Dock="Top" Text="测试结果" Style="{StaticResource EditorSectionTitleStyle}" />
+                            <TextBlock x:Name="RunSummaryText" DockPanel.Dock="Top" Margin="0,0,0,8" TextWrapping="Wrap" FontWeight="SemiBold" />
+                            <DataGrid x:Name="RunResultGrid" AutoGenerateColumns="False" IsReadOnly="True">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="序号" Binding="{Binding Index}" Width="60" />
+                                    <DataGridTextColumn Header="WorldRow" Binding="{Binding WorldRow}" Width="*" />
+                                    <DataGridTextColumn Header="WorldColumn" Binding="{Binding WorldColumn}" Width="*" />
+                                    <DataGridTextColumn Header="WorldAngle" Binding="{Binding WorldAngle}" Width="*" />
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </DockPanel>
+                    </Border>
+
+                    <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto">
+                        <StackPanel>
+                            <Border Style="{StaticResource EditorCardStyle}">
+                                <StackPanel>
+                                    <TextBlock Text="输入" Style="{StaticResource EditorSectionTitleStyle}" />
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="110" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                        </Grid.RowDefinitions>
+                                        <TextBlock Grid.Row="0" Grid.Column="0" Text="模块名" Style="{StaticResource EditorFieldLabelStyle}" />
+                                        <TextBox x:Name="ModuleNameText" Grid.Row="0" Grid.Column="1" />
+                                        <TextBlock Grid.Row="1" Grid.Column="0" Text="Row" Style="{StaticResource EditorFieldLabelStyle}" />
+                                        <ComboBox x:Name="RowPathCombo" Grid.Row="1" Grid.Column="1" IsEditable="True" />
+                                        <TextBlock Grid.Row="2" Grid.Column="0" Text="Column" Style="{StaticResource EditorFieldLabelStyle}" />
+                                        <ComboBox x:Name="ColumnPathCombo" Grid.Row="2" Grid.Column="1" IsEditable="True" />
+                                        <TextBlock Grid.Row="3" Grid.Column="0" Text="角度" Style="{StaticResource EditorFieldLabelStyle}" />
+                                        <ComboBox x:Name="AnglePathCombo" Grid.Row="3" Grid.Column="1" IsEditable="True" />
+                                        <TextBlock x:Name="MatrixPathLabel" Grid.Row="4" Grid.Column="0" Text="变换矩阵" Style="{StaticResource EditorFieldLabelStyle}" />
+                                        <ComboBox x:Name="MatrixPathCombo" Grid.Row="4" Grid.Column="1" IsEditable="True" />
+                                        <TextBlock Grid.Row="5" Grid.Column="1" Margin="0,4,0,0" TextWrapping="Wrap"
+                                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                                   Text="Row / Column / 角度可为单值或数组（个数相等逐一对应，一侧为 1 个时一对多）；角度为弧度，可选。引用变换矩阵时（仅仿射矩阵方式）优先使用该矩阵。" />
+                                    </Grid>
+                                </StackPanel>
+                            </Border>
+
+                            <Border Style="{StaticResource EditorCardStyle}">
+                                <StackPanel>
+                                    <TextBlock Text="标定" Style="{StaticResource EditorSectionTitleStyle}" />
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="110" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                        </Grid.RowDefinitions>
+                                        <TextBlock Grid.Row="0" Grid.Column="0" Text="标定方式" Style="{StaticResource EditorFieldLabelStyle}" />
+                                        <ComboBox x:Name="KindCombo" Grid.Row="0" Grid.Column="1" SelectionChanged="KindCombo_SelectionChanged" />
+                                        <TextBlock Grid.Row="1" Grid.Column="0" Text="标定来源" Style="{StaticResource EditorFieldLabelStyle}" />
+                                        <ComboBox x:Name="SourceCombo" Grid.Row="1" Grid.Column="1" SelectionChanged="SourceCombo_SelectionChanged" />
+                                        <TextBlock x:Name="CalibrationFileLabel" Grid.Row="2" Grid.Column="0" Text="标定文件" Style="{StaticResource EditorFieldLabelStyle}" />
+                                        <Grid x:Name="CalibrationFilePanel" Grid.Row="2" Grid.Column="1">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="36" />
+                                            </Grid.ColumnDefinitions>
+                                            <TextBox x:Name="CalibrationFileText" Grid.Column="0" LostFocus="CalibrationFileText_LostFocus" />
+                                            <Button Grid.Column="1" Content="..." MinWidth="32" Width="32" Padding="0" Click="BrowseCalibrationFile_Click" />
+                                        </Grid>
+                                    </Grid>
+                                    <TextBlock x:Name="CalibrationInfoText" Margin="0,8,0,0" TextWrapping="Wrap" />
+                                    <TextBlock Margin="0,4,0,0" TextWrapping="Wrap" Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                               Text="标定文件为 .vfcal.json（旧版 write_tuple 矩阵文件按内容自动识别，继续可用）；内嵌时标定内容随流程文件保存。切换来源会清空另一侧。" />
+                                </StackPanel>
+                            </Border>
+
+                            <Border Style="{StaticResource EditorCardStyle}">
+                                <StackPanel>
+                                    <TextBlock Text="原点偏移" Style="{StaticResource EditorSectionTitleStyle}" />
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="110" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                        </Grid.RowDefinitions>
+                                        <TextBlock Grid.Row="0" Grid.Column="0" Text="OriginRow" Style="{StaticResource EditorFieldLabelStyle}" />
+                                        <TextBox x:Name="OriginRowText" Grid.Row="0" Grid.Column="1" />
+                                        <TextBlock Grid.Row="1" Grid.Column="0" Text="OriginColumn" Style="{StaticResource EditorFieldLabelStyle}" />
+                                        <TextBox x:Name="OriginColumnText" Grid.Row="1" Grid.Column="1" />
+                                    </Grid>
+                                    <Button Content="执行测试" Margin="0,16,0,0" HorizontalAlignment="Right" Click="TestRun_Click" />
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+                    </ScrollViewer>
+                </Grid>
+            </TabItem>
+
+            <TabItem x:Name="AssistantTab" Header="N 点标定">
+                <Grid Margin="0,16,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="540" />
+                    </Grid.ColumnDefinitions>
+
+                    <Border Grid.Column="0" Style="{StaticResource PanelBorderStyle}" Margin="0,0,24,0">
+                        <DockPanel>
+                            <Grid DockPanel.Dock="Top" Margin="0,0,0,8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="260" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="标定图像" Style="{StaticResource EditorSectionTitleStyle}" />
+                                <ComboBox x:Name="CalibImageCombo" Grid.Column="1" IsEditable="True" SelectionChanged="CalibImageCombo_SelectionChanged" />
+                            </Grid>
+                            <TextBlock x:Name="PickHintText" DockPanel.Dock="Bottom" Margin="0,8,0,0" TextWrapping="Wrap"
+                                       Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                       Text="十字为点对表中的图像点；点击“在图像上点击取点”后，在图像上按下鼠标即加入一个点（按住拖动可微调）。" />
+                            <wfi:WindowsFormsHost>
+                                <vfc:HalconImageView x:Name="CalibImageView" />
+                            </wfi:WindowsFormsHost>
+                        </DockPanel>
+                    </Border>
+
+                    <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto">
+                        <StackPanel>
+                            <Border Style="{StaticResource EditorCardStyle}">
+                                <StackPanel>
+                                    <TextBlock Text="采集点对" Style="{StaticResource EditorSectionTitleStyle}" />
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="96" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                        </Grid.RowDefinitions>
+                                        <TextBlock Grid.Row="0" Grid.Column="0" Text="行变量" Style="{StaticResource EditorFieldLabelStyle}" />
+                                        <ComboBox x:Name="PickRowVarCombo" Grid.Row="0" Grid.Column="1" IsEditable="True" />
+                                        <TextBlock Grid.Row="1" Grid.Column="0" Text="列变量" Style="{StaticResource EditorFieldLabelStyle}" />
+                                        <ComboBox x:Name="PickColumnVarCombo" Grid.Row="1" Grid.Column="1" IsEditable="True" />
+                                    </Grid>
+                                    <WrapPanel Margin="0,8,0,0">
+                                        <Button Content="取当前值" Margin="0,0,8,8" Click="TakeCurrentValue_Click" />
+                                        <Button Content="在图像上点击取点" Margin="0,0,8,8" Click="PickOnImage_Click" />
+                                    </WrapPanel>
+                                    <Grid Margin="0,4,0,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                        </Grid.RowDefinitions>
+                                        <TextBlock Grid.Row="0" Grid.Column="0" Text="图像行" Style="{StaticResource EditorFieldLabelStyle}" />
+                                        <TextBlock Grid.Row="0" Grid.Column="1" Text="图像列" Style="{StaticResource EditorFieldLabelStyle}" />
+                                        <TextBlock Grid.Row="0" Grid.Column="2" Text="物理 X" Style="{StaticResource EditorFieldLabelStyle}" />
+                                        <TextBlock Grid.Row="0" Grid.Column="3" Text="物理 Y" Style="{StaticResource EditorFieldLabelStyle}" />
+                                        <TextBox x:Name="ManualRowText" Grid.Row="1" Grid.Column="0" Margin="0,0,4,0" />
+                                        <TextBox x:Name="ManualColumnText" Grid.Row="1" Grid.Column="1" Margin="0,0,4,0" />
+                                        <TextBox x:Name="ManualXText" Grid.Row="1" Grid.Column="2" Margin="0,0,4,0" />
+                                        <TextBox x:Name="ManualYText" Grid.Row="1" Grid.Column="3" />
+                                    </Grid>
+                                    <WrapPanel Margin="0,8,0,0">
+                                        <Button Content="手动添加点" Margin="0,0,8,8" Click="AddManualPoint_Click" />
+                                        <Button Content="导入物理坐标 CSV…" Margin="0,0,8,8" Click="ImportCsv_Click" />
+                                    </WrapPanel>
+                                    <TextBlock TextWrapping="Wrap" Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                               Text="取当前值要求引用单值（数组请引用元素，如 匹配1.Rows[0]）。物理坐标可在表格中直接修改；CSV 每行“X,Y”依次写入各点（“序号,X,Y”同样可用），“行,列,X,Y”四列时整行导入。" />
+                                </StackPanel>
+                            </Border>
+
+                            <Border Style="{StaticResource EditorCardStyle}">
+                                <StackPanel>
+                                    <TextBlock Text="点对" Style="{StaticResource EditorSectionTitleStyle}" />
+                                    <DataGrid x:Name="PointGrid" Height="250" AutoGenerateColumns="False" CanUserAddRows="False" CanUserDeleteRows="False"
+                                              CanUserSortColumns="False" SelectionMode="Single" CellEditEnding="PointGrid_CellEditEnding">
+                                        <DataGrid.RowStyle>
+                                            <Style TargetType="DataGridRow" BasedOn="{StaticResource {x:Type DataGridRow}}">
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsOutlier}" Value="True">
+                                                        <Setter Property="Background" Value="#FDE7E9" />
+                                                        <Setter Property="Foreground" Value="{DynamicResource SystemFillColorCriticalBrush}" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </DataGrid.RowStyle>
+                                        <DataGrid.Columns>
+                                            <DataGridTextColumn Header="序号" Binding="{Binding Index}" Width="56" IsReadOnly="True" />
+                                            <!-- 显示按位数格式化；编辑框绑定原值，避免未改动就提交时把数值截成显示位数 -->
+                                            <DataGridTemplateColumn Header="图像行" Width="*">
+                                                <DataGridTemplateColumn.CellTemplate>
+                                                    <DataTemplate><TextBlock Text="{Binding Row, StringFormat=F3}" /></DataTemplate>
+                                                </DataGridTemplateColumn.CellTemplate>
+                                                <DataGridTemplateColumn.CellEditingTemplate>
+                                                    <DataTemplate><TextBox Text="{Binding Row, UpdateSourceTrigger=PropertyChanged}" /></DataTemplate>
+                                                </DataGridTemplateColumn.CellEditingTemplate>
+                                            </DataGridTemplateColumn>
+                                            <DataGridTemplateColumn Header="图像列" Width="*">
+                                                <DataGridTemplateColumn.CellTemplate>
+                                                    <DataTemplate><TextBlock Text="{Binding Column, StringFormat=F3}" /></DataTemplate>
+                                                </DataGridTemplateColumn.CellTemplate>
+                                                <DataGridTemplateColumn.CellEditingTemplate>
+                                                    <DataTemplate><TextBox Text="{Binding Column, UpdateSourceTrigger=PropertyChanged}" /></DataTemplate>
+                                                </DataGridTemplateColumn.CellEditingTemplate>
+                                            </DataGridTemplateColumn>
+                                            <DataGridTemplateColumn Header="物理 X" Width="*">
+                                                <DataGridTemplateColumn.CellTemplate>
+                                                    <DataTemplate><TextBlock Text="{Binding X, StringFormat=F4}" /></DataTemplate>
+                                                </DataGridTemplateColumn.CellTemplate>
+                                                <DataGridTemplateColumn.CellEditingTemplate>
+                                                    <DataTemplate><TextBox Text="{Binding X, UpdateSourceTrigger=PropertyChanged}" /></DataTemplate>
+                                                </DataGridTemplateColumn.CellEditingTemplate>
+                                            </DataGridTemplateColumn>
+                                            <DataGridTemplateColumn Header="物理 Y" Width="*">
+                                                <DataGridTemplateColumn.CellTemplate>
+                                                    <DataTemplate><TextBlock Text="{Binding Y, StringFormat=F4}" /></DataTemplate>
+                                                </DataGridTemplateColumn.CellTemplate>
+                                                <DataGridTemplateColumn.CellEditingTemplate>
+                                                    <DataTemplate><TextBox Text="{Binding Y, UpdateSourceTrigger=PropertyChanged}" /></DataTemplate>
+                                                </DataGridTemplateColumn.CellEditingTemplate>
+                                            </DataGridTemplateColumn>
+                                            <DataGridTextColumn Header="残差" Binding="{Binding ResidualText}" Width="*" IsReadOnly="True" />
+                                            <DataGridTextColumn Header="状态" Binding="{Binding State}" Width="64" IsReadOnly="True" />
+                                        </DataGrid.Columns>
+                                    </DataGrid>
+                                    <WrapPanel Margin="0,8,0,0">
+                                        <Button Content="删除选中点" Margin="0,0,8,8" Click="DeletePoint_Click" />
+                                        <Button Content="删除超阈点" Margin="0,0,8,8" Click="DeleteOutliers_Click" />
+                                        <Button Content="清空" Margin="0,0,0,8" Click="ClearPoints_Click" />
+                                    </WrapPanel>
+                                </StackPanel>
+                            </Border>
+
+                            <Border Style="{StaticResource EditorCardStyle}">
+                                <StackPanel>
+                                    <TextBlock Text="计算与保存" Style="{StaticResource EditorSectionTitleStyle}" />
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="110" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                        </Grid.RowDefinitions>
+                                        <TextBlock Grid.Row="0" Grid.Column="0" Text="变换类型" Style="{StaticResource EditorFieldLabelStyle}" />
+                                        <ComboBox x:Name="TransformTypeCombo" Grid.Row="0" Grid.Column="1" />
+                                        <TextBlock Grid.Row="1" Grid.Column="0" Text="残差阈值" Style="{StaticResource EditorFieldLabelStyle}" />
+                                        <TextBox x:Name="ResidualThresholdText" Grid.Row="1" Grid.Column="1" Text="0.05" />
+                                        <TextBlock Grid.Row="2" Grid.Column="0" Text="物理单位" Style="{StaticResource EditorFieldLabelStyle}" />
+                                        <TextBox x:Name="UnitText" Grid.Row="2" Grid.Column="1" Text="mm" />
+                                        <TextBlock Grid.Row="3" Grid.Column="0" Text="描述" Style="{StaticResource EditorFieldLabelStyle}" />
+                                        <TextBox x:Name="DescriptionText" Grid.Row="3" Grid.Column="1" />
+                                    </Grid>
+                                    <Button Content="计算" Margin="0,12,0,0" HorizontalAlignment="Right" Style="{StaticResource AccentButtonStyle}" Click="Solve_Click" />
+                                    <TextBlock x:Name="SolveResultText" Margin="0,8,0,0" TextWrapping="Wrap" FontWeight="SemiBold" />
+                                    <TextBlock x:Name="MatrixText" Margin="0,4,0,0" TextWrapping="Wrap" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                                    <WrapPanel Margin="0,12,0,0" HorizontalAlignment="Right">
+                                        <Button Content="保存为标定文件…" Margin="0,0,8,0" Click="SaveCalibrationFile_Click" />
+                                        <Button x:Name="EmbedButton" Content="内嵌到当前工具" Click="EmbedCalibration_Click" />
+                                    </WrapPanel>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+                    </ScrollViewer>
+                </Grid>
+            </TabItem>
+        </TabControl>
+
+        <DockPanel Grid.Row="1" LastChildFill="False" Margin="0,24,0,0">
+            <TextBlock x:Name="StatusText" VerticalAlignment="Center" TextWrapping="Wrap" MaxWidth="900"
+                       Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+            <Button x:Name="CancelButton" DockPanel.Dock="Right" Content="取消" MinWidth="96" Margin="8,0,0,0" Click="Cancel_Click" />
+            <Button x:Name="OkButton" DockPanel.Dock="Right" Content="确定" MinWidth="96" Style="{StaticResource AccentButtonStyle}" Click="Ok_Click" />
+        </DockPanel>
+    </Grid>
+</Window>
