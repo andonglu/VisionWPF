@@ -131,7 +131,11 @@ namespace VisionFlow.Editing
                     ImagePath = "Input.Image"
                 })));
             Register(new ToolboxItem("regionprocess", "03 区域处理", "区域处理", () =>
-                new ToolNode(new RegionProcessTool(NextModuleName("区域处理")))));
+                new ToolNode(new RegionProcessTool(NextModuleName("区域处理"))
+                {
+                    // 只有“取反”读取裁剪图像；默认值放在工具箱而非构造函数，历史流程加载后保持为空
+                    ClipImagePath = "Input.Image"
+                })));
             Register(new ToolboxItem("manual-region", "03 区域处理", "手动 Region", () =>
                 new ToolNode(new ManualRegionTool(NextModuleName("手动Region")))));
             Register(new ToolboxItem("region-difference", "03 区域处理", "Region 相减", () =>
@@ -145,12 +149,18 @@ namespace VisionFlow.Editing
             // “Region Union1”“形态学”已并入“区域处理”（TR-11），不再提供独立入口；类型与 ID 保留用于历史流程
             Register(new ToolboxItem("region-features", "03 区域处理", "Region 特征值", () =>
                 new ToolNode(new RegionFeaturesTool(NextModuleName("Region特征")))));
-            Register(new ToolboxItem("region-min-max-gray", "03 区域处理", "MinMaxGray 灰度统计", () =>
+            Register(new ToolboxItem("region-min-max-gray", "03 区域处理", "区域灰度统计", () =>
                 new ToolNode(new RegionMinMaxGrayTool(NextModuleName("灰度统计")))));
             Register(new ToolboxItem("selectregion", "03 区域处理", "区域筛选", () =>
-                new ToolNode(new SelectRegionTool(NextModuleName("区域筛选")))));
+                new ToolNode(new SelectRegionTool(NextModuleName("区域筛选"))
+                {
+                    // 只有“按灰度筛选”读取图像；默认值放在工具箱，历史流程加载后保持为空
+                    ImagePath = "Input.Image"
+                })));
             Register(new ToolboxItem("region-sort", "03 区域处理", "区域排序(行列编号)", () =>
                 new ToolNode(new RegionSortTool(NextModuleName("区域排序")))));
+            Register(new ToolboxItem("xld-to-region", "03 区域处理", "XLD 转 Region", () =>
+                new ToolNode(new XldToRegionTool(NextModuleName("XLD转Region")))));
             Register(new ToolboxItem("zone-inspect", "03 区域处理", "分区检测", () =>
                 new ToolNode(new ZoneInspectTool(NextModuleName("分区检测")))));
             Register(new ToolboxItem("regionpose", "01 定位匹配", "区域定位", () =>
@@ -165,12 +175,16 @@ namespace VisionFlow.Editing
                 new ToolNode(new SegmentXldTool(NextModuleName("XLD分割")))));
             Register(new ToolboxItem("xld-features", "04 XLD轮廓", "XLD 特征值", () =>
                 new ToolNode(new XldFeaturesTool(NextModuleName("XLD特征")))));
+            Register(new ToolboxItem("region-to-xld", "04 XLD轮廓", "Region 转 XLD", () =>
+                new ToolNode(new RegionToXldTool(NextModuleName("Region转XLD")))));
             Register(new ToolboxItem("fit-line", "05 几何测量", "拟合直线", () =>
                 new ToolNode(new FitLineTool(NextModuleName("拟合直线")))));
             Register(new ToolboxItem("fit-circle", "05 几何测量", "拟合圆", () =>
                 new ToolNode(new FitCircleTool(NextModuleName("拟合圆")))));
             Register(new ToolboxItem("intersection-lines", "05 几何测量", "线线交点", () =>
                 new ToolNode(new IntersectionLinesTool(NextModuleName("线线交点")))));
+            Register(new ToolboxItem("region-distance", "05 几何测量", "区域距离", () =>
+                new ToolNode(new RegionDistanceTool(NextModuleName("区域距离")))));
             Register(new ToolboxItem("affine-point", "05 几何测量", "图像坐标转世界坐标", () =>
                 new ToolNode(new AffinePointTool(NextModuleName("坐标转换")))));
             Register(new ToolboxItem("angle-convert", "05 几何测量", "角度换算(弧度/角度)", () =>

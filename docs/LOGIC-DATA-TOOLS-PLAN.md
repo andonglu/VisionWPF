@@ -1,7 +1,7 @@
 # 数据处理、判定与逻辑补充开发计划
 
 编写日期：2026-10-06
-状态：待开发
+状态：已实现（LD-01 ~ LD-08，分支 `feature/dynamic-tool-outputs`）
 范围：流程节点（`VisionFlow.Base\Nodes`、`VisionFlow.Base\Conditions`）与工具箱“07 结果判定”中的数据处理、判定类工具。
 关联文档：
 

@@ -136,6 +136,7 @@ namespace VisionFlow.WpfApp.Ui
             });
 
             IReadOnlyList<ToolInputRefDef> inputRefs = ToolMetadata.GetInputRefs(tool.GetType());
+            var visibility = tool as IToolParameterVisibility;
             AddSection("输入引用");
             if (inputRefs.Count == 0)
             {
@@ -143,19 +144,23 @@ namespace VisionFlow.WpfApp.Ui
             }
             foreach (ToolInputRefDef input in inputRefs)
             {
-                AddInputRefRow(node, input);
+                if (visibility == null || visibility.IsParameterVisible(input.PropertyName))
+                {
+                    AddInputRefRow(node, input);
+                }
             }
 
             AddSection("参数");
             bool hasScalar = false;
             foreach (PropertyInfo property in SerializableProperties(tool.GetType()))
             {
-                if (inputRefs.Any(i => i.PropertyName == property.Name))
+                if (inputRefs.Any(i => i.PropertyName == property.Name)
+                    || (visibility != null && !visibility.IsParameterVisible(property.Name)))
                 {
                     continue;
                 }
                 hasScalar = true;
-                AddScalarRow(tool, property);
+                AddScalarRow(tool, property, node);
             }
             if (!hasScalar)
             {
@@ -737,7 +742,7 @@ namespace VisionFlow.WpfApp.Ui
                 value => input.Property.SetValue(node.Tool, value));
         }
 
-        private void AddScalarRow(ToolBase tool, PropertyInfo property)
+        private void AddScalarRow(ToolBase tool, PropertyInfo property, FlowNode node = null)
         {
             Type type = property.PropertyType;
             if (type == typeof(bool))
@@ -770,8 +775,17 @@ namespace VisionFlow.WpfApp.Ui
 
             if (type.IsEnum)
             {
-                AddComboRow(property.Name, Enum.GetNames(type), property.GetValue(tool).ToString(),
-                    value => property.SetValue(tool, Enum.Parse(type, value)));
+                AddComboRow(property.Name, Enum.GetNames(type), property.GetValue(tool).ToString(), value =>
+                {
+                    object parsed = Enum.Parse(type, value);
+                    bool changed = !Equals(property.GetValue(tool), parsed);
+                    property.SetValue(tool, parsed);
+                    if (changed && tool is IToolParameterVisibility && node != null)
+                    {
+                        // 方式改变后显示的参数随之变化；等当前下拉事件结束再重建面板
+                        _panel.Dispatcher.BeginInvoke(new Action(() => Build(node)));
+                    }
+                });
                 return;
             }
 

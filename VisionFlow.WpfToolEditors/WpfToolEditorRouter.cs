@@ -86,6 +86,8 @@ namespace VisionFlow.WpfToolEditors
                 || tool is ZoneInspectTool
                 || tool is RegionPoseTool
                 || tool is XldToolBase
+                || tool is XldToRegionTool
+                || tool is RegionDistanceTool
                 || tool is XldFeaturesTool
                 || tool is FitLineTool
                 || tool is FitCircleTool

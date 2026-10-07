@@ -141,7 +141,7 @@
 | `ContourToContour` | `distance_cc_min_points` | 轮廓 1（必填）、轮廓 2（可选，本模式必填） |
 
 - `ContourToContour` 新增 `CcMode`：`fast_point_to_segment`（默认）/ `point_to_segment`。
-- 配对规则与 RG-07 完全一致：
+- 配对规则与 RG-07 完全一致，直接使用已实现的 `PairingHelper`（`VisionFlow.Tools\Tools\PairingHelper.cs`，RG-07 与数组处理的逐元素运算共用）：
   - 两侧个数相等：第 i 个与第 i 个配对（`distance_cc_min_points` 的原生语义，要求个数相等）。
   - 一侧只有 1 个：与另一侧每个对象分别计算。
   - 两侧个数不等且都大于 1：运行失败，提示“两组对象个数不一致（N 对 M），无法逐一配对”。

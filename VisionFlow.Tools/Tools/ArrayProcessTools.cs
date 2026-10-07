@@ -323,19 +323,18 @@ namespace VisionFlow.Tools
             }
         }
 
-        /// <summary>逐元素运算：两侧个数相等时一一对应；一侧只有一个元素时与另一侧每个元素运算；否则报错。除数为 0 时结果为 NaN。</summary>
+        /// <summary>逐元素运算：按 <see cref="PairingHelper"/> 的规则配对（等长一一对应、一侧为 1 则一对多、否则报错）。除数为 0 时结果为 NaN。</summary>
         private List<object> ElementWise(List<object> left, List<object> right)
         {
-            if (left.Count != right.Count && left.Count != 1 && right.Count != 1)
+            if (!PairingHelper.TryGetPairCount(left.Count, right.Count, out int count, out string error))
             {
-                throw new ArrayProcessException($"两组对象个数不一致（{left.Count} 对 {right.Count}），无法逐一配对");
+                throw new ArrayProcessException(error);
             }
-            int count = left.Count == 0 || right.Count == 0 ? 0 : Math.Max(left.Count, right.Count);
             var values = new List<object>();
             for (int i = 0; i < count; i++)
             {
-                double a = (double)left[left.Count == 1 ? 0 : i];
-                double b = (double)right[right.Count == 1 ? 0 : i];
+                double a = (double)left[PairingHelper.SideIndex(i, left.Count)];
+                double b = (double)right[PairingHelper.SideIndex(i, right.Count)];
                 switch (ElementWiseOperator)
                 {
                     case ArrayElementWiseOperator.Subtract: values.Add(a - b); break;

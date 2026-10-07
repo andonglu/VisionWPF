@@ -24,6 +24,8 @@ namespace VisionFlow.WpfToolEditors.Editors
             public Control Editor { get; set; }
             public Type PropertyType { get; set; }
             public bool IsInputRef { get; set; }
+            /// <summary>该字段在面板中的全部元素（标签与编辑控件），用于按方式显示/隐藏。</summary>
+            public List<UIElement> Elements { get; set; } = new List<UIElement>();
         }
 
         private sealed class ViewTarget
@@ -59,7 +61,42 @@ namespace VisionFlow.WpfToolEditors.Editors
             BuildInputFields();
             BuildScalarFields();
             BuildToolActions();
+            HookParameterVisibility();
             RunPreview();
+        }
+
+        /// <summary>按工具声明只显示当前方式用到的参数；切换枚举参数时立即刷新（编辑的是工作副本，可直接写回）。</summary>
+        private void HookParameterVisibility()
+        {
+            if (!(_tool is IToolParameterVisibility visibility))
+            {
+                return;
+            }
+            foreach (FieldBinding binding in _bindings.Where(b => b.PropertyType.IsEnum && b.Editor is ComboBox))
+            {
+                FieldBinding current = binding;
+                ((ComboBox)current.Editor).SelectionChanged += (s, e) =>
+                {
+                    if (((ComboBox)current.Editor).SelectedItem is string name && Enum.IsDefined(current.PropertyType, name))
+                    {
+                        current.Property.SetValue(_tool, Enum.Parse(current.PropertyType, name));
+                        UpdateParameterVisibility(visibility);
+                    }
+                };
+            }
+            UpdateParameterVisibility(visibility);
+        }
+
+        private void UpdateParameterVisibility(IToolParameterVisibility visibility)
+        {
+            foreach (FieldBinding binding in _bindings)
+            {
+                Visibility state = visibility.IsParameterVisible(binding.Property.Name) ? Visibility.Visible : Visibility.Collapsed;
+                foreach (UIElement element in binding.Elements)
+                {
+                    element.Visibility = state;
+                }
+            }
         }
 
         private void BuildInputFields()
@@ -73,6 +110,7 @@ namespace VisionFlow.WpfToolEditors.Editors
 
             foreach (ToolInputRefDef input in inputs)
             {
+                int start = InputPanel.Children.Count;
                 ComboBox combo = CreateCombo(input.DisplayName);
                 if (input.Optional)
                 {
@@ -93,7 +131,14 @@ namespace VisionFlow.WpfToolEditors.Editors
                     }
                 }
                 combo.Text = input.Property.GetValue(_tool) as string ?? string.Empty;
-                _bindings.Add(new FieldBinding { Property = input.Property, Editor = combo, PropertyType = typeof(string), IsInputRef = true });
+                _bindings.Add(new FieldBinding
+                {
+                    Property = input.Property,
+                    Editor = combo,
+                    PropertyType = typeof(string),
+                    IsInputRef = true,
+                    Elements = InputPanel.Children.Cast<UIElement>().Skip(start).ToList()
+                });
             }
         }
 
@@ -108,7 +153,13 @@ namespace VisionFlow.WpfToolEditors.Editors
                     continue;
                 }
                 any = true;
+                int start = ScalarPanel.Children.Count;
+                int bindingCount = _bindings.Count;
                 AddScalarField(property);
+                if (_bindings.Count > bindingCount)
+                {
+                    _bindings[_bindings.Count - 1].Elements = ScalarPanel.Children.Cast<UIElement>().Skip(start).ToList();
+                }
             }
 
             if (!any)

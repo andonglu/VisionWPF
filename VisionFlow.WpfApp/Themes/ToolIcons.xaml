@@ -672,6 +672,33 @@
         </Canvas>
     </Viewbox>
 
+    <!-- 手工追加：Region 转 XLD（实心区域 → 轮廓线） -->
+    <Viewbox x:Key="ToolIcon.region-to-xld" x:Shared="False" Width="24" Height="24" Stretch="Uniform">
+        <Canvas Width="24" Height="24">
+            <Rectangle Canvas.Left="2" Canvas.Top="6" Width="8" Height="12" RadiusX="3" RadiusY="3" Stroke="{DynamicResource TextFillColorPrimaryBrush}" StrokeThickness="1.6" Fill="#B23366CC" />
+            <Path Data="M11,12 L14,12 M12.5,10.5 L14,12 L12.5,13.5" Stroke="{DynamicResource TextFillColorPrimaryBrush}" StrokeThickness="1.4" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Fill="{x:Null}" />
+            <Rectangle Canvas.Left="15" Canvas.Top="6" Width="7" Height="12" RadiusX="3" RadiusY="3" Stroke="{DynamicResource AccentFillColorDefaultBrush}" StrokeThickness="1.6" StrokeDashArray="1.5 1" Fill="{x:Null}" />
+        </Canvas>
+    </Viewbox>
+
+    <!-- 手工追加：XLD 转 Region（轮廓线 → 实心区域） -->
+    <Viewbox x:Key="ToolIcon.xld-to-region" x:Shared="False" Width="24" Height="24" Stretch="Uniform">
+        <Canvas Width="24" Height="24">
+            <Rectangle Canvas.Left="2" Canvas.Top="6" Width="7" Height="12" RadiusX="3" RadiusY="3" Stroke="{DynamicResource AccentFillColorDefaultBrush}" StrokeThickness="1.6" StrokeDashArray="1.5 1" Fill="{x:Null}" />
+            <Path Data="M10,12 L13,12 M11.5,10.5 L13,12 L11.5,13.5" Stroke="{DynamicResource TextFillColorPrimaryBrush}" StrokeThickness="1.4" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Fill="{x:Null}" />
+            <Rectangle Canvas.Left="14" Canvas.Top="6" Width="8" Height="12" RadiusX="3" RadiusY="3" Stroke="{DynamicResource TextFillColorPrimaryBrush}" StrokeThickness="1.6" Fill="#B23366CC" />
+        </Canvas>
+    </Viewbox>
+
+    <!-- 手工追加：区域距离（两个区域 + 最近点连线） -->
+    <Viewbox x:Key="ToolIcon.region-distance" x:Shared="False" Width="24" Height="24" Stretch="Uniform">
+        <Canvas Width="24" Height="24">
+            <Ellipse Canvas.Left="2" Canvas.Top="2" Width="8" Height="8" Stroke="{DynamicResource TextFillColorPrimaryBrush}" StrokeThickness="1.6" Fill="#B23366CC" />
+            <Rectangle Canvas.Left="14" Canvas.Top="14" Width="8" Height="8" RadiusX="1.5" RadiusY="1.5" Stroke="{DynamicResource TextFillColorPrimaryBrush}" StrokeThickness="1.6" Fill="#B23366CC" />
+            <Path Data="M9,9 L15,15 M9,11.5 L9,9 L11.5,9 M15,12.5 L15,15 L12.5,15" Stroke="{DynamicResource AccentFillColorDefaultBrush}" StrokeThickness="1.5" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Fill="{x:Null}" />
+        </Canvas>
+    </Viewbox>
+
     <Viewbox x:Key="ToolIcon._default" x:Shared="False" Width="24" Height="24" Stretch="Uniform">
         <Canvas Width="24" Height="24">
             <Rectangle Canvas.Left="4" Canvas.Top="4" Width="16" Height="16" RadiusX="2" RadiusY="2" Stroke="{DynamicResource TextFillColorPrimaryBrush}" StrokeThickness="1.8" Fill="{x:Null}" />

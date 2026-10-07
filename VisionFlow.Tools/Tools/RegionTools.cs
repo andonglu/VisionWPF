@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
@@ -43,18 +44,41 @@ namespace VisionFlow.Tools
         BinaryThreshold,
         FastThreshold,
         CharThreshold,
-        VarThreshold
+        VarThreshold,
+        /// <summary>动态阈值：与均值滤波后的参考图比较（mean_image + dyn_threshold）。</summary>
+        DynThreshold
     }
 
     /// <summary>
-    /// 阈值分割工具：按 SegmentMethod 选择执行哪种阈值分割（手动/自动/二值/快速/字符/局部阈值），
+    /// 提取亮区还是暗区（成员名即 HALCON 参数值）。原为字符串参数，按名称保存，文件内容与旧版一致、旧版程序仍可读取。
+    /// 二值阈值只支持 light / dark；局部阈值、动态阈值支持全部四种。
+    /// </summary>
+    [JsonConverter(typeof(JsonStringEnumConverter))]
+    public enum ThresholdLightDark
+    {
+        light,
+        dark,
+        equal,
+        not_equal
+    }
+
+    /// <summary>二值阈值自动确定阈值的方法（成员名即 HALCON 参数值）。原为字符串参数，按名称保存以保持文件兼容。</summary>
+    [JsonConverter(typeof(JsonStringEnumConverter))]
+    public enum BinaryThresholdMethod
+    {
+        max_separability,
+        smooth_histo
+    }
+
+    /// <summary>
+    /// 阈值分割工具：按 SegmentMethod 选择执行哪种阈值分割（手动/自动/二值/快速/字符/局部/动态阈值），
     /// 可选立即做 connection 拆分连通域。
     /// </summary>
     [ToolOutput("Region", VariableKind.Object, VariableType.Object, ElementClrType = typeof(HalconRegion))]
     [ToolOutput("UsedThreshold", VariableKind.Single, VariableType.Double)]
     [ToolOutput("Count", VariableKind.Single, VariableType.Int)]
     [ToolOutput("Found", VariableKind.Single, VariableType.Bool)]
-    public class ThresholdTool : ToolBase, INotFoundPolicy
+    public class ThresholdTool : ToolBase, INotFoundPolicy, IToolConfigurationCheck, IToolParameterVisibility
     {
         /// <summary>图像变量引用。</summary>
         [InputRef("图像", typeof(HalconImage))]
@@ -76,18 +100,20 @@ namespace VisionFlow.Tools
         public double Sigma { get; set; } = 2.0;
         /// <summary>灰度差异百分比（字符阈值）。</summary>
         public double Percent { get; set; } = 5.0;
-        /// <summary>自动确定阈值的方法（二值阈值）：max_separability / smooth_histo。</summary>
-        public string BinaryMethod { get; set; } = "max_separability";
-        /// <summary>提取亮区还是暗区（二值/局部阈值）：light / dark。</summary>
-        public string LightDark { get; set; } = "light";
-        /// <summary>局部窗口宽（局部阈值）。</summary>
+        /// <summary>自动确定阈值的方法（二值阈值）。</summary>
+        public BinaryThresholdMethod BinaryMethod { get; set; } = BinaryThresholdMethod.max_separability;
+        /// <summary>提取亮区还是暗区（二值阈值只支持 light / dark；局部、动态阈值另支持 equal / not_equal）。</summary>
+        public ThresholdLightDark LightDark { get; set; } = ThresholdLightDark.light;
+        /// <summary>局部窗口宽（局部阈值）；动态阈值时为均值滤波掩膜宽。</summary>
         public int MaskWidth { get; set; } = 15;
-        /// <summary>局部窗口高（局部阈值）。</summary>
+        /// <summary>局部窗口高（局部阈值）；动态阈值时为均值滤波掩膜高。</summary>
         public int MaskHeight { get; set; } = 15;
         /// <summary>标准差缩放系数（局部阈值）。</summary>
         public double StdDevScale { get; set; } = 0.2;
         /// <summary>绝对阈值（局部阈值）。</summary>
         public double AbsThreshold { get; set; } = 15;
+        /// <summary>与参考图的灰度差（动态阈值），作为 UsedThreshold 输出。</summary>
+        public double Offset { get; set; } = 5;
         /// <summary>是否立即拆分连通域（connection）。</summary>
         public bool Connection { get; set; }
 
@@ -95,8 +121,62 @@ namespace VisionFlow.Tools
         {
         }
 
+        public IEnumerable<ToolConfigurationIssue> CheckConfiguration()
+        {
+            if (SegmentMethod == ThresholdSegmentMethod.BinaryThreshold
+                && LightDark != ThresholdLightDark.light && LightDark != ThresholdLightDark.dark)
+            {
+                yield return new ToolConfigurationIssue(nameof(LightDark), "二值阈值只支持 light / dark");
+            }
+            if ((SegmentMethod == ThresholdSegmentMethod.VarThreshold || SegmentMethod == ThresholdSegmentMethod.DynThreshold)
+                && (MaskWidth <= 0 || MaskHeight <= 0))
+            {
+                yield return new ToolConfigurationIssue("MaskWidth / MaskHeight", "掩膜宽高必须大于 0");
+            }
+        }
+
+        public bool IsParameterVisible(string propertyName)
+        {
+            switch (propertyName)
+            {
+                case nameof(MinGray):
+                case nameof(MaxGray):
+                    return SegmentMethod == ThresholdSegmentMethod.Threshold || SegmentMethod == ThresholdSegmentMethod.FastThreshold;
+                case nameof(MinSize):
+                    return SegmentMethod == ThresholdSegmentMethod.FastThreshold;
+                case nameof(Sigma):
+                    return SegmentMethod == ThresholdSegmentMethod.AutoThreshold || SegmentMethod == ThresholdSegmentMethod.CharThreshold;
+                case nameof(Percent):
+                    return SegmentMethod == ThresholdSegmentMethod.CharThreshold;
+                case nameof(BinaryMethod):
+                    return SegmentMethod == ThresholdSegmentMethod.BinaryThreshold;
+                case nameof(LightDark):
+                    return SegmentMethod == ThresholdSegmentMethod.BinaryThreshold || SegmentMethod == ThresholdSegmentMethod.VarThreshold
+                        || SegmentMethod == ThresholdSegmentMethod.DynThreshold;
+                case nameof(MaskWidth):
+                case nameof(MaskHeight):
+                    return SegmentMethod == ThresholdSegmentMethod.VarThreshold || SegmentMethod == ThresholdSegmentMethod.DynThreshold;
+                case nameof(StdDevScale):
+                case nameof(AbsThreshold):
+                    return SegmentMethod == ThresholdSegmentMethod.VarThreshold;
+                case nameof(Offset):
+                    return SegmentMethod == ThresholdSegmentMethod.DynThreshold;
+                case "Method":
+                    // 旧版二值阈值工具的同义属性，与 BinaryMethod 重复，不再单独显示
+                    return false;
+                default:
+                    return true;
+            }
+        }
+
         public override NodeResult Run(FlowContext ctx)
         {
+            ToolConfigurationIssue issue = CheckConfiguration().FirstOrDefault();
+            if (issue != null)
+            {
+                return NodeResult.Fail($"{ModuleName} {issue.Parameter}：{issue.Message}");
+            }
+
             HObject image = Input<HalconImage>(ctx, ImagePath).Object;
             HObject region;
             HTuple usedThreshold = null;
@@ -104,13 +184,27 @@ namespace VisionFlow.Tools
             string detail;
             switch (SegmentMethod)
             {
+                case ThresholdSegmentMethod.DynThreshold:
+                    HOperatorSet.MeanImage(image, out HObject reference, MaskWidth, MaskHeight);
+                    try
+                    {
+                        HOperatorSet.DynThreshold(image, reference, out region, Offset, LightDark.ToString());
+                    }
+                    finally
+                    {
+                        reference.Dispose();
+                    }
+                    usedThreshold = new HTuple(Offset);
+                    label = "DynThreshold";
+                    detail = $"Mask={MaskWidth}x{MaskHeight}, Offset={Offset}, LightDark={LightDark}";
+                    break;
                 case ThresholdSegmentMethod.AutoThreshold:
                     HOperatorSet.AutoThreshold(image, out region, Sigma);
                     label = "AutoThreshold";
                     detail = $"Sigma={Sigma}";
                     break;
                 case ThresholdSegmentMethod.BinaryThreshold:
-                    HOperatorSet.BinaryThreshold(image, out region, BinaryMethod, LightDark, out usedThreshold);
+                    HOperatorSet.BinaryThreshold(image, out region, BinaryMethod.ToString(), LightDark.ToString(), out usedThreshold);
                     label = "BinaryThreshold";
                     detail = $"Method={BinaryMethod}, LightDark={LightDark}, UsedThreshold={usedThreshold.D}";
                     break;
@@ -133,7 +227,7 @@ namespace VisionFlow.Tools
                     detail = $"Sigma={Sigma}, Percent={Percent}, Threshold={usedThreshold.D}";
                     break;
                 case ThresholdSegmentMethod.VarThreshold:
-                    HOperatorSet.VarThreshold(image, out region, MaskWidth, MaskHeight, StdDevScale, AbsThreshold, LightDark);
+                    HOperatorSet.VarThreshold(image, out region, MaskWidth, MaskHeight, StdDevScale, AbsThreshold, LightDark.ToString());
                     label = "VarThreshold";
                     detail = $"Mask={MaskWidth}x{MaskHeight}, StdDevScale={StdDevScale}, AbsThreshold={AbsThreshold}, LightDark={LightDark}";
                     break;
@@ -179,11 +273,11 @@ namespace VisionFlow.Tools
             ImagePath = "Input.Image";
         }
 
-        /// <summary>历史属性名，等价于 BinaryMethod。</summary>
+        /// <summary>历史属性名，等价于 BinaryMethod（按名称解析，不区分大小写）。</summary>
         public string Method
         {
-            get { return BinaryMethod; }
-            set { BinaryMethod = value; }
+            get { return BinaryMethod.ToString(); }
+            set { BinaryMethod = (BinaryThresholdMethod)Enum.Parse(typeof(BinaryThresholdMethod), value, ignoreCase: true); }
         }
     }
 
@@ -268,30 +362,77 @@ namespace VisionFlow.Tools
         /// <summary>矩形膨胀。</summary>
         DilationRectangle,
         /// <summary>矩形腐蚀。</summary>
-        ErosionRectangle
+        ErosionRectangle,
+        /// <summary>按形状特征填充孔洞（fill_up_shape）。</summary>
+        FillUpShape,
+        /// <summary>区域边界（boundary）。</summary>
+        Boundary,
+        /// <summary>按固定宽高切分（partition_rectangle）。</summary>
+        PartitionRectangle,
+        /// <summary>在细窄处动态切分（partition_dynamic）。</summary>
+        PartitionDynamic,
+        /// <summary>取反：裁剪图像范围减去区域。</summary>
+        Complement
+    }
+
+    /// <summary>填充孔洞时判断的形状特征（成员名即 HALCON 参数值）。</summary>
+    public enum RegionFillFeature
+    {
+        area,
+        compactness,
+        convexity,
+        anisometry,
+        phi,
+        ra,
+        rb,
+        inner_circle,
+        outer_circle
+    }
+
+    /// <summary>边界类型（成员名即 HALCON 参数值）。</summary>
+    public enum RegionBoundaryType
+    {
+        inner,
+        inner_filled,
+        outer
     }
 
     /// <summary>
     /// 区域处理工具（参考 VisionTools.ProcessRegionTool）：对区域做连通拆分 / 填充 / 合并 / 骨架 /
-    /// 圆形或矩形结构元素的形态学操作。工具箱中的区域形态学与 Union1 统一由本工具提供（TR-11）。
+    /// 圆形或矩形结构元素的形态学操作，以及按形状填充、边界、切分与取反（RG-02）。
+    /// 工具箱中的区域形态学与 Union1 统一由本工具提供（TR-11）。
     /// </summary>
     [ToolOutput("Region", VariableKind.Object, VariableType.Object, ElementClrType = typeof(HalconRegion))]
     [ToolOutput("Count", VariableKind.Single, VariableType.Int)]
     [ToolOutput("Found", VariableKind.Single, VariableType.Bool)]
-    public sealed class RegionProcessTool : ToolBase, INotFoundPolicy
+    public sealed class RegionProcessTool : ToolBase, INotFoundPolicy, IToolConfigurationCheck, IToolParameterVisibility
     {
         /// <summary>区域变量引用。</summary>
         [InputRef("区域", typeof(HalconRegion))]
         public string RegionPath { get; set; }
 
+        /// <summary>取反时的裁剪范围（取该图像的宽高）；从工具箱新建时默认 Input.Image，其他方式不读取。</summary>
+        [InputRef("裁剪图像", typeof(HalconImage), Optional = true)]
+        public string ClipImagePath { get; set; }
+
         /// <summary>处理方式。</summary>
         public RegionProcessOp Method { get; set; } = RegionProcessOp.Connection;
         /// <summary>圆形结构元素半径（仅圆形形态学有效）。</summary>
         public double Radius { get; set; } = 3.5;
-        /// <summary>矩形结构元素宽（仅矩形形态学有效）。</summary>
+        /// <summary>矩形结构元素宽（矩形形态学）；切分时为切块宽度。</summary>
         public int Width { get; set; } = 5;
-        /// <summary>矩形结构元素高（仅矩形形态学有效）。</summary>
+        /// <summary>矩形结构元素高（矩形形态学）；按固定宽高切分时为切块高度。</summary>
         public int Height { get; set; } = 5;
+        /// <summary>按形状填充孔洞时判断的特征。</summary>
+        public RegionFillFeature FillFeature { get; set; } = RegionFillFeature.area;
+        /// <summary>特征下限：特征值在 [FillMin, FillMax] 内的孔洞被填充。</summary>
+        public double FillMin { get; set; } = 1;
+        /// <summary>特征上限。</summary>
+        public double FillMax { get; set; } = 100;
+        /// <summary>边界类型。</summary>
+        public RegionBoundaryType BoundaryType { get; set; } = RegionBoundaryType.inner;
+        /// <summary>动态切分时切点位置的最大偏移（占宽度的百分比，0 ~ 100）。</summary>
+        public double Percent { get; set; } = 20;
         /// <summary>处理结果为空时是否失败（默认 true）；关闭后输出 Found=false 并继续。</summary>
         public bool FailWhenNotFound { get; set; } = true;
 
@@ -299,21 +440,90 @@ namespace VisionFlow.Tools
         {
         }
 
-        public override NodeResult Run(FlowContext ctx)
+        public IEnumerable<ToolConfigurationIssue> CheckConfiguration()
         {
             if (IsRectangleOp(Method) && (Width <= 0 || Height <= 0))
             {
-                return NodeResult.Fail("矩形形态学宽高必须大于 0");
+                yield return new ToolConfigurationIssue("Width / Height", "矩形形态学宽高必须大于 0");
             }
             if (IsCircleOp(Method) && Radius <= 0)
             {
-                return NodeResult.Fail("圆形形态学半径必须大于 0");
+                yield return new ToolConfigurationIssue(nameof(Radius), "圆形形态学半径必须大于 0");
+            }
+            if (Method == RegionProcessOp.FillUpShape && FillMin > FillMax)
+            {
+                yield return new ToolConfigurationIssue("FillMin / FillMax", "特征下限不能大于上限");
+            }
+            if (Method == RegionProcessOp.PartitionRectangle && (Width <= 0 || Height <= 0))
+            {
+                yield return new ToolConfigurationIssue("Width / Height", "切块宽高必须大于 0");
+            }
+            if (Method == RegionProcessOp.PartitionDynamic && Width <= 0)
+            {
+                yield return new ToolConfigurationIssue(nameof(Width), "切块宽度必须大于 0");
+            }
+            if (Method == RegionProcessOp.PartitionDynamic && (Percent < 0 || Percent > 100))
+            {
+                yield return new ToolConfigurationIssue(nameof(Percent), "必须在 0 到 100 之间");
+            }
+            if (Method == RegionProcessOp.Complement && string.IsNullOrWhiteSpace(ClipImagePath))
+            {
+                yield return new ToolConfigurationIssue("裁剪图像", "取反需要指定裁剪图像");
+            }
+        }
+
+        public bool IsParameterVisible(string propertyName)
+        {
+            switch (propertyName)
+            {
+                case nameof(Radius):
+                    return IsCircleOp(Method);
+                case nameof(Width):
+                    return IsRectangleOp(Method) || Method == RegionProcessOp.PartitionRectangle || Method == RegionProcessOp.PartitionDynamic;
+                case nameof(Height):
+                    return IsRectangleOp(Method) || Method == RegionProcessOp.PartitionRectangle;
+                case nameof(FillFeature):
+                case nameof(FillMin):
+                case nameof(FillMax):
+                    return Method == RegionProcessOp.FillUpShape;
+                case nameof(BoundaryType):
+                    return Method == RegionProcessOp.Boundary;
+                case nameof(Percent):
+                    return Method == RegionProcessOp.PartitionDynamic;
+                case nameof(ClipImagePath):
+                    return Method == RegionProcessOp.Complement;
+                default:
+                    return true;
+            }
+        }
+
+        public override NodeResult Run(FlowContext ctx)
+        {
+            ToolConfigurationIssue issue = CheckConfiguration().FirstOrDefault();
+            if (issue != null)
+            {
+                return NodeResult.Fail(issue.Parameter == "裁剪图像" ? issue.Message : $"{issue.Parameter}：{issue.Message}");
             }
 
             HObject input = Input<HalconRegion>(ctx, RegionPath).Object;
             HObject output;
             switch (Method)
             {
+                case RegionProcessOp.FillUpShape:
+                    HOperatorSet.FillUpShape(input, out output, FillFeature.ToString(), FillMin, FillMax);
+                    break;
+                case RegionProcessOp.Boundary:
+                    HOperatorSet.Boundary(input, out output, BoundaryType.ToString());
+                    break;
+                case RegionProcessOp.PartitionRectangle:
+                    HOperatorSet.PartitionRectangle(input, out output, Width, Height);
+                    break;
+                case RegionProcessOp.PartitionDynamic:
+                    HOperatorSet.PartitionDynamic(input, out output, Width, Percent);
+                    break;
+                case RegionProcessOp.Complement:
+                    output = Complement(input, Input<HalconImage>(ctx, ClipImagePath).Object);
+                    break;
                 case RegionProcessOp.FillUp:
                     HOperatorSet.FillUp(input, out output);
                     break;
@@ -353,6 +563,22 @@ namespace VisionFlow.Tools
             }
 
             return RegionOutput.Set(ctx, ModuleName, this, output, "区域处理", Method.ToString());
+        }
+
+        /// <summary>取反：裁剪图像的整幅范围减去输入区域（多个区域按合并后计算），结果为一个区域。</summary>
+        private static HObject Complement(HObject region, HObject clipImage)
+        {
+            HOperatorSet.GetImageSize(clipImage, out HTuple width, out HTuple height);
+            HOperatorSet.GenRectangle1(out HObject clip, 0, 0, height.I - 1, width.I - 1);
+            try
+            {
+                HOperatorSet.Difference(clip, region, out HObject output);
+                return output;
+            }
+            finally
+            {
+                clip.Dispose();
+            }
         }
 
         private static bool IsRectangleOp(RegionProcessOp op)
@@ -985,12 +1211,20 @@ namespace VisionFlow.Tools
         }
     }
 
+    /// <summary>
+    /// 区域灰度统计：逐区域输出最小 / 最大灰度与范围（min_max_gray），以及均值与标准差（intensity，RG-04）。
+    /// 各数组与区域对象逐一对应。
+    /// </summary>
     [ToolOutput("MinGrays", VariableKind.Array, VariableType.Double)]
     [ToolOutput("MaxGrays", VariableKind.Array, VariableType.Double)]
     [ToolOutput("Ranges", VariableKind.Array, VariableType.Double)]
+    [ToolOutput("Means", VariableKind.Array, VariableType.Double)]
+    [ToolOutput("Deviations", VariableKind.Array, VariableType.Double)]
     [ToolOutput("FirstMinGray", VariableKind.Single, VariableType.Double)]
     [ToolOutput("FirstMaxGray", VariableKind.Single, VariableType.Double)]
     [ToolOutput("FirstRange", VariableKind.Single, VariableType.Double)]
+    [ToolOutput("FirstMean", VariableKind.Single, VariableType.Double)]
+    [ToolOutput("FirstDeviation", VariableKind.Single, VariableType.Double)]
     [ToolOutput("Count", VariableKind.Single, VariableType.Int)]
     [ToolOutput("Found", VariableKind.Single, VariableType.Bool)]
     public sealed class RegionMinMaxGrayTool : ToolBase, INotFoundPolicy
@@ -1022,21 +1256,30 @@ namespace VisionFlow.Tools
             var mins = new List<double>();
             var maxs = new List<double>();
             var ranges = new List<double>();
+            var means = new List<double>();
+            var deviations = new List<double>();
             if (regionCount.I > 0)
             {
                 HOperatorSet.MinMaxGray(region, image, Percent, out HTuple minTuple, out HTuple maxTuple, out HTuple rangeTuple);
                 mins.AddRange(HalconTupleConvert.ToDoubles(minTuple));
                 maxs.AddRange(HalconTupleConvert.ToDoubles(maxTuple));
                 ranges.AddRange(HalconTupleConvert.ToDoubles(rangeTuple));
+                HOperatorSet.Intensity(region, image, out HTuple meanTuple, out HTuple deviationTuple);
+                means.AddRange(HalconTupleConvert.ToDoubles(meanTuple));
+                deviations.AddRange(HalconTupleConvert.ToDoubles(deviationTuple));
             }
             int count = Math.Max(mins.Count, Math.Max(maxs.Count, ranges.Count));
 
             SetOutput(ctx, Variable.Array(ModuleName, "MinGrays", VariableType.Double, mins));
             SetOutput(ctx, Variable.Array(ModuleName, "MaxGrays", VariableType.Double, maxs));
             SetOutput(ctx, Variable.Array(ModuleName, "Ranges", VariableType.Double, ranges));
+            SetOutput(ctx, Variable.Array(ModuleName, "Means", VariableType.Double, means));
+            SetOutput(ctx, Variable.Array(ModuleName, "Deviations", VariableType.Double, deviations));
             SetOutput(ctx, Variable.Single(ModuleName, "FirstMinGray", VariableType.Double, mins.Count > 0 ? mins[0] : double.NaN));
             SetOutput(ctx, Variable.Single(ModuleName, "FirstMaxGray", VariableType.Double, maxs.Count > 0 ? maxs[0] : double.NaN));
             SetOutput(ctx, Variable.Single(ModuleName, "FirstRange", VariableType.Double, ranges.Count > 0 ? ranges[0] : double.NaN));
+            SetOutput(ctx, Variable.Single(ModuleName, "FirstMean", VariableType.Double, means.Count > 0 ? means[0] : double.NaN));
+            SetOutput(ctx, Variable.Single(ModuleName, "FirstDeviation", VariableType.Double, deviations.Count > 0 ? deviations[0] : double.NaN));
             SetOutput(ctx, Variable.Single(ModuleName, "Count", VariableType.Int, count));
             SetOutput(ctx, Variable.Single(ModuleName, "Found", VariableType.Bool, count > 0));
             if (count == 0)
@@ -1044,7 +1287,7 @@ namespace VisionFlow.Tools
                 return NotFoundOutcome.Resolve(ctx, this,
                     regionCount.I == 0 ? "Region 灰度统计输入区域为空" : "Region 灰度统计结果为空");
             }
-            ctx.AddLog(FlowLogLevel.Info, $"[MinMaxGray] 区域数={regionCount.I}, 输出={count}, Percent={Percent}");
+            ctx.AddLog(FlowLogLevel.Info, $"[区域灰度统计] 区域数={regionCount.I}, 输出={count}, Percent={Percent}");
             return NodeResult.Ok;
         }
     }
@@ -1179,30 +1422,63 @@ namespace VisionFlow.Tools
         /// <summary>第一个。</summary>
         First,
         /// <summary>最左侧（中心列最小）。</summary>
-        Leftmost
+        Leftmost,
+        /// <summary>按序号取（TakeIndex，从 0 开始）。</summary>
+        ByIndex
+    }
+
+    /// <summary>区域筛选依据：形状特征（select_shape）或灰度特征（select_gray）。</summary>
+    public enum RegionFilterBy
+    {
+        Shape,
+        Gray
+    }
+
+    /// <summary>多条件之间的关系（成员名即 HALCON 参数值）。</summary>
+    public enum RegionSelectOperation
+    {
+        and,
+        or
     }
 
     /// <summary>
-    /// 区域筛选工具（参考 VisionTools.SelectShapeTool）：按特征区间 select_shape 过滤，
-    /// 再按 TakeMode 取件（面积最大/最小/最左等）。输出筛选后的区域与数量。
+    /// 区域筛选工具（参考 VisionTools.SelectShapeTool）：按特征区间过滤（形状 select_shape / 灰度 select_gray，
+    /// 单条件或多条件），再按 TakeMode 取件（面积最大/最小/最左/按序号等）。输出筛选后的区域与数量。
+    /// 多条件字段（Features / Mins / Maxs）任一非空即按多条件执行；都为空时按原单条件（Feature / Min / Max）执行，与旧版一致。
     /// </summary>
     [ToolOutput("Region", VariableKind.Object, VariableType.Object, ElementClrType = typeof(HalconRegion))]
     [ToolOutput("Count", VariableKind.Single, VariableType.Int)]
     [ToolOutput("Found", VariableKind.Single, VariableType.Bool)]
-    public sealed class SelectRegionTool : ToolBase, INotFoundPolicy
+    public sealed class SelectRegionTool : ToolBase, INotFoundPolicy, IToolConfigurationCheck, IToolParameterVisibility
     {
         /// <summary>区域变量引用。</summary>
         [InputRef("区域", typeof(HalconRegion))]
         public string RegionPath { get; set; }
 
-        /// <summary>筛选特征（select_shape 特征名，如 area / width / height / circularity / rectangularity）。</summary>
+        /// <summary>按灰度筛选时的图像；从工具箱新建时默认 Input.Image，按形状筛选时不读取。</summary>
+        [InputRef("图像", typeof(HalconImage), Optional = true)]
+        public string ImagePath { get; set; }
+
+        /// <summary>筛选依据。</summary>
+        public RegionFilterBy FilterBy { get; set; } = RegionFilterBy.Shape;
+        /// <summary>筛选特征（形状如 area / width / circularity；灰度如 mean / deviation / max）。</summary>
         public string Feature { get; set; } = "area";
         /// <summary>特征下限。</summary>
         public double Min { get; set; } = 100;
         /// <summary>特征上限。</summary>
         public double Max { get; set; } = 99999999;
+        /// <summary>多条件：特征名，逗号分隔（如 area,circularity）；非空时代替 Feature / Min / Max。</summary>
+        public string Features { get; set; } = string.Empty;
+        /// <summary>多条件：各特征下限，逗号分隔，个数与 Features 一致。</summary>
+        public string Mins { get; set; } = string.Empty;
+        /// <summary>多条件：各特征上限，逗号分隔，个数与 Features 一致。</summary>
+        public string Maxs { get; set; } = string.Empty;
+        /// <summary>多条件之间的关系：and 全部满足 / or 任一满足。</summary>
+        public RegionSelectOperation Operation { get; set; } = RegionSelectOperation.and;
         /// <summary>多个满足条件时的取件方式。</summary>
         public RegionTakeMode TakeMode { get; set; } = RegionTakeMode.All;
+        /// <summary>按序号取件时的序号（筛选结果中的第几个，从 0 开始）；越界按未找到处理。</summary>
+        public int TakeIndex { get; set; }
         /// <summary>筛选结果为空时是否失败（默认 true）；关闭后输出 Found=false 并继续。</summary>
         public bool FailWhenNotFound { get; set; } = true;
 
@@ -1210,24 +1486,140 @@ namespace VisionFlow.Tools
         {
         }
 
+        private bool IsMultiCondition
+        {
+            get { return !string.IsNullOrWhiteSpace(Features) || !string.IsNullOrWhiteSpace(Mins) || !string.IsNullOrWhiteSpace(Maxs); }
+        }
+
+        public IEnumerable<ToolConfigurationIssue> CheckConfiguration()
+        {
+            if (FilterBy == RegionFilterBy.Gray && string.IsNullOrWhiteSpace(ImagePath))
+            {
+                yield return new ToolConfigurationIssue("图像", "按灰度筛选需要指定图像");
+            }
+            if (TakeMode == RegionTakeMode.ByIndex && TakeIndex < 0)
+            {
+                yield return new ToolConfigurationIssue(nameof(TakeIndex), "序号不能小于 0");
+            }
+            if (IsMultiCondition && !TryGetConditions(out _, out _, out _, out string error))
+            {
+                yield return new ToolConfigurationIssue("多条件", error);
+            }
+        }
+
+        public bool IsParameterVisible(string propertyName)
+        {
+            switch (propertyName)
+            {
+                case nameof(ImagePath):
+                    return FilterBy == RegionFilterBy.Gray;
+                case nameof(TakeIndex):
+                    return TakeMode == RegionTakeMode.ByIndex;
+                default:
+                    return true;
+            }
+        }
+
+        /// <summary>多条件字段解析：个数必须一致且至少一个，上下限必须是数值。</summary>
+        private bool TryGetConditions(out string[] features, out double[] mins, out double[] maxs, out string error)
+        {
+            features = HalconTupleConvert.SplitCsv(Features);
+            string[] minTexts = HalconTupleConvert.SplitCsv(Mins);
+            string[] maxTexts = HalconTupleConvert.SplitCsv(Maxs);
+            mins = null;
+            maxs = null;
+            if (features.Length == 0 || features.Length != minTexts.Length || features.Length != maxTexts.Length)
+            {
+                error = $"特征、下限、上限的个数必须一致且不为 0（特征 {features.Length} 个、下限 {minTexts.Length} 个、上限 {maxTexts.Length} 个）";
+                return false;
+            }
+            mins = new double[features.Length];
+            maxs = new double[features.Length];
+            for (int i = 0; i < features.Length; i++)
+            {
+                if (!double.TryParse(minTexts[i], NumberStyles.Float, CultureInfo.InvariantCulture, out mins[i]))
+                {
+                    error = $"下限第 {i + 1} 项“{minTexts[i]}”不是数值";
+                    return false;
+                }
+                if (!double.TryParse(maxTexts[i], NumberStyles.Float, CultureInfo.InvariantCulture, out maxs[i]))
+                {
+                    error = $"上限第 {i + 1} 项“{maxTexts[i]}”不是数值";
+                    return false;
+                }
+            }
+            error = null;
+            return true;
+        }
+
         public override NodeResult Run(FlowContext ctx)
         {
-            HObject input = Input<HalconRegion>(ctx, RegionPath).Object;
+            ToolConfigurationIssue issue = CheckConfiguration().FirstOrDefault();
+            if (issue != null)
+            {
+                return NodeResult.Fail($"{ModuleName} {issue.Parameter}：{issue.Message}");
+            }
 
-            HOperatorSet.SelectShape(input, out HObject selected,
-                new HTuple(Feature), new HTuple("and"), new HTuple(Min), new HTuple(Max));
+            HObject input = Input<HalconRegion>(ctx, RegionPath).Object;
+            HTuple features;
+            HTuple operation;
+            HTuple mins;
+            HTuple maxs;
+            string condition;
+            if (IsMultiCondition)
+            {
+                TryGetConditions(out string[] names, out double[] minValues, out double[] maxValues, out _);
+                features = new HTuple(names);
+                operation = new HTuple(Operation.ToString());
+                mins = new HTuple(minValues);
+                maxs = new HTuple(maxValues);
+                condition = string.Join($" {Operation} ", names.Select((n, i) => $"{n} ∈ [{minValues[i]}, {maxValues[i]}]"));
+            }
+            else
+            {
+                features = new HTuple(Feature);
+                operation = new HTuple("and");
+                mins = new HTuple(Min);
+                maxs = new HTuple(Max);
+                condition = $"{Feature} ∈ [{Min}, {Max}]";
+            }
+
+            HObject selected;
+            if (FilterBy == RegionFilterBy.Gray)
+            {
+                HObject image = Input<HalconImage>(ctx, ImagePath).Object;
+                HOperatorSet.SelectGray(input, image, out selected, features, operation, mins, maxs);
+                condition = "灰度 " + condition;
+            }
+            else
+            {
+                HOperatorSet.SelectShape(input, out selected, features, operation, mins, maxs);
+            }
             HOperatorSet.CountObj(selected, out HTuple count);
 
             HObject result = selected;
-            if (TakeMode != RegionTakeMode.All && count.I > 1)
+            string take = TakeMode.ToString();
+            if (TakeMode == RegionTakeMode.ByIndex)
+            {
+                take = $"第 {TakeIndex} 个（共 {count.I} 个）";
+                if (TakeIndex < count.I)
+                {
+                    HOperatorSet.SelectObj(selected, out result, TakeIndex + 1);
+                }
+                else
+                {
+                    HOperatorSet.GenEmptyObj(out result);
+                }
+                selected.Dispose();
+            }
+            else if (TakeMode != RegionTakeMode.All && count.I > 1)
             {
                 int pick = PickIndex(selected, count.I);
                 HOperatorSet.SelectObj(selected, out result, pick + 1);
                 selected.Dispose();
             }
 
-            return RegionOutput.Set(ctx, ModuleName, this, result, "区域筛选",
-                $"{Feature} ∈ [{Min}, {Max}]，取 {TakeMode}");
+            return RegionOutput.Set(ctx, ModuleName, this, result, "区域筛选", $"{condition}，取 {take}");
         }
 
         /// <summary>按取件方式返回要选中的下标（0 基）。</summary>

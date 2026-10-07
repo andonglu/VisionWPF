@@ -101,6 +101,16 @@ namespace VisionFlow.Variables
         IEnumerable<ToolConfigurationIssue> CheckConfiguration();
     }
 
+    /// <summary>
+    /// 参数随所选方式变化的工具：编辑界面只显示当前方式用到的参数与输入引用（隐藏的参数照常保存）。
+    /// 实现只读取工具自身的参数，不应抛出异常；未列出的参数名视为可见。
+    /// </summary>
+    public interface IToolParameterVisibility
+    {
+        /// <summary>按当前配置判断属性（标量参数或 [InputRef] 属性名）是否需要显示。</summary>
+        bool IsParameterVisible(string propertyName);
+    }
+
     /// <summary>一个工具引用输入声明（运行期读取结果）。</summary>
     public sealed class ToolInputRefDef
     {
