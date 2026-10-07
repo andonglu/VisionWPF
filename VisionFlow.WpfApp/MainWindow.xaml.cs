@@ -125,7 +125,10 @@ namespace VisionFlow.WpfApp
                 ShowWarning,
                 RefreshFlowTree,
                 SetStatus,
-                OpenToolEditor);
+                OpenToolEditor)
+            {
+                LastRunContext = () => _runSession.LastRunContext
+            };
             LoadDisplaySettings();
             ApplyDisplaySettings();
             BootstrapEditor();
@@ -390,9 +393,14 @@ namespace VisionFlow.WpfApp
             {
                 return;
             }
-            if (GetSelectedFlowNode() is ToolNode node)
+            FlowNode selected = GetSelectedFlowNode();
+            if (selected is ToolNode node)
             {
                 OpenToolEditor(node);
+            }
+            else if (selected != null && _panelBuilder.OpenNodeEditor(selected))
+            {
+                e.Handled = true;
             }
         }
 

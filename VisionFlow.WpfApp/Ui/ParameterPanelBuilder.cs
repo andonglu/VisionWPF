@@ -16,6 +16,7 @@ using VisionFlow.Tools;
 using VisionFlow.Ui;
 using VisionFlow.Variables;
 using VisionFlow.WpfToolEditors.Controls;
+using VisionFlow.WpfToolEditors.Editors;
 
 namespace VisionFlow.WpfApp.Ui
 {
@@ -56,6 +57,9 @@ namespace VisionFlow.WpfApp.Ui
             _setStatus = setStatus ?? throw new ArgumentNullException(nameof(setStatus));
             _openToolEditor = openToolEditor ?? throw new ArgumentNullException(nameof(openToolEditor));
         }
+
+        /// <summary>上次运行的上下文（专用编辑窗口试运行时借用其中的变量）；未设置或尚未运行时为 null。</summary>
+        public Func<FlowContext> LastRunContext { get; set; }
 
         public void Build(FlowNode node)
         {
@@ -164,6 +168,37 @@ namespace VisionFlow.WpfApp.Ui
         private void BuildIfElseParameterPanel(IfElseNode node)
         {
             AddConditionEditor(node.Condition, RefCandidateService.ForNode(_flowRoot(), node), condition => node.Condition = condition);
+            AddSharedOutputsSection(node, node.Outputs.Select(o => $"{node.Name}.{o.Name}（{SharedOutputType.Find(o.Kind, o.Type)}）"),
+                () => SharedOutputsEditor.For(node));
+        }
+
+        /// <summary>公共输出摘要与“编辑公共输出”按钮（IfElse 与 Switch 共用）；编辑器在点击时按当前结构创建。</summary>
+        private void AddSharedOutputsSection(FlowNode node, IEnumerable<string> summary, Func<SharedOutputsEditor> createEditor)
+        {
+            AddSection("公共输出");
+            List<string> lines = summary.ToList();
+            if (lines.Count == 0)
+            {
+                AddInfo("没有公共输出。分支内部的结果需要通过公共输出交给分支之后的节点。");
+            }
+            foreach (string line in lines)
+            {
+                AddInfo(line);
+            }
+            AddButtonRow("编辑公共输出...", () =>
+            {
+                SharedOutputsEditor editor = createEditor();
+                var window = new WpfSharedOutputsEditWindow(editor, _flowRoot()) { Owner = Window.GetWindow(_panel) };
+                if (window.ShowDialog() != true)
+                {
+                    return;
+                }
+                editor.Apply();
+                _markDirty();
+                _refreshFlowTree();
+                _setStatus("公共输出已更新");
+                Build(node);
+            }, marksDirty: false);
         }
 
         private void BuildSubFlowParameterPanel(SubFlowNode node)
@@ -186,7 +221,7 @@ namespace VisionFlow.WpfApp.Ui
                 {
                     return;
                 }
-                node.FlowFile = ToStoredPath(dialog.FileName, node.BaseDirectory);
+                node.FlowFile = SubFlowEditor.ToStoredPath(dialog.FileName, node.BaseDirectory);
                 _refreshFlowTree();
                 Build(node);
             });
@@ -214,37 +249,44 @@ namespace VisionFlow.WpfApp.Ui
                 : "相对路径相对于当前流程文件所在目录：" + node.BaseDirectory);
 
             AddSection("输入映射");
-            AddInfo("子流程默认沿用当前流程的 Input.* 外部输入（如 Input.Image）；在此追加或覆盖，例如把 Input.Threshold 设为 ref:计算1.阈值。");
-            List<string> candidates = RefCandidateService.ForNode(_flowRoot(), node)
-                .Select(c => "ref:" + c.Path)
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .ToList();
-            foreach (SubFlowInputMapping mapping in node.Inputs.ToList())
+            if (node.Inputs.Count == 0)
             {
-                AddTextRow("子流程输入（Input.名称）", mapping.InputPath, value => mapping.InputPath = (value ?? string.Empty).Trim());
-                AddComboRow("取值", candidates, OperandText(mapping.Value), value => mapping.Value = ParseOperand(value));
-                AddButtonRow("删除此映射", () =>
-                {
-                    node.Inputs.Remove(mapping);
-                    Build(node);
-                });
+                AddInfo("没有输入映射，子流程沿用当前流程的 Input.* 外部输入。");
             }
-            AddButtonRow("添加输入映射", () =>
+            foreach (SubFlowInputMapping mapping in node.Inputs)
             {
-                node.Inputs.Add(new SubFlowInputMapping { InputPath = "Input.", Value = Operand.Const(string.Empty) });
-                Build(node);
-            });
+                AddInfo($"{mapping.InputPath} ← {OperandText(mapping.Value)}");
+            }
+            AddButtonRow("打开子流程编辑窗口...", () => OpenSubFlowEditor(node), marksDirty: false);
         }
 
-        /// <summary>保存的子流程路径：在当前流程目录内（含子目录）时存相对路径，便于整体拷贝；否则存完整路径。</summary>
-        private static string ToStoredPath(string fullPath, string baseDirectory)
+        /// <summary>主窗口双击等入口打开节点的专用编辑窗口；目前只有子流程节点有，返回是否已处理。</summary>
+        public bool OpenNodeEditor(FlowNode node)
         {
-            if (string.IsNullOrWhiteSpace(baseDirectory))
+            if (node is SubFlowNode subFlow)
             {
-                return fullPath;
+                OpenSubFlowEditor(subFlow);
+                return true;
             }
-            string relative = System.IO.Path.GetRelativePath(baseDirectory, fullPath);
-            return relative.StartsWith("..", StringComparison.Ordinal) || System.IO.Path.IsPathRooted(relative) ? fullPath : relative;
+            return false;
+        }
+
+        private void OpenSubFlowEditor(SubFlowNode node)
+        {
+            SubFlowEditor editor = SubFlowEditor.For(node);
+            var window = new WpfSubFlowEditWindow(editor, _flowRoot(), LastRunContext?.Invoke(), _inputImage())
+            {
+                Owner = Window.GetWindow(_panel)
+            };
+            if (window.ShowDialog() != true)
+            {
+                return;
+            }
+            editor.Apply();
+            _markDirty();
+            _refreshFlowTree();
+            _setStatus("子流程设置已更新");
+            Build(node);
         }
 
         private void BuildSwitchParameterPanel(SwitchNode node)
@@ -277,15 +319,8 @@ namespace VisionFlow.WpfApp.Ui
             });
             AddInfo("在流程树中选中分支可修改名称和匹配值、上移下移或删除（默认分支不能删除）；把节点放进分支即可在该分支执行。");
 
-            if (node.Outputs.Count > 0)
-            {
-                AddSection("公共输出");
-                foreach (SwitchOutputDef output in node.Outputs)
-                {
-                    AddInfo($"{node.Name}.{output.Name}（{output.Kind}/{output.Type}）");
-                }
-                AddInfo("各分支的取值在选中分支后设置。");
-            }
+            AddSharedOutputsSection(node, node.Outputs.Select(o => $"{node.Name}.{o.Name}（{SharedOutputType.Find(o.Kind, o.Type)}）"),
+                () => SharedOutputsEditor.For(node));
         }
 
         private void BuildSwitchCaseParameterPanel(SwitchCaseNode node)
@@ -987,37 +1022,12 @@ namespace VisionFlow.WpfApp.Ui
 
         internal static Operand ParseOperand(string text)
         {
-            text = (text ?? string.Empty).Trim();
-            if (text.StartsWith("ref:", StringComparison.OrdinalIgnoreCase))
-            {
-                return Operand.Ref(text.Substring(4).Trim());
-            }
-            if (string.Equals(text, "null", StringComparison.OrdinalIgnoreCase))
-            {
-                return Operand.Const(null);
-            }
-            if (text == "\"\"")
-            {
-                return Operand.Const(string.Empty);
-            }
-            if (double.TryParse(text, NumberStyles.Float, CultureInfo.CurrentCulture, out double d))
-            {
-                return Operand.Const(d);
-            }
-            if (bool.TryParse(text, out bool b))
-            {
-                return Operand.Const(b);
-            }
-            return Operand.Const(text);
+            return VisionFlow.Ui.OperandText.Parse(text);
         }
 
         internal static string OperandText(Operand operand)
         {
-            if (operand == null)
-            {
-                return string.Empty;
-            }
-            return operand.IsConstant ? Convert.ToString(operand.ConstantValue, CultureInfo.CurrentCulture) : "ref:" + operand.Reference;
+            return VisionFlow.Ui.OperandText.Format(operand);
         }
     }
 }

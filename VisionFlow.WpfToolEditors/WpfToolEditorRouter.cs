@@ -52,6 +52,10 @@ namespace VisionFlow.WpfToolEditors
             {
                 return new WpfResultJudgeToolEditWindow(resultJudgeTool, context);
             }
+            if (tool is ArrayProcessTool arrayProcessTool)
+            {
+                return new WpfArrayProcessToolEditWindow(arrayProcessTool, context);
+            }
             return IsVisualPreviewTool(tool)
                 ? (Window)new WpfVisualToolEditWindow(tool, context)
                 : new WpfGenericToolEditWindow(tool, context);
