@@ -98,3 +98,42 @@
 ## B2-4. 开工顺序确认
 
 第二批：回归修复 + MS-02 + MS-07（Fixed）。第三批候选：MT-02 + MT-03（示教界面一次改完，合并评审）。MS-07 的 Calibration 来源、MS-03 / MS-04（沿圆弧、模糊测量）留待标定批或第四批评审。
+
+---
+
+# 第三批评审意见（MT-02 + MT-03，合并）
+
+评审日期：2026-10-07
+评审对象：计划 MT-02（XLD / DXF 建模与模型原点）、MT-03（通用形状匹配新工具）。
+评审方式：与第二批实现后的代码核对（`HalconTools.cs` 匹配基类与模型缓存、`MatchResultItem`、`WpfMatchToolEditWindow` 示教区、第二批引入的输出可见性守卫测试）。
+评审结论：**可以开工，第三批 = MT-02 + MT-03（新工具 `HalconGenericShapeMatchTool`）。本批是 MATCH-MEASURE 线中风险最高的一批：示教界面大改 + 新工具 + 多模板持久化格式，必须带上列出的 P1 门禁。**
+
+## B3-1. P1：动工前确认
+
+1. **`ModelNames` 命名冲突（硬性，第二批守卫测试会红灯）**：计划同时定义"模板名另存 `ModelNames` CSV 字符串参数"和"输出 `ModelNames`（数组）"。第二批已加守卫测试"任何工具的输出名都不与其参数名相同"（`MatchMeasureBatch2Tests`），本批若照计划命名必然失败。**参数改名**，如 `TemplateNamesCsv`（流程文件可读的 CSV 字符串属性），输出保留 `ModelNames`。
+2. **通用形状模型的原点设置方式需 HALCON 实测**：`set_shape_model_origin` 只适用于经典形状模型，通用形状模型（20.11 `create_generic_shape_model`）的原点是否支持、用哪个参数名（`set_generic_shape_model_param`），必须先探测。不支持则 MT-02 的原点功能对通用形状匹配降级（界面禁用并说明），或在结果坐标上加偏移实现但要在计划里记录差异；**不得**假设 API 存在。
+3. **多模板"按模板分别设置查找参数（CSV 字符串）"建议砍掉**：全局查找参数对所有模板生效已覆盖绝大多数场景；CSV 按模板覆盖引入解析、校验、界面三重复杂度，收益不明。**本批只实现全局查找参数**；如现场确实需要，单独立项。计划条目需同步改。
+4. **`ModelsData` 持久化格式**：版本号 + 模板数 + 逐模板（名称长度、UTF-8 名称、模型长度、模型字节）。用 `serialize_shape_model` 序列化通用形状模型句柄**必须先实测确认可行**（计划已写"开发时实测确认"），不可行则改用逐个 `write_dict`/`serialize` 替代方案并记录。加载时版本不符给出明确错误，不得静默误读。
+5. **模型缓存键**：现有模板匹配基类的 `CurrentModelKey` 用 `ShapeModelData` 数组**引用**（`HalconTools.cs:608-612`）。MT-03 若按计划在原数组上原地修改，`ContentHash` 必须覆盖名称与全部模板字节；建议直接沿用"示教/导入替换整个数组"的现有模式（新数组 → 新引用 → 触发重载），比引入哈希更简单且与既有行为一致。若坚持哈希，须用例固定：任一模板增删改名后缓存键变化。
+6. **XLD / DXF 建模的输入约束**：`create_shape_model_xld` 要求单一轮廓对象——上游 XLD 输出若为多条轮廓（`edges_sub_pix` 常见），示教界面必须提供轮廓选择（按序号）或明确报错；`read_contour_xld_dxf` 读入多条时同理。DXF 文件不存在 / 解析失败在示教时明确报错，运行时**不得**依赖 DXF 文件（计划已写）。
+
+## B3-2. P2：开发中落实
+
+1. **MT-02 的度量锁定与校验**：XLD 建模时 `Metric` 强制 `ignore_local_polarity`、对比度参数不生效——界面锁定并说明原因（计划已写），同时 `CheckConfiguration` 对"XLD 来源 + 非 ignore_local_polarity"的历史配置给出流程校验错误，不允许带病运行。
+2. **模型原点的基准提示**：修改原点后界面提示重新确定跟随基准（计划已写）；`BaseRow` / `BaseColumn` / `BaseAngle` 不回填原点偏移，两者语义保持独立。
+3. **通用形状模型结果矩阵**：跟随矩阵与模型轮廓变换必须用 `get_generic_shape_model_result` 的完整 2D 变换矩阵，**禁止**用 `Scale` 重建（各向异性缩放时错误，计划已写——用例固定：各向异性缩放下 `HomMats` 与直接算子调用逐项一致）。
+4. **句柄生命周期**：`find_generic_shape_model` 的结果句柄必须 `clear_handle`（含异常路径）；多模板句柄逐个释放；`ClearModel` / 编辑事务 Dispose 路径不得泄漏（第一批 `ToolTestRun` 的 `FlowResources.Release` 机制沿用）。
+5. **示教界面布局**：示教页要加模型来源（图像 ROI / XLD / DXF）、原点编辑、模板列表（增删改排序）、杂乱区域绘制，现有窗口已较拥挤——新增控件按现有页签/分区风格组织，模板列表与杂乱绘制放示教页的独立分组，注意 `WindowsFormsHost` 的 DPI 与遮挡问题（现有 ROI 控件是 WinForms 承载）。
+6. **新工具登记清单**：`BuiltinToolIdentities`、`ToolboxRegistry`、`WpfToolEditorRouter`（在缩放形状匹配之前路由，注意既有"椭圆测量先于通用跟随窗口"的排序注释模式）、README 工具表、计划头部状态。
+7. **枚举**：`ScaleMode`（`None` / `Isotropic` / `Anisotropic`）按数字保存、追加、默认 `None`；`BorderShapeModels` / `UseClutter` 用 bool；`TimeoutMs` 为 int 毫秒，写入算子前确认单位（`timeout` 参数实测单位并注释）。
+8. **回归门禁**：现有 4 个匹配工具图像 ROI 示教行为逐项不变（含模型字节、`CurrentModelKey` 引用语义）；`HalconMatchToolBase` 的搜索区域与排序（第一批）在通用形状匹配上同样生效（继承自动获得，但要有一个用例固定）。
+
+## B3-3. P3：文档维护
+
+1. 计划头部状态、MT-02 / MT-03 实现说明（含 P1-2 / P1-3 的实际结论）、第 6 节同步清单若新增项一并更新。
+2. README 工具表"定位匹配"行补通用形状匹配与 XLD / DXF 建模、模型原点。
+3. HALCON 探测结论（原点参数、`serialize_shape_model` 对通用句柄、`timeout` 单位）记入计划新一节，注明 22.11 环境与 20.11 复核要求（沿用第 9 节模式）。
+
+## B3-4. 开工顺序确认
+
+第三批：MT-02 + MT-03。第四批候选：MS-06（找角）+ MS-05（灰度投影）；之后 MT-06（差分检测）；MT-05 / MT-04 / MS-03 / MS-04 与标定批（CB-01~07 + MS-07 Calibration）按现场需求排。

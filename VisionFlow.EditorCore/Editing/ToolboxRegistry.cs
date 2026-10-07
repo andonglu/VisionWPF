@@ -84,6 +84,12 @@ namespace VisionFlow.Editing
                     ImagePath = "Input.Image",
                     NumMatches = 10
                 })));
+            Register(new ToolboxItem("generic-shape-match", "01 定位匹配", "通用形状匹配", () =>
+                new ToolNode(new HalconGenericShapeMatchTool(NextModuleName("通用形状匹配"))
+                {
+                    ImagePath = "Input.Image",
+                    NumMatches = 10
+                })));
             Register(new ToolboxItem("descriptor-match", "01 定位匹配", "描述子匹配", () =>
                 new ToolNode(new DescriptorMatchTool(NextModuleName("描述子匹配")))));
             Register(new ToolboxItem("measure", "05 几何测量", "椭圆测量", () =>

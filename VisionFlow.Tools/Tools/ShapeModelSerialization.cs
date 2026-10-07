@@ -41,6 +41,36 @@ namespace VisionFlow.Tools
             return File.ReadAllBytes(modelPath);
         }
 
+        /// <summary>
+        /// 用 serialize_shape_model 在内存中序列化形状模型句柄；通用形状模型（create_generic_shape_model）同样适用
+        /// （HALCON 22.11 实测，含原点与杂乱区域）。
+        /// </summary>
+        public static byte[] SerializeInMemory(HTuple modelId)
+        {
+            HOperatorSet.SerializeShapeModel(modelId, out HTuple item);
+            try
+            {
+                HOperatorSet.GetSerializedItemPtr(item, out HTuple pointer, out HTuple size);
+                var bytes = new byte[size.I];
+                Marshal.Copy(new IntPtr(pointer.L), bytes, 0, bytes.Length);
+                return bytes;
+            }
+            finally
+            {
+                HOperatorSet.ClearSerializedItem(item);
+            }
+        }
+
+        /// <summary>由 <see cref="SerializeInMemory"/> 的字节反序列化形状模型句柄（deserialize_shape_model）。</summary>
+        public static HTuple DeserializeInMemory(byte[] bytes)
+        {
+            if (bytes == null || bytes.Length == 0)
+            {
+                throw new InvalidOperationException("模板模型数据为空");
+            }
+            return DeserializeSerializedItem(bytes);
+        }
+
         public static byte[] SerializeNcc(HTuple modelId)
         {
             string modelPath = CreateTempModelPath(".ncm");

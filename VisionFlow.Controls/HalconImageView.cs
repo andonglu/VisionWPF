@@ -8,6 +8,19 @@ using VisionFlow.Controls.Roi;
 
 namespace VisionFlow.Controls
 {
+    /// <summary>图像坐标上的一个点（行、列）。</summary>
+    public sealed class ImagePointEventArgs : EventArgs
+    {
+        public ImagePointEventArgs(double row, double column)
+        {
+            Row = row;
+            Column = column;
+        }
+
+        public double Row { get; private set; }
+        public double Column { get; private set; }
+    }
+
     public sealed class HalconImageView : UserControl
     {
         private readonly HWindowControl _window;
@@ -30,6 +43,9 @@ namespace VisionFlow.Controls
         private string _overlayDrawMode = "margin";
         private double _overlayFillOpacity = 0.35;
         private double _overlayLineWidth = 2.0;
+        private bool _pickingPoint;
+        private bool _draggingPoint;
+        private (double Row, double Column)? _marker;
 
         public RoiCollection Rois { get; } = new RoiCollection();
 
@@ -169,6 +185,27 @@ namespace VisionFlow.Controls
             Cursor = Cursors.Cross;
         }
 
+        /// <summary>
+        /// 进入点选模式：在图像上按下鼠标即拾取一个点，按住拖动时持续更新，松开后退出点选模式。
+        /// 每次位置变化触发 <see cref="PointPicked"/>（图像坐标）。
+        /// </summary>
+        public void BeginPickPoint()
+        {
+            _pickingPoint = true;
+            _pendingRoiKind = null;
+            Cursor = Cursors.Cross;
+        }
+
+        /// <summary>点选模式下拾取（或拖动）到的图像坐标。</summary>
+        public event EventHandler<ImagePointEventArgs> PointPicked;
+
+        /// <summary>显示一个十字标记（如模型原点）；null 表示不显示。</summary>
+        public void SetMarker(double? row, double? column)
+        {
+            _marker = row.HasValue && column.HasValue ? ((double Row, double Column)?)(row.Value, column.Value) : null;
+            Redraw();
+        }
+
         public void CancelAddRoi()
         {
             _pendingRoiKind = null;
@@ -205,6 +242,13 @@ namespace VisionFlow.Controls
                 return;
             }
 
+            if (_pickingPoint)
+            {
+                _draggingPoint = true;
+                PointPicked?.Invoke(this, new ImagePointEventArgs(e.Y, e.X));
+                return;
+            }
+
             Rois.HitTest(e.Y, e.X, out _activeHandle);
             if (_activeHandle >= 0)
             {
@@ -224,6 +268,12 @@ namespace VisionFlow.Controls
         {
             if (!_hasImage)
             {
+                return;
+            }
+
+            if (_draggingPoint)
+            {
+                PointPicked?.Invoke(this, new ImagePointEventArgs(e.Y, e.X));
                 return;
             }
 
@@ -254,6 +304,12 @@ namespace VisionFlow.Controls
             _isPanning = false;
             _isEditingRoi = false;
             _activeHandle = -1;
+            if (_draggingPoint)
+            {
+                _draggingPoint = false;
+                _pickingPoint = false;
+                Cursor = Cursors.Default;
+            }
         }
 
         private void ZoomAt(double row, double col, double scale)
@@ -313,6 +369,13 @@ namespace VisionFlow.Controls
                     _window.HalconWindow.DispObj(_overlay);
                 }
                 Rois.Draw(_window.HalconWindow);
+                if (_marker.HasValue)
+                {
+                    _window.HalconWindow.SetColor("magenta");
+                    _window.HalconWindow.SetLineWidth(2);
+                    double size = Math.Max(12, (_col2 - _col1) / 40.0);
+                    _window.HalconWindow.DispCross(_marker.Value.Row, _marker.Value.Column, size, 0);
+                }
             }
             catch (HalconException)
             {

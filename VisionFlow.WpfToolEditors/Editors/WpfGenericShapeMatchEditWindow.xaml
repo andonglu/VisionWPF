@@ -1,0 +1,411 @@
+<Window x:Class="VisionFlow.WpfToolEditors.Editors.WpfGenericShapeMatchEditWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:wfi="clr-namespace:System.Windows.Forms.Integration;assembly=WindowsFormsIntegration"
+        xmlns:vfc="clr-namespace:VisionFlow.Controls;assembly=VisionFlow.Controls"
+        xmlns:editorControls="clr-namespace:VisionFlow.WpfToolEditors.Controls"
+        Title="通用形状匹配编辑"
+        Width="1320"
+        Height="880"
+        MinWidth="1180"
+        MinHeight="760"
+        WindowStartupLocation="CenterOwner">
+    <Grid Margin="24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <TabControl Grid.Row="0" TabStripPlacement="Right">
+            <TabItem Header="示教建模">
+                <Grid Margin="0,16,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="400" />
+                    </Grid.ColumnDefinitions>
+
+                    <Border Grid.Column="0" Style="{StaticResource PanelBorderStyle}" Margin="0,0,24,0">
+                        <DockPanel>
+                            <TextBlock DockPanel.Dock="Top" Text="ROI 示教区域（模板区域 / 杂乱区域）" Style="{StaticResource EditorSectionTitleStyle}" />
+                            <editorControls:WpfRoiEditorControl x:Name="TeachRoiEditor" />
+                        </DockPanel>
+                    </Border>
+
+                    <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto">
+                        <StackPanel>
+                            <Border Style="{StaticResource EditorCardStyle}">
+                                <StackPanel>
+                                    <TextBlock Text="模板列表" Style="{StaticResource EditorSectionTitleStyle}" />
+                                    <ListBox x:Name="TemplateList" Height="120" SelectionChanged="TemplateList_SelectionChanged" />
+                                    <Grid Margin="0,8,0,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="96" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="模板名称" Style="{StaticResource EditorFieldLabelStyle}" />
+                                        <TextBox x:Name="TemplateNameText" Grid.Column="1" />
+                                    </Grid>
+                                    <WrapPanel Margin="0,8,0,0" HorizontalAlignment="Right">
+                                        <Button Content="添加" Margin="0,0,8,0" Click="AddTemplate_Click" />
+                                        <Button Content="改名" Margin="0,0,8,0" Click="RenameTemplate_Click" />
+                                        <Button Content="删除" Margin="0,0,8,0" Click="DeleteTemplate_Click" />
+                                        <Button Content="上移" Margin="0,0,8,0" Click="MoveUp_Click" />
+                                        <Button Content="下移" Click="MoveDown_Click" />
+                                    </WrapPanel>
+                                    <TextBlock x:Name="TemplateStateText" Margin="0,8,0,0" TextWrapping="Wrap" FontWeight="SemiBold" />
+                                    <TextBlock x:Name="TemplateOrderHintText" Margin="0,8,0,0" TextWrapping="Wrap" Visibility="Collapsed"
+                                               Foreground="{DynamicResource SystemFillColorCautionBrush}"
+                                               Text="模板顺序已调整：下游按模板序号引用的地方（ModelIndices、CountsPerModel、BestModelIndex）可能需要更新。" />
+                                </StackPanel>
+                            </Border>
+
+                            <Border Style="{StaticResource EditorCardStyle}">
+                                <StackPanel>
+                                    <TextBlock Text="模型来源" Style="{StaticResource EditorSectionTitleStyle}" />
+                                    <ComboBox x:Name="ModelSourceCombo" SelectionChanged="ModelSourceCombo_SelectionChanged" />
+                                    <StackPanel x:Name="XldSourcePanel" Margin="0,8,0,0">
+                                        <TextBlock Text="XLD 轮廓（上游输出）" Style="{StaticResource EditorFieldLabelStyle}" />
+                                        <ComboBox x:Name="TeachXldCombo" IsEditable="True" />
+                                    </StackPanel>
+                                    <StackPanel x:Name="DxfSourcePanel" Margin="0,8,0,0">
+                                        <TextBlock Text="DXF 文件" Style="{StaticResource EditorFieldLabelStyle}" />
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="36" />
+                                            </Grid.ColumnDefinitions>
+                                            <TextBox x:Name="DxfPathText" Grid.Column="0" />
+                                            <Button Grid.Column="1" Content="..." MinWidth="32" Width="32" Padding="0" Click="BrowseDxf_Click" />
+                                        </Grid>
+                                    </StackPanel>
+                                    <StackPanel x:Name="ContourIndexPanel" Margin="0,8,0,0">
+                                        <TextBlock Text="轮廓序号（-1 = 全部轮廓）" Style="{StaticResource EditorFieldLabelStyle}" />
+                                        <TextBox x:Name="TeachXldIndexText" Text="-1" />
+                                    </StackPanel>
+                                    <TextBlock x:Name="XldMetricHintText" Margin="0,8,0,0" TextWrapping="Wrap"
+                                               Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                               Text="XLD / DXF 建模：XLD 没有灰度信息，度量固定为 ignore_local_polarity，对比度参数不生效（已锁定）。DXF 只在示教时读取，运行不依赖该文件。" />
+                                </StackPanel>
+                            </Border>
+
+                            <Border Style="{StaticResource EditorCardStyle}">
+                                <StackPanel>
+                                    <TextBlock Text="建模参数" Style="{StaticResource EditorSectionTitleStyle}" />
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="110" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                        </Grid.RowDefinitions>
+                                        <TextBlock Grid.Row="0" Grid.Column="0" Text="起始角（度）" Style="{StaticResource EditorFieldLabelStyle}" />
+                                        <TextBox x:Name="AngleStartText" Grid.Row="0" Grid.Column="1" />
+                                        <TextBlock Grid.Row="1" Grid.Column="0" Text="终止角（度）" Style="{StaticResource EditorFieldLabelStyle}" />
+                                        <TextBox x:Name="AngleEndText" Grid.Row="1" Grid.Column="1" />
+                                        <TextBlock Grid.Row="2" Grid.Column="0" Text="缩放方式" Style="{StaticResource EditorFieldLabelStyle}" />
+                                        <ComboBox x:Name="ScaleModeCombo" Grid.Row="2" Grid.Column="1" SelectionChanged="ScaleModeCombo_SelectionChanged" />
+                                    </Grid>
+                                    <Grid x:Name="IsoScalePanel">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="110" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                        </Grid.RowDefinitions>
+                                        <TextBlock Grid.Row="0" Grid.Column="0" Text="等比缩放最小" Style="{StaticResource EditorFieldLabelStyle}" />
+                                        <TextBox x:Name="IsoScaleMinText" Grid.Row="0" Grid.Column="1" />
+                                        <TextBlock Grid.Row="1" Grid.Column="0" Text="等比缩放最大" Style="{StaticResource EditorFieldLabelStyle}" />
+                                        <TextBox x:Name="IsoScaleMaxText" Grid.Row="1" Grid.Column="1" />
+                                    </Grid>
+                                    <Grid x:Name="AnisoScalePanel">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="110" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                        </Grid.RowDefinitions>
+                                        <TextBlock Grid.Row="0" Grid.Column="0" Text="行缩放最小" Style="{StaticResource EditorFieldLabelStyle}" />
+                                        <TextBox x:Name="ScaleRowMinText" Grid.Row="0" Grid.Column="1" />
+                                        <TextBlock Grid.Row="1" Grid.Column="0" Text="行缩放最大" Style="{StaticResource EditorFieldLabelStyle}" />
+                                        <TextBox x:Name="ScaleRowMaxText" Grid.Row="1" Grid.Column="1" />
+                                        <TextBlock Grid.Row="2" Grid.Column="0" Text="列缩放最小" Style="{StaticResource EditorFieldLabelStyle}" />
+                                        <TextBox x:Name="ScaleColumnMinText" Grid.Row="2" Grid.Column="1" />
+                                        <TextBlock Grid.Row="3" Grid.Column="0" Text="列缩放最大" Style="{StaticResource EditorFieldLabelStyle}" />
+                                        <TextBox x:Name="ScaleColumnMaxText" Grid.Row="3" Grid.Column="1" />
+                                    </Grid>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="110" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                        </Grid.RowDefinitions>
+                                        <TextBlock Grid.Row="0" Grid.Column="0" Text="金字塔（0 自动）" Style="{StaticResource EditorFieldLabelStyle}" />
+                                        <TextBox x:Name="NumLevelsText" Grid.Row="0" Grid.Column="1" />
+                                        <TextBlock Grid.Row="1" Grid.Column="0" Text="度量" Style="{StaticResource EditorFieldLabelStyle}" />
+                                        <ComboBox x:Name="MetricCombo" Grid.Row="1" Grid.Column="1" />
+                                        <TextBlock Grid.Row="2" Grid.Column="0" Text="优化" Style="{StaticResource EditorFieldLabelStyle}" />
+                                        <ComboBox x:Name="OptimizationCombo" Grid.Row="2" Grid.Column="1" IsEditable="True" />
+                                        <TextBlock Grid.Row="3" Grid.Column="0" Text="对比度下限" Style="{StaticResource EditorFieldLabelStyle}" />
+                                        <TextBox x:Name="ContrastLowText" Grid.Row="3" Grid.Column="1" />
+                                        <TextBlock Grid.Row="4" Grid.Column="0" Text="对比度上限" Style="{StaticResource EditorFieldLabelStyle}" />
+                                        <TextBox x:Name="ContrastHighText" Grid.Row="4" Grid.Column="1" />
+                                        <TextBlock Grid.Row="5" Grid.Column="0" Text="最小对比度" Style="{StaticResource EditorFieldLabelStyle}" />
+                                        <TextBox x:Name="MinContrastText" Grid.Row="5" Grid.Column="1" />
+                                        <TextBlock Grid.Row="6" Grid.Column="0" Text="最小尺寸" Style="{StaticResource EditorFieldLabelStyle}" />
+                                        <TextBox x:Name="MinSizeText" Grid.Row="6" Grid.Column="1" />
+                                    </Grid>
+                                    <TextBlock Margin="0,8,0,0" TextWrapping="Wrap" Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                               Text="缩放、金字塔、度量、对比度、优化、最小尺寸只在训练时生效，修改后需重新训练模板（0 表示自动）。角度范围训练与查找共用。" />
+                                    <Button Content="训练当前模板" Margin="0,12,0,0" HorizontalAlignment="Right" Click="TrainTemplate_Click" />
+                                </StackPanel>
+                            </Border>
+
+                            <Border Style="{StaticResource EditorCardStyle}">
+                                <StackPanel>
+                                    <TextBlock Text="模型原点（当前模板）" Style="{StaticResource EditorSectionTitleStyle}" />
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="110" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                        </Grid.RowDefinitions>
+                                        <TextBlock Grid.Row="0" Grid.Column="0" Text="原点行偏移" Style="{StaticResource EditorFieldLabelStyle}" />
+                                        <TextBox x:Name="ModelOriginRowText" Grid.Row="0" Grid.Column="1" Text="0" />
+                                        <TextBlock Grid.Row="1" Grid.Column="0" Text="原点列偏移" Style="{StaticResource EditorFieldLabelStyle}" />
+                                        <TextBox x:Name="ModelOriginColumnText" Grid.Row="1" Grid.Column="1" Text="0" />
+                                    </Grid>
+                                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,8,0,0">
+                                        <Button Content="在图像上点选原点" Margin="0,0,8,0" Click="PickOrigin_Click" />
+                                        <Button Content="应用原点" Click="ApplyOrigin_Click" />
+                                    </StackPanel>
+                                    <TextBlock Margin="0,8,0,0" TextWrapping="Wrap" Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                               Text="原点是相对模板参考点的偏移（origin_row / origin_column），写入当前模板的模型，匹配输出的 Row / Column 即为该点。点选：按下后可拖动，松开结束。" />
+                                    <TextBlock x:Name="OriginBaseHintText" Margin="0,8,0,0" TextWrapping="Wrap" Visibility="Collapsed"
+                                               Foreground="{DynamicResource SystemFillColorCautionBrush}"
+                                               Text="模型原点已修改：请重新确定跟随基准（基准 Row / Col / 角），基准不会随原点自动换算。" />
+                                </StackPanel>
+                            </Border>
+
+                            <Border Style="{StaticResource EditorCardStyle}">
+                                <StackPanel>
+                                    <TextBlock Text="杂乱区域（当前模板）" Style="{StaticResource EditorSectionTitleStyle}" />
+                                    <TextBlock TextWrapping="Wrap" Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                               Text="在左侧用 ROI 画出不允许出现边缘的区域（示教图像坐标，包含 ROI 合并、排除 ROI 扣除），再点“设为杂乱区域”写入当前模板；运行时在“运行参数”中启用杂乱判定。重新训练会清除杂乱区域。" />
+                                    <TextBlock x:Name="ClutterStateText" Margin="0,8,0,0" FontWeight="SemiBold" />
+                                    <Button Content="设为杂乱区域" Margin="0,8,0,0" HorizontalAlignment="Right" Click="SetClutter_Click" />
+                                </StackPanel>
+                            </Border>
+
+                            <Border Style="{StaticResource EditorCardStyle}">
+                                <StackPanel>
+                                    <TextBlock Text="基准姿态（全部模板共用）" Style="{StaticResource EditorSectionTitleStyle}" />
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="110" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                        </Grid.RowDefinitions>
+                                        <TextBlock Grid.Row="0" Grid.Column="0" Text="基准 Row" Style="{StaticResource EditorFieldLabelStyle}" />
+                                        <TextBox x:Name="BaseRowText" Grid.Row="0" Grid.Column="1" />
+                                        <TextBlock Grid.Row="1" Grid.Column="0" Text="基准 Col" Style="{StaticResource EditorFieldLabelStyle}" />
+                                        <TextBox x:Name="BaseColumnText" Grid.Row="1" Grid.Column="1" />
+                                        <TextBlock Grid.Row="2" Grid.Column="0" Text="基准角" Style="{StaticResource EditorFieldLabelStyle}" />
+                                        <TextBox x:Name="BaseAngleText" Grid.Row="2" Grid.Column="1" />
+                                    </Grid>
+                                    <TextBlock Margin="0,4,0,0" TextWrapping="Wrap" Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                               Text="跟随矩阵 HomMat = 匹配的完整变换矩阵（hom_mat_2d，含各向异性缩放）· 基准位姿⁻¹。" />
+                                    <Button Content="选中结果设为基准" HorizontalAlignment="Right" Margin="0,8,0,0" Click="SetSelectedBase_Click" />
+                                </StackPanel>
+                            </Border>
+
+                            <Border Style="{StaticResource EditorCardStyle}">
+                                <DockPanel>
+                                    <TextBlock DockPanel.Dock="Top" Text="示教测试结果（当前模板）" Style="{StaticResource EditorSectionTitleStyle}" />
+                                    <DataGrid x:Name="TeachResultGrid" Height="170" AutoGenerateColumns="False" IsReadOnly="True">
+                                        <DataGrid.Columns>
+                                            <DataGridTextColumn Header="序号" Binding="{Binding Index}" Width="48" />
+                                            <DataGridTextColumn Header="Row" Binding="{Binding Row}" Width="*" />
+                                            <DataGridTextColumn Header="Column" Binding="{Binding Column}" Width="*" />
+                                            <DataGridTextColumn Header="Angle" Binding="{Binding Angle}" Width="*" />
+                                            <DataGridTextColumn Header="ScaleRow" Binding="{Binding ScaleRow}" Width="*" />
+                                            <DataGridTextColumn Header="ScaleColumn" Binding="{Binding ScaleColumn}" Width="*" />
+                                            <DataGridTextColumn Header="Score" Binding="{Binding Score}" Width="*" />
+                                        </DataGrid.Columns>
+                                    </DataGrid>
+                                </DockPanel>
+                            </Border>
+                        </StackPanel>
+                    </ScrollViewer>
+                </Grid>
+            </TabItem>
+
+            <TabItem Header="运行参数">
+                <Grid Margin="0,16,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="400" />
+                    </Grid.ColumnDefinitions>
+
+                    <Border Grid.Column="0" Style="{StaticResource PanelBorderStyle}" Margin="0,0,24,0">
+                        <DockPanel>
+                            <TextBlock DockPanel.Dock="Top" Text="运行预览" Style="{StaticResource EditorSectionTitleStyle}" />
+                            <wfi:WindowsFormsHost>
+                                <vfc:HalconImageView x:Name="RunImageView" />
+                            </wfi:WindowsFormsHost>
+                        </DockPanel>
+                    </Border>
+
+                    <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto">
+                        <StackPanel>
+                            <Border Style="{StaticResource EditorCardStyle}">
+                                <StackPanel>
+                                    <TextBlock Text="输入" Style="{StaticResource EditorSectionTitleStyle}" />
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="110" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                        </Grid.RowDefinitions>
+                                        <TextBlock Grid.Row="0" Grid.Column="0" Text="模块名" Style="{StaticResource EditorFieldLabelStyle}" />
+                                        <TextBox x:Name="ModuleNameText" Grid.Row="0" Grid.Column="1" />
+                                        <TextBlock Grid.Row="1" Grid.Column="0" Text="图像输入" Style="{StaticResource EditorFieldLabelStyle}" />
+                                        <ComboBox x:Name="ImagePathCombo" Grid.Row="1" Grid.Column="1" IsEditable="True" SelectionChanged="ImagePathCombo_SelectionChanged" />
+                                    </Grid>
+                                </StackPanel>
+                            </Border>
+
+                            <Border Style="{StaticResource EditorCardStyle}">
+                                <StackPanel>
+                                    <TextBlock Text="查找参数（对全部模板生效）" Style="{StaticResource EditorSectionTitleStyle}" />
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="110" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                        </Grid.RowDefinitions>
+                                        <TextBlock Grid.Row="0" Grid.Column="0" Text="最小分" Style="{StaticResource EditorFieldLabelStyle}" />
+                                        <TextBox x:Name="MinScoreText" Grid.Row="0" Grid.Column="1" />
+                                        <TextBlock Grid.Row="1" Grid.Column="0" Text="数量（0 全部）" Style="{StaticResource EditorFieldLabelStyle}" />
+                                        <TextBox x:Name="NumMatchesText" Grid.Row="1" Grid.Column="1" />
+                                        <TextBlock Grid.Row="2" Grid.Column="0" Text="重叠" Style="{StaticResource EditorFieldLabelStyle}" />
+                                        <TextBox x:Name="MaxOverlapText" Grid.Row="2" Grid.Column="1" />
+                                        <TextBlock Grid.Row="3" Grid.Column="0" Text="贪婪度" Style="{StaticResource EditorFieldLabelStyle}" />
+                                        <TextBox x:Name="GreedinessText" Grid.Row="3" Grid.Column="1" />
+                                        <TextBlock Grid.Row="4" Grid.Column="0" Text="亚像素" Style="{StaticResource EditorFieldLabelStyle}" />
+                                        <ComboBox x:Name="SubPixelCombo" Grid.Row="4" Grid.Column="1" />
+                                        <TextBlock Grid.Row="5" Grid.Column="0" Text="最大变形（像素）" Style="{StaticResource EditorFieldLabelStyle}" />
+                                        <TextBox x:Name="MaxDeformationText" Grid.Row="5" Grid.Column="1" />
+                                        <TextBlock Grid.Row="6" Grid.Column="0" Text="超时（毫秒，0 不限）" Style="{StaticResource EditorFieldLabelStyle}" />
+                                        <TextBox x:Name="TimeoutMsText" Grid.Row="6" Grid.Column="1" />
+                                        <CheckBox x:Name="BorderShapeModelsCheck" Grid.Row="7" Grid.Column="0" Grid.ColumnSpan="2" Margin="0,8,0,0"
+                                                  Content="允许模板部分超出图像（越界匹配）" />
+                                    </Grid>
+                                    <CheckBox x:Name="UseClutterCheck" Margin="0,8,0,0" Content="启用杂乱判定（每个模板都须设置杂乱区域）"
+                                              Checked="UseClutterCheck_Changed" Unchecked="UseClutterCheck_Changed" />
+                                    <Grid x:Name="ClutterParamsPanel">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="110" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                        </Grid.RowDefinitions>
+                                        <TextBlock Grid.Row="0" Grid.Column="0" Text="最大杂乱比例" Style="{StaticResource EditorFieldLabelStyle}" />
+                                        <TextBox x:Name="MaxClutterText" Grid.Row="0" Grid.Column="1" />
+                                        <TextBlock Grid.Row="1" Grid.Column="0" Text="杂乱对比度" Style="{StaticResource EditorFieldLabelStyle}" />
+                                        <TextBox x:Name="ClutterContrastText" Grid.Row="1" Grid.Column="1" />
+                                    </Grid>
+                                    <CheckBox x:Name="FailWhenNotFoundCheck" Margin="0,8,0,0" Content="未匹配到目标时失败（取消后输出 Found=false 并继续）" />
+                                    <Grid Margin="0,12,0,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="110" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                        </Grid.RowDefinitions>
+                                        <TextBlock Grid.Row="0" Grid.Column="0" Text="搜索区域" Style="{StaticResource EditorFieldLabelStyle}" />
+                                        <ComboBox x:Name="SearchRegionCombo" Grid.Row="0" Grid.Column="1" IsEditable="True" />
+                                        <TextBlock Grid.Row="1" Grid.Column="1" Margin="0,4,0,8" TextWrapping="Wrap"
+                                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                                   Text="可选，留空则在整幅图像中查找。搜索区域限制的是模型参考点（原点）落在区域内，不是整个模板落在区域内。" />
+                                        <TextBlock Grid.Row="2" Grid.Column="0" Text="排序方式" Style="{StaticResource EditorFieldLabelStyle}" />
+                                        <ComboBox x:Name="SortByCombo" Grid.Row="2" Grid.Column="1" SelectionChanged="SortByCombo_SelectionChanged" />
+                                        <TextBlock x:Name="RowToleranceLabel" Grid.Row="3" Grid.Column="0" Text="行容差" Style="{StaticResource EditorFieldLabelStyle}" />
+                                        <TextBox x:Name="RowToleranceText" Grid.Row="3" Grid.Column="1" />
+                                    </Grid>
+                                    <Button Content="执行测试" Margin="0,16,0,0" HorizontalAlignment="Right" Click="TestRun_Click" />
+                                </StackPanel>
+                            </Border>
+
+                            <Border Style="{StaticResource EditorCardStyle}">
+                                <DockPanel>
+                                    <TextBlock DockPanel.Dock="Top" Text="运行测试结果" Style="{StaticResource EditorSectionTitleStyle}" />
+                                    <DataGrid x:Name="RunResultGrid" Height="220" AutoGenerateColumns="False" IsReadOnly="True">
+                                        <DataGrid.Columns>
+                                            <DataGridTextColumn Header="序号" Binding="{Binding Index}" Width="48" />
+                                            <DataGridTextColumn Header="模板" Binding="{Binding ModelName}" Width="*" />
+                                            <DataGridTextColumn Header="Row" Binding="{Binding Row}" Width="*" />
+                                            <DataGridTextColumn Header="Column" Binding="{Binding Column}" Width="*" />
+                                            <DataGridTextColumn Header="Angle" Binding="{Binding Angle}" Width="*" />
+                                            <DataGridTextColumn Header="ScaleRow" Binding="{Binding ScaleRow}" Width="*" />
+                                            <DataGridTextColumn Header="ScaleColumn" Binding="{Binding ScaleColumn}" Width="*" />
+                                            <DataGridTextColumn Header="Score" Binding="{Binding Score}" Width="*" />
+                                        </DataGrid.Columns>
+                                    </DataGrid>
+                                </DockPanel>
+                            </Border>
+                        </StackPanel>
+                    </ScrollViewer>
+                </Grid>
+            </TabItem>
+        </TabControl>
+
+        <DockPanel Grid.Row="1" LastChildFill="False" Margin="0,24,0,0">
+            <TextBlock x:Name="StatusText" VerticalAlignment="Center" TextWrapping="Wrap" MaxWidth="900"
+                       Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+            <Button DockPanel.Dock="Right" Content="取消" MinWidth="96" Margin="8,0,0,0" Click="Cancel_Click" />
+            <Button DockPanel.Dock="Right" Content="确定" MinWidth="96" Style="{StaticResource AccentButtonStyle}" Click="Ok_Click" />
+        </DockPanel>
+    </Grid>
+</Window>

@@ -19,6 +19,11 @@ namespace VisionFlow.WpfToolEditors
             {
                 return registeredWindow;
             }
+            // 通用形状匹配是多模板工具，须先于单模板的模板匹配窗口（模板 / 灰度 / 缩放形状 / 局部变形）路由到专用窗口
+            if (tool is HalconGenericShapeMatchTool genericShapeTool)
+            {
+                return new WpfGenericShapeMatchEditWindow(genericShapeTool, context);
+            }
             if (tool is IHalconTemplateMatchTool matchTool)
             {
                 return new WpfMatchToolEditWindow(matchTool, context);

@@ -15,6 +15,7 @@ namespace VisionFlow.Tools
             FlowSerializer.RegisterToolType(typeof(HalconGrayMatchTool), "gray-match");
             FlowSerializer.RegisterToolType(typeof(HalconScaledShapeMatchTool), "scaled-shape-match");
             FlowSerializer.RegisterToolType(typeof(HalconLocalDeformableMatchTool), "deformable-match");
+            FlowSerializer.RegisterToolType(typeof(HalconGenericShapeMatchTool), "generic-shape-match");
             FlowSerializer.RegisterToolType(typeof(EllipseFollowMeasureTool), "measure");
             FlowSerializer.RegisterToolType(typeof(LineFollowMeasureTool), "measureline");
             FlowSerializer.RegisterToolType(typeof(OneDCaliperFollowMeasureTool), "measure-caliper1d");

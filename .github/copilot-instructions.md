@@ -4,7 +4,7 @@
 
 Work from the repository root (`VisionWPF`). The solution file is `VisionFlow.slnx`, not a classic `.sln`.
 
-Prerequisites: Windows, a .NET SDK that can build `net9.0-windows`, and HALCON's .NET assembly at `lib\halcon\halcondotnet.dll`. All projects reference `..\lib\halcon\halcondotnet.dll`; DLLs are ignored by git, so a fresh clone without that file fails with `MSB3245` / `CS0246` for `HalconDotNet`.
+Prerequisites: Windows, a .NET SDK that can build `net9.0-windows`, and HALCON 22.11's .NET assembly at `lib\halcon\halcondotnet.dll` (copy it from `HALCON-22.11-Steady\bin\dotnet35\halcondotnet.dll`; the 20.11 assembly lacks the `*_generic_shape_model` operators used by the generic shape match tool). All projects reference `..\lib\halcon\halcondotnet.dll`; DLLs are ignored by git, so a fresh clone without that file fails with `MSB3245` / `CS0246` for `HalconDotNet`.
 
 ```powershell
 dotnet restore .\VisionFlow.slnx

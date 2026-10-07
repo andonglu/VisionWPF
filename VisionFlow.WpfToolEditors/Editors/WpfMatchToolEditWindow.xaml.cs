@@ -47,6 +47,15 @@ namespace VisionFlow.WpfToolEditors.Editors
         private readonly ToolEditContext _context;
         private readonly List<MatchResultItem> _lastTeachMatches = new List<MatchResultItem>();
         private byte[] _modelData;
+        // MT-02 示教记录：以最近一次创建模板时的实际方式为准，确定时写回工具
+        private MatchModelSource _teachSource;
+        private string _teachMetric;
+        private string _teachXldPath;
+        private int _teachXldIndex = -1;
+        private string _teachDxfPath;
+        private double _appliedOriginRow;
+        private double _appliedOriginColumn;
+        private string _metricBeforeLock;
 
         public WpfMatchToolEditWindow(IHalconTemplateMatchTool tool, ToolEditContext context)
         {
@@ -61,12 +70,43 @@ namespace VisionFlow.WpfToolEditors.Editors
             TryShowSelectedImage();
             ShowLastRunResult();
             RefreshModelState();
+            TeachRoiEditor.ImageView.PointPicked += OnOriginPicked;
         }
 
         private bool HasModel => _modelData != null && _modelData.Length > 0;
         private bool IsGrayMatch => _tool is HalconGrayMatchTool;
         private bool IsScaledShapeMatch => _tool is HalconScaledShapeMatchTool;
         private bool IsDeformableMatch => _tool is HalconLocalDeformableMatchTool;
+        private HalconTemplateMatchToolBase TemplateTool => _tool as HalconTemplateMatchToolBase;
+        private bool SupportsXld => TemplateTool?.SupportsXldModel == true;
+        private bool SupportsOrigin => TemplateTool?.SupportsModelOrigin == true;
+
+        private sealed class SourceChoice
+        {
+            public SourceChoice(MatchModelSource value, string label)
+            {
+                Value = value;
+                Label = label;
+            }
+
+            public MatchModelSource Value { get; private set; }
+            public string Label { get; private set; }
+
+            public override string ToString()
+            {
+                return Label;
+            }
+        }
+
+        private static readonly SourceChoice[] SourceChoices =
+        {
+            new SourceChoice(MatchModelSource.ImageRoi, "图像 ROI"),
+            new SourceChoice(MatchModelSource.Xld, "XLD 轮廓"),
+            new SourceChoice(MatchModelSource.Dxf, "DXF 文件")
+        };
+
+        private MatchModelSource SelectedSource =>
+            SupportsXld ? (ModelSourceCombo.SelectedItem as SourceChoice)?.Value ?? MatchModelSource.ImageRoi : MatchModelSource.ImageRoi;
 
         private void InitializeOptions()
         {
@@ -115,6 +155,20 @@ namespace VisionFlow.WpfToolEditors.Editors
                 }
             }
             SortByCombo.ItemsSource = SortChoices;
+
+            ModelSourceCombo.ItemsSource = SourceChoices;
+            ModelSourceCard.Visibility = SupportsXld ? Visibility.Visible : Visibility.Collapsed;
+            ModelOriginCard.Visibility = SupportsOrigin ? Visibility.Visible : Visibility.Collapsed;
+            if (_context.Root != null && _context.Node != null)
+            {
+                foreach (RefCandidate candidate in RefCandidateService.ForInput(_context.Root, _context.Node, typeof(HalconXld)))
+                {
+                    if (!TeachXldCombo.Items.Contains(candidate.Path))
+                    {
+                        TeachXldCombo.Items.Add(candidate.Path);
+                    }
+                }
+            }
         }
 
         private sealed class SortChoice
@@ -208,6 +262,54 @@ namespace VisionFlow.WpfToolEditors.Editors
                 ScaleColumnStepText.Text = "auto";
                 DeformationSmoothnessText.Text = deformable.DeformationSmoothness;
             }
+
+            HalconTemplateMatchToolBase templateTool = TemplateTool;
+            if (templateTool != null)
+            {
+                _teachSource = templateTool.ModelSource;
+                _teachMetric = templateTool.TeachMetric;
+                _teachXldPath = templateTool.TeachXldPath;
+                _teachXldIndex = templateTool.TeachXldIndex;
+                _teachDxfPath = templateTool.DxfPath;
+                _appliedOriginRow = templateTool.ModelOriginRow;
+                _appliedOriginColumn = templateTool.ModelOriginColumn;
+            }
+            ModelSourceCombo.SelectedItem = SourceChoices.First(c => c.Value == (SupportsXld ? _teachSource : MatchModelSource.ImageRoi));
+            TeachXldCombo.Text = _teachXldPath ?? string.Empty;
+            TeachXldIndexText.Text = _teachXldIndex.ToString(CultureInfo.CurrentCulture);
+            DxfPathText.Text = _teachDxfPath ?? string.Empty;
+            ModelOriginRowText.Text = Format(_appliedOriginRow);
+            ModelOriginColumnText.Text = Format(_appliedOriginColumn);
+            ModelSourceCombo_SelectionChanged(null, null);
+        }
+
+        /// <summary>模型来源切换：XLD / DXF 建模时度量锁定为 ignore_local_polarity、对比度不可用。</summary>
+        private void ModelSourceCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            MatchModelSource source = SelectedSource;
+            XldSourcePanel.Visibility = source == MatchModelSource.Xld ? Visibility.Visible : Visibility.Collapsed;
+            DxfSourcePanel.Visibility = source == MatchModelSource.Dxf ? Visibility.Visible : Visibility.Collapsed;
+            ContourIndexPanel.Visibility = source == MatchModelSource.ImageRoi ? Visibility.Collapsed : Visibility.Visible;
+            XldMetricHintText.Visibility = source == MatchModelSource.ImageRoi ? Visibility.Collapsed : Visibility.Visible;
+            if (source != MatchModelSource.ImageRoi)
+            {
+                if (TeachMetricCombo.IsEnabled)
+                {
+                    _metricBeforeLock = TeachMetricCombo.Text;
+                }
+                TeachMetricCombo.SelectedItem = MatchModelBuilder.XldMetric;
+                TeachMetricCombo.IsEnabled = false;
+                TeachContrastText.IsEnabled = false;
+            }
+            else
+            {
+                if (!TeachMetricCombo.IsEnabled)
+                {
+                    TeachMetricCombo.IsEnabled = true;
+                    TeachMetricCombo.SelectedItem = _metricBeforeLock ?? LastTeachSettings.Metric;
+                }
+                TeachContrastText.IsEnabled = true;
+            }
         }
 
         private void RefreshModelState()
@@ -215,6 +317,25 @@ namespace VisionFlow.WpfToolEditors.Editors
             ModelStateText.Text = HasModel ? $"模型：已创建 ({_modelData.Length} bytes)" : "模型：未创建";
             ModelStateText.Foreground = (System.Windows.Media.Brush)FindResource(
                 HasModel ? "SystemFillColorSuccessBrush" : "SystemFillColorCriticalBrush");
+        }
+
+        /// <summary>按引用从上次运行结果取图像（借用，不得释放）；没有运行结果或引用无效时返回 null。</summary>
+        private HObject ResolveRunImage(string path)
+        {
+            if (_context.LastRunContext == null)
+            {
+                return null;
+            }
+            try
+            {
+                object value = VariableReference.Parse(path).Resolve(_context.LastRunContext);
+                HObject image = value is HalconImage halconImage ? halconImage.Object : value as HObject;
+                return image != null && image.IsInitialized() ? image : null;
+            }
+            catch (Exception ex) when (ex is InvalidOperationException || ex is KeyNotFoundException || ex is FormatException || ex is ArgumentException)
+            {
+                return null;
+            }
         }
 
         private void TryShowSelectedImage()
@@ -230,8 +351,20 @@ namespace VisionFlow.WpfToolEditors.Editors
                 return;
             }
 
-            if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
+            if (string.IsNullOrWhiteSpace(path))
             {
+                return;
+            }
+
+            if (!File.Exists(path))
+            {
+                // 上游节点的图像输出（如 图像1.Image）取自上次运行结果；示教页的 XLD 建模测试与原点点选需要它
+                HObject upstream = ResolveRunImage(path);
+                if (upstream != null)
+                {
+                    TeachRoiEditor.ShowImage(upstream);
+                    RunImageView.ShowImage(upstream);
+                }
                 return;
             }
 
@@ -284,6 +417,12 @@ namespace VisionFlow.WpfToolEditors.Editors
 
         private void CreateTemplate_Click(object sender, RoutedEventArgs e)
         {
+            if (SelectedSource != MatchModelSource.ImageRoi)
+            {
+                CreateTemplateFromXld(SelectedSource);
+                return;
+            }
+
             if (TeachRoiEditor.ImageView.ImageObject == null)
             {
                 ShowInfo("请先打开或显示一张图像。");
@@ -293,6 +432,7 @@ namespace VisionFlow.WpfToolEditors.Editors
             try
             {
                 SaveTeachSettings();
+                ReadOriginTexts(out double originRow, out double originColumn);
                 using HRegion region = TeachRoiEditor.BuildRegion();
                 HOperatorSet.AreaCenter(region, out HTuple area, out HTuple teachRows, out HTuple teachColumns);
                 if (area.Length == 0 || area.D <= 0)
@@ -309,7 +449,13 @@ namespace VisionFlow.WpfToolEditors.Editors
                     HTuple modelId = CreateModel(reduced);
                     try
                     {
+                        // 原点写入模型本身；偏移为 0 时不调用算子，模型字节与原来完全相同
+                        if (SupportsOrigin)
+                        {
+                            MatchModelBuilder.ApplyOrigin(modelId, IsGrayMatch, originRow, originColumn);
+                        }
                         _modelData = SerializeModel(modelId);
+                        RecordTeach(MatchModelSource.ImageRoi, originRow, originColumn);
                         RefreshModelState();
                         double testStartAngle = ParseDouble(TeachAngleStartText.Text, "起始角");
                         double testExtentAngle = ParseDouble(TeachAngleExtentText.Text, "角范围");
@@ -330,8 +476,8 @@ namespace VisionFlow.WpfToolEditors.Editors
                             testNumLevels,
                             testGreediness,
                             updateTeachMatches: true,
-                            expectedRow: teachRow,
-                            expectedColumn: teachColumn);
+                            expectedRow: teachRow + originRow,
+                            expectedColumn: teachColumn + originColumn);
                         if (_lastTeachMatches.Count > 0)
                         {
                             BaseRowText.Text = Format(_lastTeachMatches[0].Row);
@@ -366,6 +512,256 @@ namespace VisionFlow.WpfToolEditors.Editors
             catch (Exception ex)
             {
                 ShowError("创建模板失败：" + ex.Message);
+            }
+        }
+
+        private void ReadOriginTexts(out double row, out double column)
+        {
+            row = 0;
+            column = 0;
+            if (SupportsOrigin)
+            {
+                row = ParseDouble(ModelOriginRowText.Text, "原点行偏移");
+                column = ParseDouble(ModelOriginColumnText.Text, "原点列偏移");
+            }
+        }
+
+        /// <summary>记录本次建模的方式与已写入模型的原点（确定时写回工具）。</summary>
+        private void RecordTeach(MatchModelSource source, double originRow, double originColumn)
+        {
+            _teachSource = source;
+            _teachMetric = source == MatchModelSource.ImageRoi ? TeachMetricCombo.Text : MatchModelBuilder.XldMetric;
+            _teachXldPath = source == MatchModelSource.Xld ? (TeachXldCombo.Text ?? string.Empty).Trim() : null;
+            _teachDxfPath = source == MatchModelSource.Dxf ? (DxfPathText.Text ?? string.Empty).Trim() : null;
+            _teachXldIndex = source == MatchModelSource.ImageRoi ? -1 : ParseInt(TeachXldIndexText.Text, "轮廓序号");
+            _appliedOriginRow = originRow;
+            _appliedOriginColumn = originColumn;
+            OriginBaseHintText.Visibility = Visibility.Collapsed;
+        }
+
+        /// <summary>从上游 XLD 或 DXF 文件建模（MT-02）：度量固定 ignore_local_polarity；示教图像中能找到时用于测试与确定基准。</summary>
+        private void CreateTemplateFromXld(MatchModelSource source)
+        {
+            HObject owned = null;
+            HObject selected = null;
+            try
+            {
+                SaveTeachSettings();
+                ReadOriginTexts(out double originRow, out double originColumn);
+                int index = ParseInt(TeachXldIndexText.Text, "轮廓序号");
+                HObject contours;
+                if (source == MatchModelSource.Xld)
+                {
+                    contours = ResolveXld((TeachXldCombo.Text ?? string.Empty).Trim());
+                }
+                else
+                {
+                    owned = MatchModelBuilder.ReadDxf((DxfPathText.Text ?? string.Empty).Trim());
+                    contours = owned;
+                }
+                selected = MatchModelBuilder.SelectContours(contours, index);
+                HOperatorSet.CountObj(selected, out HTuple contourCount);
+                int minContrast = ParseAutoInt(TeachMinContrastText.Text, "最小对比");
+                HTuple minContrastValue = minContrast < 0 ? new HTuple(5) : new HTuple(minContrast);
+                HTuple modelId = IsScaledShapeMatch
+                    ? MatchModelBuilder.CreateScaledShapeModelXld(selected,
+                        ToAuto(ParseAutoInt(TeachNumLevelsText.Text, "金字塔")),
+                        ParseDouble(TeachAngleStartText.Text, "起始角"),
+                        ParseDouble(TeachAngleExtentText.Text, "角范围"),
+                        ToAuto(ParseAutoDouble(TeachAngleStepText.Text, "角步长")),
+                        ParseDouble(ScaleMinText.Text, "最小缩放"),
+                        ParseDouble(ScaleMaxText.Text, "最大缩放"),
+                        ToAuto(ParseAutoDouble(ScaleStepText.Text, "缩放步长")),
+                        TeachOptimizationCombo.Text,
+                        minContrastValue)
+                    : MatchModelBuilder.CreateShapeModelXld(selected,
+                        ToAuto(ParseAutoInt(TeachNumLevelsText.Text, "金字塔")),
+                        ParseDouble(TeachAngleStartText.Text, "起始角"),
+                        ParseDouble(TeachAngleExtentText.Text, "角范围"),
+                        ToAuto(ParseAutoDouble(TeachAngleStepText.Text, "角步长")),
+                        TeachOptimizationCombo.Text,
+                        minContrastValue);
+                try
+                {
+                    MatchModelBuilder.ApplyOrigin(modelId, false, originRow, originColumn);
+                    _modelData = SerializeModel(modelId);
+                    RecordTeach(source, originRow, originColumn);
+                    RefreshModelState();
+                    int matchCount = 0;
+                    if (TeachRoiEditor.ImageView.ImageObject != null)
+                    {
+                        // XLD 模型的参考点是轮廓外接矩形中心
+                        HOperatorSet.SmallestRectangle1Xld(selected, out HTuple r1, out HTuple c1, out HTuple r2, out HTuple c2);
+                        double centerRow = (r1.TupleMin().D + r2.TupleMax().D) / 2.0 + originRow;
+                        double centerColumn = (c1.TupleMin().D + c2.TupleMax().D) / 2.0 + originColumn;
+                        matchCount = ExecuteMatch(modelId, TeachRoiEditor.ImageView.ImageObject, TeachRoiEditor.ImageView, TeachResultGrid,
+                            ParseDouble(TeachAngleStartText.Text, "起始角"), ParseDouble(TeachAngleExtentText.Text, "角范围"),
+                            0.5, 1, 0.5, "least_squares", 0, 0.9, updateTeachMatches: true,
+                            expectedRow: centerRow, expectedColumn: centerColumn);
+                        if (_lastTeachMatches.Count > 0)
+                        {
+                            BaseRowText.Text = Format(_lastTeachMatches[0].Row);
+                            BaseColumnText.Text = Format(_lastTeachMatches[0].Column);
+                            BaseAngleText.Text = Format(_lastTeachMatches[0].Angle);
+                        }
+                    }
+                    SetStatus($"已从{(source == MatchModelSource.Xld ? "XLD 轮廓" : "DXF 文件")}创建模板：{contourCount.I} 条轮廓，度量 {MatchModelBuilder.XldMetric}；示教图像中匹配 {matchCount} 个。");
+                }
+                finally
+                {
+                    ClearModel(modelId);
+                }
+            }
+            catch (Exception ex)
+            {
+                ShowError("创建模板失败：" + ex.Message);
+            }
+            finally
+            {
+                selected?.Dispose();
+                owned?.Dispose();
+            }
+        }
+
+        /// <summary>取上游 XLD 输出（借用上次运行的结果，不得释放）。</summary>
+        private HObject ResolveXld(string path)
+        {
+            if (string.IsNullOrWhiteSpace(path))
+            {
+                throw new InvalidOperationException("请选择上游 XLD 输出");
+            }
+            if (_context.LastRunContext == null)
+            {
+                throw new InvalidOperationException("XLD 引用需要先运行一次流程：" + path);
+            }
+            object value = VariableReference.Parse(path).Resolve(_context.LastRunContext);
+            HObject xld = value is HalconXld halconXld ? halconXld.Object : value as HObject;
+            if (xld == null)
+            {
+                throw new InvalidOperationException("引用不是 XLD 轮廓：" + path);
+            }
+            return xld;
+        }
+
+        private void BrowseDxf_Click(object sender, RoutedEventArgs e)
+        {
+            var dialog = new OpenFileDialog { Filter = "DXF 文件|*.dxf|所有文件|*.*" };
+            if (dialog.ShowDialog(this) == true)
+            {
+                DxfPathText.Text = dialog.FileName;
+            }
+        }
+
+        private void PickOrigin_Click(object sender, RoutedEventArgs e)
+        {
+            if (!HasModel || TeachRoiEditor.ImageView.ImageObject == null)
+            {
+                ShowInfo("请先创建模板并显示示教图像。");
+                return;
+            }
+            if (_lastTeachMatches.Count == 0)
+            {
+                RefreshTeachMatches(_appliedOriginRow, _appliedOriginColumn);
+            }
+            if (_lastTeachMatches.Count == 0)
+            {
+                ShowInfo("示教图像中没有找到模板，无法确定模板参考点。");
+                return;
+            }
+            TeachRoiEditor.ImageView.BeginPickPoint();
+            SetStatus("请在示教图像上点选模型原点（按住可拖动，松开结束），然后点“应用原点”。");
+        }
+
+        private void OnOriginPicked(object sender, ImagePointEventArgs e)
+        {
+            if (_lastTeachMatches.Count == 0)
+            {
+                return;
+            }
+            MatchResultItem match = _lastTeachMatches[0];
+            MatchModelBuilder.OriginFromPickedPoint(e.Row, e.Column, match.Row, match.Column,
+                _appliedOriginRow, _appliedOriginColumn, out double row, out double column);
+            ModelOriginRowText.Text = Format(Math.Round(row, 2));
+            ModelOriginColumnText.Text = Format(Math.Round(column, 2));
+            TeachRoiEditor.ImageView.SetMarker(e.Row, e.Column);
+            SetStatus($"已点选原点：图像 ({e.Row:F2}, {e.Column:F2})，相对参考点偏移 ({row:F2}, {column:F2})。点“应用原点”写入模型。");
+        }
+
+        private void ApplyOrigin_Click(object sender, RoutedEventArgs e)
+        {
+            if (!HasModel)
+            {
+                ShowInfo("请先创建模板。");
+                return;
+            }
+            try
+            {
+                ApplyOriginToModel();
+            }
+            catch (Exception ex)
+            {
+                ShowError("应用原点失败：" + ex.Message);
+            }
+        }
+
+        /// <summary>把界面上的原点写入已创建的模型（替换模型数据），重新做示教测试，并提示重新确定跟随基准。</summary>
+        private void ApplyOriginToModel()
+        {
+            ReadOriginTexts(out double row, out double column);
+            double previousRow = _appliedOriginRow;
+            double previousColumn = _appliedOriginColumn;
+            HTuple modelId = DeserializeModel();
+            try
+            {
+                MatchModelBuilder.SetOrigin(modelId, IsGrayMatch, row, column);
+                _modelData = SerializeModel(modelId);
+            }
+            finally
+            {
+                ClearModel(modelId);
+            }
+            _appliedOriginRow = row;
+            _appliedOriginColumn = column;
+            RefreshModelState();
+            if (row != previousRow || column != previousColumn)
+            {
+                OriginBaseHintText.Visibility = Visibility.Visible;
+            }
+            RefreshTeachMatches(previousRow, previousColumn);
+            if (_lastTeachMatches.Count > 0)
+            {
+                TeachRoiEditor.ImageView.SetMarker(_lastTeachMatches[0].Row, _lastTeachMatches[0].Column);
+            }
+            SetStatus($"模型原点已更新为 ({row:F2}, {column:F2})；匹配输出的 Row / Column 即为该点。请重新确定跟随基准（基准 Row / Col / 角）。");
+        }
+
+        /// <summary>
+        /// 用当前模型在示教图像上重新做示教测试；按“原示教实例 + 原点变化量”的位置排序，保证第一项仍是原来的示教实例。
+        /// </summary>
+        private void RefreshTeachMatches(double previousOriginRow, double previousOriginColumn)
+        {
+            if (!HasModel || TeachRoiEditor.ImageView.ImageObject == null)
+            {
+                return;
+            }
+            double? expectedRow = null;
+            double? expectedColumn = null;
+            if (_lastTeachMatches.Count > 0)
+            {
+                expectedRow = _lastTeachMatches[0].Row - previousOriginRow + _appliedOriginRow;
+                expectedColumn = _lastTeachMatches[0].Column - previousOriginColumn + _appliedOriginColumn;
+            }
+            HTuple modelId = DeserializeModel();
+            try
+            {
+                ExecuteMatch(modelId, TeachRoiEditor.ImageView.ImageObject, TeachRoiEditor.ImageView, TeachResultGrid,
+                    ParseDouble(TeachAngleStartText.Text, "起始角"), ParseDouble(TeachAngleExtentText.Text, "角范围"),
+                    0.5, 10, 0.5, IsGrayMatch ? "true" : "least_squares", 0, 0.9, updateTeachMatches: true,
+                    expectedRow: expectedRow, expectedColumn: expectedColumn);
+            }
+            finally
+            {
+                ClearModel(modelId);
             }
         }
 
@@ -954,6 +1350,12 @@ namespace VisionFlow.WpfToolEditors.Editors
         {
             try
             {
+                // 输入了原点但未点“应用原点”时，确定前先写入模型，保证记录与模型一致
+                ReadOriginTexts(out double row, out double column);
+                if (HasModel && (row != _appliedOriginRow || column != _appliedOriginColumn))
+                {
+                    ApplyOriginToModel();
+                }
                 ApplyToTool();
                 DialogResult = true;
                 Close();
@@ -997,6 +1399,16 @@ namespace VisionFlow.WpfToolEditors.Editors
             target.BaseRow = ParseDouble(BaseRowText.Text, "基准 Row");
             target.BaseColumn = ParseDouble(BaseColumnText.Text, "基准 Col");
             target.BaseAngle = ParseDouble(BaseAngleText.Text, "基准角");
+            if (target is HalconTemplateMatchToolBase templateTarget)
+            {
+                templateTarget.ModelSource = _teachSource;
+                templateTarget.TeachMetric = _teachMetric;
+                templateTarget.TeachXldPath = _teachXldPath;
+                templateTarget.TeachXldIndex = _teachXldIndex;
+                templateTarget.DxfPath = _teachDxfPath;
+                templateTarget.ModelOriginRow = _appliedOriginRow;
+                templateTarget.ModelOriginColumn = _appliedOriginColumn;
+            }
             if (target is HalconScaledShapeMatchTool scaled)
             {
                 scaled.ScaleMin = ParseDouble(ScaleMinText.Text, "最小缩放");

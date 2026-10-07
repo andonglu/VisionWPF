@@ -65,6 +65,10 @@ namespace VisionFlow.Tools
         public double ScaleRow { get; set; } = 1;
         public double ScaleColumn { get; set; } = 1;
         public double Score { get; set; }
+        /// <summary>所属模板序号（0 起；多模板的通用形状匹配使用，单模板匹配恒为 0）。</summary>
+        public int ModelIndex { get; set; }
+        /// <summary>所属模板名称（多模板的通用形状匹配使用，其他匹配为 null）。</summary>
+        public string ModelName { get; set; }
         /// <summary>匹配后的轮廓（已仿射变换到图像位置）。</summary>
         public HObject Contour { get; set; }
         public int ContourPointCount { get; set; }
@@ -195,6 +199,11 @@ namespace VisionFlow.Tools
 
         public override NodeResult Run(FlowContext ctx)
         {
+            ToolConfigurationIssue modelIssue = CheckModelConfiguration().FirstOrDefault();
+            if (modelIssue != null)
+            {
+                return NodeResult.Fail($"{ModuleName} {modelIssue.Parameter}：{modelIssue.Message}");
+            }
             if (!TryLoadImage(ctx, out HObject image, out bool ownsImage, out string imageError))
             {
                 return NodeResult.Fail(imageError);
@@ -214,6 +223,7 @@ namespace VisionFlow.Tools
             if (emptySearchRegion)
             {
                 SetMatchOutputs(ctx, image, ownsImage, items, null);
+                WriteExtraOutputs(ctx, items, null);
                 return NotFoundOutcome.Resolve(ctx, this, $"{MatchLabel}的搜索区域为空，未查找");
             }
 
@@ -277,6 +287,7 @@ namespace VisionFlow.Tools
             MatchResultItem best = items.OrderByDescending(i => i.Score).FirstOrDefault();
             SortItems(items);
             SetMatchOutputs(ctx, image, ownsImage, items, best);
+            WriteExtraOutputs(ctx, items, best);
             if (items.Count == 0)
             {
                 return NotFoundOutcome.Resolve(ctx, this, $"{MatchLabel}未匹配到任何目标");
@@ -294,11 +305,29 @@ namespace VisionFlow.Tools
             {
                 yield return new ToolConfigurationIssue(nameof(RowTolerance), "行容差不能小于 0");
             }
+            foreach (ToolConfigurationIssue issue in CheckModelConfiguration())
+            {
+                yield return issue;
+            }
         }
 
-        public bool IsParameterVisible(string propertyName)
+        /// <summary>
+        /// 派生类的模型/示教配置检查：除进入流程校验外，运行开始时第一个问题直接让节点失败（不带病运行）。
+        /// 实现不应抛出异常。
+        /// </summary>
+        protected virtual IEnumerable<ToolConfigurationIssue> CheckModelConfiguration()
+        {
+            yield break;
+        }
+
+        public virtual bool IsParameterVisible(string propertyName)
         {
             return propertyName != nameof(RowTolerance) || SortBy == MatchSortBy.RowThenColumn;
+        }
+
+        /// <summary>写入派生类特有的输出（在公共匹配输出之后调用，items 已按 SortBy 排序；未找到时 items 为空、best 为 null）。</summary>
+        protected virtual void WriteExtraOutputs(FlowContext ctx, List<MatchResultItem> items, MatchResultItem best)
+        {
         }
 
         /// <summary>
@@ -601,6 +630,68 @@ namespace VisionFlow.Tools
         /// <summary>基准模板位姿：示教时设定的固定角度（弧度）。</summary>
         public double BaseAngle { get; set; }
 
+        /// <summary>
+        /// 模型来源（MT-02，示教记录）：图像 ROI（默认，即原有方式）/ XLD 轮廓 / DXF 文件。
+        /// 只记录示教方式，运行时只使用 ShapeModelData，不读取 XLD 引用或 DXF 文件。
+        /// </summary>
+        public MatchModelSource ModelSource { get; set; } = MatchModelSource.ImageRoi;
+        /// <summary>示教时使用的度量（示教记录）；XLD / DXF 建模只能是 ignore_local_polarity。</summary>
+        public string TeachMetric { get; set; }
+        /// <summary>XLD 建模时选用的上游 XLD 输出（示教记录，运行不依赖）。</summary>
+        public string TeachXldPath { get; set; }
+        /// <summary>XLD / DXF 建模时选用的轮廓序号（0 起）；-1 表示全部轮廓共同组成模板。</summary>
+        public int TeachXldIndex { get; set; } = -1;
+        /// <summary>DXF 建模时读入的文件（示教记录，运行不依赖）。</summary>
+        public string DxfPath { get; set; }
+        /// <summary>
+        /// 模型原点相对模板参考点的行偏移（MT-02）：示教时写入模型本身（set_shape_model_origin / set_ncc_model_origin），
+        /// 本属性只用于界面回显；匹配输出的 Row / Column 即为该原点。
+        /// </summary>
+        public double ModelOriginRow { get; set; }
+        /// <summary>模型原点相对模板参考点的列偏移，见 <see cref="ModelOriginRow"/>。</summary>
+        public double ModelOriginColumn { get; set; }
+
+        /// <summary>是否支持从 XLD / DXF 建模（模板匹配、缩放形状匹配支持）。</summary>
+        public virtual bool SupportsXldModel
+        {
+            get { return false; }
+        }
+
+        /// <summary>是否支持设置模型原点（局部变形匹配不支持）。</summary>
+        public virtual bool SupportsModelOrigin
+        {
+            get { return true; }
+        }
+
+        /// <summary>示教记录类参数只在编辑窗口的示教页修改（它们已写入模型字节，侧栏修改不会生效），侧栏不显示。</summary>
+        private static readonly string[] TeachRecordParameters =
+        {
+            nameof(ModelSource), nameof(TeachMetric), nameof(TeachXldPath), nameof(TeachXldIndex), nameof(DxfPath),
+            nameof(ModelOriginRow), nameof(ModelOriginColumn)
+        };
+
+        public override bool IsParameterVisible(string propertyName)
+        {
+            return !TeachRecordParameters.Contains(propertyName) && base.IsParameterVisible(propertyName);
+        }
+
+        protected override IEnumerable<ToolConfigurationIssue> CheckModelConfiguration()
+        {
+            if (ModelSource != MatchModelSource.ImageRoi && !SupportsXldModel)
+            {
+                yield return new ToolConfigurationIssue(nameof(ModelSource), $"{MatchLabel}不支持 XLD / DXF 建模");
+            }
+            else if (ModelSource != MatchModelSource.ImageRoi && TeachMetric != MatchModelBuilder.XldMetric)
+            {
+                yield return new ToolConfigurationIssue(nameof(TeachMetric),
+                    $"XLD / DXF 建模的度量只能是 {MatchModelBuilder.XldMetric}（XLD 没有灰度极性，对比度参数不生效），请重新示教");
+            }
+            if (!SupportsModelOrigin && (ModelOriginRow != 0 || ModelOriginColumn != 0))
+            {
+                yield return new ToolConfigurationIssue(nameof(ModelOriginRow), $"{MatchLabel}不支持模型原点");
+            }
+        }
+
         protected HalconTemplateMatchToolBase(string moduleName) : base(moduleName)
         {
         }
@@ -682,6 +773,11 @@ namespace VisionFlow.Tools
         public void SetSerializedModel(byte[] modelData)
         {
             ShapeModelData = modelData;
+        }
+
+        public override bool SupportsXldModel
+        {
+            get { return true; }
         }
 
         protected override HTuple DeserializeModel(byte[] data)
@@ -828,6 +924,11 @@ namespace VisionFlow.Tools
         {
         }
 
+        public override bool SupportsXldModel
+        {
+            get { return true; }
+        }
+
         protected override string MatchLabel
         {
             get { return "缩放形状匹配"; }
@@ -899,6 +1000,11 @@ namespace VisionFlow.Tools
 
         public HalconLocalDeformableMatchTool(string moduleName) : base(moduleName)
         {
+        }
+
+        public override bool SupportsModelOrigin
+        {
+            get { return false; }
         }
 
         protected override string MatchLabel

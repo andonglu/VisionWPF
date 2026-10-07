@@ -740,6 +740,16 @@
         </Canvas>
     </Viewbox>
 
+    <!-- 手工追加：通用形状匹配（L 形模板 + 横向拉伸的副本 + 双向拉伸箭头，表示各向异性缩放与多模板） -->
+    <Viewbox x:Key="ToolIcon.generic-shape-match" x:Shared="False" Width="24" Height="24" Stretch="Uniform">
+        <Canvas Width="24" Height="24">
+            <Path Data="M3,3 L3,10 L8,10" Stroke="{DynamicResource TextFillColorPrimaryBrush}" StrokeThickness="1.8" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Fill="{x:Null}" />
+            <Path Data="M9,12 L9,20 L21,20" Stroke="{DynamicResource TextFillColorPrimaryBrush}" StrokeThickness="1.8" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Fill="{x:Null}" />
+            <Rectangle Canvas.Left="14" Canvas.Top="3" Width="6" Height="6" RadiusX="1" RadiusY="1" Stroke="{DynamicResource TextFillColorPrimaryBrush}" StrokeThickness="1.8" Fill="{x:Null}" />
+            <Path Data="M12,15.5 L20,15.5 M12,15.5 L13.8,14 M12,15.5 L13.8,17 M20,15.5 L18.2,14 M20,15.5 L18.2,17" Stroke="{DynamicResource AccentFillColorDefaultBrush}" StrokeThickness="1.6" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Fill="{x:Null}" />
+        </Canvas>
+    </Viewbox>
+
     <Viewbox x:Key="ToolIcon._default" x:Shared="False" Width="24" Height="24" Stretch="Uniform">
         <Canvas Width="24" Height="24">
             <Rectangle Canvas.Left="4" Canvas.Top="4" Width="16" Height="16" RadiusX="2" RadiusY="2" Stroke="{DynamicResource TextFillColorPrimaryBrush}" StrokeThickness="1.8" Fill="{x:Null}" />

@@ -44,6 +44,35 @@
                                 </StackPanel>
                             </Border>
 
+                            <Border x:Name="ModelSourceCard" Style="{StaticResource EditorCardStyle}">
+                                <StackPanel>
+                                    <TextBlock Text="模型来源" Style="{StaticResource EditorSectionTitleStyle}" />
+                                    <ComboBox x:Name="ModelSourceCombo" SelectionChanged="ModelSourceCombo_SelectionChanged" />
+                                    <StackPanel x:Name="XldSourcePanel" Margin="0,8,0,0">
+                                        <TextBlock Text="XLD 轮廓（上游输出）" Style="{StaticResource EditorFieldLabelStyle}" />
+                                        <ComboBox x:Name="TeachXldCombo" IsEditable="True" />
+                                    </StackPanel>
+                                    <StackPanel x:Name="DxfSourcePanel" Margin="0,8,0,0">
+                                        <TextBlock Text="DXF 文件" Style="{StaticResource EditorFieldLabelStyle}" />
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="36" />
+                                            </Grid.ColumnDefinitions>
+                                            <TextBox x:Name="DxfPathText" Grid.Column="0" />
+                                            <Button Grid.Column="1" Content="..." MinWidth="32" Width="32" Padding="0" Click="BrowseDxf_Click" />
+                                        </Grid>
+                                    </StackPanel>
+                                    <StackPanel x:Name="ContourIndexPanel" Margin="0,8,0,0">
+                                        <TextBlock Text="轮廓序号（-1 = 全部轮廓）" Style="{StaticResource EditorFieldLabelStyle}" />
+                                        <TextBox x:Name="TeachXldIndexText" />
+                                    </StackPanel>
+                                    <TextBlock x:Name="XldMetricHintText" Margin="0,8,0,0" TextWrapping="Wrap"
+                                               Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                               Text="XLD / DXF 建模：XLD 没有灰度信息，度量固定为 ignore_local_polarity，对比度参数不生效（已锁定）。多条轮廓共同组成模板，可按序号只取一条。DXF 只在示教时读取，运行不依赖该文件。" />
+                                </StackPanel>
+                            </Border>
+
                             <Border Style="{StaticResource EditorCardStyle}">
                                 <StackPanel>
                                     <TextBlock Text="创建模板参数" Style="{StaticResource EditorSectionTitleStyle}" />
@@ -133,6 +162,35 @@
                                         </Grid>
                                     </StackPanel>
                                     <Button Content="创建模板" Margin="0,16,0,0" HorizontalAlignment="Right" Click="CreateTemplate_Click" />
+                                </StackPanel>
+                            </Border>
+
+                            <Border x:Name="ModelOriginCard" Style="{StaticResource EditorCardStyle}">
+                                <StackPanel>
+                                    <TextBlock Text="模型原点" Style="{StaticResource EditorSectionTitleStyle}" />
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="96" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                        </Grid.RowDefinitions>
+                                        <TextBlock Grid.Row="0" Grid.Column="0" Text="原点行偏移" Style="{StaticResource EditorFieldLabelStyle}" />
+                                        <TextBox x:Name="ModelOriginRowText" Grid.Row="0" Grid.Column="1" />
+                                        <TextBlock Grid.Row="1" Grid.Column="0" Text="原点列偏移" Style="{StaticResource EditorFieldLabelStyle}" />
+                                        <TextBox x:Name="ModelOriginColumnText" Grid.Row="1" Grid.Column="1" />
+                                    </Grid>
+                                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,8,0,0">
+                                        <Button Content="在图像上点选原点" Margin="0,0,8,0" Click="PickOrigin_Click" />
+                                        <Button Content="应用原点" Click="ApplyOrigin_Click" />
+                                    </StackPanel>
+                                    <TextBlock Margin="0,8,0,0" TextWrapping="Wrap" Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                               Text="原点是相对模板参考点（图像 ROI 为区域重心，XLD 为轮廓外接矩形中心）的偏移，写入模型后匹配输出的 Row / Column 即为该点。点选：按下后可拖动，松开结束。" />
+                                    <TextBlock x:Name="OriginBaseHintText" Margin="0,8,0,0" TextWrapping="Wrap" Visibility="Collapsed"
+                                               Foreground="{DynamicResource SystemFillColorCautionBrush}"
+                                               Text="模型原点已修改：请重新确定跟随基准（基准 Row / Col / 角），基准不会随原点自动换算。" />
                                 </StackPanel>
                             </Border>
 

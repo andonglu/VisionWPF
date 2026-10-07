@@ -1,9 +1,9 @@
 # 定位匹配与几何测量补充开发计划
 
 编写日期：2026-10-06
-状态：第一批 MT-01 / MS-01 已实现（分支 `feature/match-measure-batch1`，见第 10 节）；第二批 MS-02 / MS-07（Fixed）已实现并修复第一批“执行测试”回归（分支 `feature/match-measure-batch2`，见第 11 节）；其余各项待开发，动工前各做一次小评审。
+状态：第一批 MT-01 / MS-01 已实现（分支 `feature/match-measure-batch1`，见第 10 节）；第二批 MS-02 / MS-07（Fixed）已实现并修复第一批“执行测试”回归（分支 `feature/match-measure-batch2`，见第 11 节）；第三批 MT-02 / MT-03 已实现（分支 `feature/match-measure-batch3`，见第 12、13 节）；其余各项待开发，动工前各做一次小评审。
 范围：工具箱“01 定位匹配”和“05 几何测量”中的模板匹配类、测量类工具（`HalconTools.cs`、`DescriptorMatchTools.cs`、`MeasureTools.cs`、`FollowMeasureTools.cs`、`AngleTools.cs`），以及新增的差分检测。
-HALCON 版本基线：**20.11 及以上**。可以直接使用通用形状模型（`*_generic_shape_model`）等 20.11 引入的算子，无需兼容更早版本。
+HALCON 版本基线：**22.11 及以上**（第三批起）。原文写“通用形状模型是 20.11 引入的算子”有误：`create_generic_shape_model` 等算子不在 20.11 中，仓库原先引用的 `halcondotnet.dll` 20.11.1 没有这些方法；第三批经使用方确认把编译引用换成 22.11.1（`HALCON-22.11-Steady\bin\dotnet35\halcondotnet.dll`），整个应用的最低 HALCON 版本随之提高到 22.11（见第 12 节）。
 关联文档：
 
 - [Region 相关算子补充开发计划](REGION-TOOLS-PLAN.md)
@@ -122,12 +122,21 @@ HALCON 版本基线：**20.11 及以上**。可以直接使用通用形状模型
 - 工具新增 `ModelOriginRow` / `ModelOriginColumn`（相对模板参考点的偏移，默认 0）用于界面回显；原点写入模型本身，运行时无需再次设置。
 - 修改原点后，跟随基准位姿 `BaseRow` / `BaseColumn` / `BaseAngle` 必须重新确定，界面需提示重新设置基准。
 
+**实现说明（第三批已完成）**
+
+- 示教记录属性（`HalconTemplateMatchToolBase`，默认值即原有行为）：`ModelSource`（`MatchModelSource`：`ImageRoi` 默认 / `Xld` / `Dxf`，按数字保存）、`TeachMetric`、`TeachXldPath`、`TeachXldIndex`（-1 = 全部轮廓）、`DxfPath`、`ModelOriginRow` / `ModelOriginColumn`。它们只记录示教方式，运行只用 `ShapeModelData`；已写入模型字节，侧栏不显示（侧栏改了也不会生效），只在示教页修改。
+- 公共建模步骤放在 `MatchModelBuilder`（与界面无关，编辑窗口与测试共用）：`ReadDxf`（文件不存在、解析失败、没有轮廓分别给出明确错误）、`SelectContours`、`CreateShapeModelXld` / `CreateScaledShapeModelXld`（度量固定 `ignore_local_polarity`，最小对比度 auto 时取 5）、`ApplyOrigin`（偏移为 0 时不调用算子，模型字节与原来完全相同）/ `SetOrigin`、`OriginFromPickedPoint`。
+- 多轮廓（评审 B3-1-6）：22.11 实测 `create_shape_model_xld` / `create_scaled_shape_model_xld` / `train_generic_shape_model` 都接受多条轮廓，全部轮廓共同组成模板，不会报错或只取第一条。示教页提供“轮廓序号”（-1 = 全部，≥0 取单条，越界明确报错），用于从 `edges_sub_pix` 等多轮廓输出中挑一条。
+- 支持范围：模板匹配、缩放形状匹配支持 XLD / DXF 建模；灰度匹配只支持原点（`set_ncc_model_origin`）；局部变形匹配两者都不支持（示教页隐藏对应分组）。流程校验（运行时同样拒绝）：不支持 XLD 的工具配置了 XLD / DXF 来源、XLD / DXF 来源但 `TeachMetric` 不是 `ignore_local_polarity`、局部变形匹配配置了原点。
+- 原点：示教页可输入偏移，也可在示教图像上点选（按下拾取、按住拖动，松开结束；参考点 = 示教匹配位置 − 当前原点），点“应用原点”写入模型（替换模型字节），确定时未应用的输入也会先写入。应用后重新做示教测试并显示原点标记；`BaseRow` / `BaseColumn` / `BaseAngle` 不随原点自动换算，界面显示“请重新确定跟随基准”的提示。22.11 实测：设置原点后 `find_*` 输出平移到原点，`get_shape_model_contours` / `get_ncc_model_region` 也相对新原点给出，显示轮廓仍画在目标上。
+- XLD 模型的参考点是轮廓外接矩形中心（22.11 实测），示教测试按此位置在示教图像中挑出示教实例并设为基准。
+
 ### MT-03 通用形状匹配（新工具）
 
 **定位**
 
 - 工具箱：`01 定位匹配 / 通用形状匹配`，ID `generic-shape-match`，类 `HalconGenericShapeMatchTool : HalconMatchToolBase`。
-- 用 HALCON 20.11 的通用形状模型实现，一个工具覆盖：旋转、等比缩放、行列方向不同比例缩放、多模板同时匹配、杂乱判定、越界匹配、最大变形量、超时。
+- 用 HALCON 通用形状模型（22.11，见本文头部基线说明）实现，一个工具覆盖：旋转、等比缩放、行列方向不同比例缩放、多模板同时匹配、杂乱判定、越界匹配、最大变形量、超时。
 - 原计划的“缩放形状匹配增加各向异性缩放”和“多模板匹配”新工具不再单独开发，统一由本工具提供。
 
 **算子流程**
@@ -140,18 +149,18 @@ HALCON 版本基线：**20.11 及以上**。可以直接使用通用形状模型
 
 | 分组 | 属性 | 通用形状模型参数 | 说明 |
 |---|---|---|---|
-| 角度 | `AngleStart` / `AngleEnd` | `angle_start` / `angle_end` | 界面按度显示 |
-| 缩放 | `ScaleMode` 枚举：`None`（默认）/ `Isotropic` / `Anisotropic` | — | 决定使用哪组缩放参数 |
-| 缩放 | `IsoScaleMin` / `IsoScaleMax` | `iso_scale_min` / `iso_scale_max` | 等比缩放 |
-| 缩放 | `ScaleRowMin` / `ScaleRowMax` / `ScaleColumnMin` / `ScaleColumnMax` | `scale_row_*` / `scale_column_*` | 行列方向不同比例缩放 |
-| 查找 | `MinScore`、`NumMatches`、`MaxOverlap`、`Greediness`、`SubPixel`、`NumLevels` | `min_score`、`num_matches`、`max_overlap`、`greediness`、`subpixel`、`num_levels` | `MinScore` / `NumMatches` 继承自基类 |
+| 角度 | `AngleStart` / `AngleEnd` | `angle_start` / `angle_end` | 弧度保存，界面按度显示；训练与查找共用（训练后可改） |
+| 缩放 | `ScaleMode` 枚举：`None`（默认）/ `Isotropic` / `Anisotropic` | — | 决定训练时使用哪组缩放参数（建模参数） |
+| 缩放 | `IsoScaleMin` / `IsoScaleMax` | `iso_scale_min` / `iso_scale_max` | 等比缩放（建模参数） |
+| 缩放 | `ScaleRowMin` / `ScaleRowMax` / `ScaleColumnMin` / `ScaleColumnMax` | `scale_row_*` / `scale_column_*` | 行列方向不同比例缩放（建模参数） |
+| 查找 | `MinScore`、`NumMatches`、`MaxOverlap`、`Greediness`、`SubPixel` | `min_score`、`num_matches`、`max_overlap`、`greediness`、`subpixel` | `MinScore` / `NumMatches` 继承自基类；`NumMatches = 0` 表示全部 |
 | 查找 | `BorderShapeModels` | `border_shape_models` | 允许模板部分超出图像 |
 | 查找 | `MaxDeformation` | `max_deformation` | 允许的轮廓偏移像素 |
-| 查找 | `TimeoutMs` | `timeout` | 0 表示不限制 |
-| 杂乱 | `UseClutter`、`MaxClutter`、`ClutterContrast` | `use_clutter`、`max_clutter`、`clutter_contrast` | 杂乱区域在示教时绘制，用 `set_generic_shape_model_object` 写入模型 |
-| 建模 | `Metric`、`Optimization`、`ContrastLow`、`ContrastHigh`、`MinContrast`、`MinSize` | `metric`、`optimization`、`contrast_low`、`contrast_high`、`min_contrast`、`min_size` | 修改后必须重新训练 |
+| 查找 | `TimeoutMs` | `timeout` | 毫秒（22.11 实测），0 表示不限制 |
+| 杂乱 | `UseClutter`、`MaxClutter`、`ClutterContrast` | `use_clutter`、`max_clutter`、`clutter_contrast` | 杂乱区域在示教时绘制，用 `set_generic_shape_model_object` 写入模型；开启时每个模板都须有杂乱区域 |
+| 建模 | `NumLevels`、`Metric`、`Optimization`、`ContrastLow`、`ContrastHigh`、`MinContrast`、`MinSize` | `num_levels`、`metric`、`optimization`、`contrast_low`、`contrast_high`、`min_contrast`、`min_size` | 修改后必须重新训练（0 / 留空表示自动） |
 
-- 多模板时 `MinScore` 等查找参数可以按模板分别设置（CSV 字符串，留空表示全部使用同一值）。
+- ~~多模板时 `MinScore` 等查找参数可以按模板分别设置（CSV 字符串，留空表示全部使用同一值）。~~ 按第三批评审 B3-1-3 砍掉：查找参数全局生效，对所有模板相同；现场确有需要时另行立项。
 
 **输出**
 
@@ -161,11 +170,23 @@ HALCON 版本基线：**20.11 及以上**。可以直接使用通用形状模型
 
 **开发方法**
 
-- 持久化：全部模板打包成一个 `byte[] ModelsData`。格式：版本号、模板数量，然后逐个写入名称长度、名称（UTF-8）、模型长度、模型字节（`serialize_shape_model`，通用形状模型同样适用，开发时实测确认）。模板名另存一份 `ModelNames` CSV 字符串，便于在流程文件中查看。
-- `CurrentModelKey` 使用 `ModelsData` 的内容哈希；`LoadModel` 反序列化全部模型；`ClearModel` 逐个释放。
+- 持久化：全部模板打包成一个 `byte[] ModelsData`。格式：版本号、模板数量，然后逐个写入名称长度、名称（UTF-8）、模型长度、模型字节（`serialize_shape_model`，通用形状模型同样适用，22.11 已实测）。模板名另存一份 `TemplateNamesCsv` CSV 字符串，便于在流程文件中查看（原计划命名为 `ModelNames`，与输出 `ModelNames` 冲突，按评审 B3-1-1 改名）。
+- `CurrentModelKey` 沿用现有模式：`ModelsData` 的数组引用，示教/导入整体替换数组（按评审 B3-1-5，不做内容哈希）；`LoadModel` 反序列化全部模型；`ClearModel` 逐个释放。
 - 查找参数在每次 `FindMatches` 时写入缓存的模型句柄（开销小），建模参数只在示教时设置。基类已对同一实例的运行加锁，写参数不存在并发问题。
 - 跟随矩阵和模型轮廓变换使用 `get_generic_shape_model_result` 返回的完整变换矩阵，不能只用 `Scale` 重建，否则各向异性缩放时结果错误。
 - 编辑窗口：复用 `WpfMatchToolEditWindow` 的示教区，增加模板列表（添加、删除、改名、上移、下移）；每个模板单独示教，可单独设置原点（MT-02）和杂乱区域。模板顺序调整后提示下游引用的模板序号可能需要更新。
+
+**实现说明（第三批已完成）**
+
+- 类型与文件：`GenericShapeMatchTools.cs`（`ScaleMode` 枚举、`GenericShapeTemplate`、`GenericShapeModelData` 打包格式、`GenericShapeTraining` 示教步骤、`HalconGenericShapeMatchTool`）；四件套登记：`BuiltinToolIdentities`（`generic-shape-match`）、`ToolboxRegistry`（`01 定位匹配 / 通用形状匹配`，默认模块名“通用形状匹配N”）、`WpfToolEditorRouter`（在单模板匹配窗口之前路由）、README；手绘图标 `ToolIcon.generic-shape-match`。
+- `ModelsData` 格式（小端）：`int32` 版本号 1、`int32` 模板数，逐模板 `int32` 名称字节数 + UTF-8 名称 + `int32` 模型字节数 + 模型字节。版本不符（“版本 N 不受支持（当前版本 1）”）、长度越界（“截断或损坏”）、末尾多余字节、模板数无效都给出明确错误；流程校验与运行开始时同样拒绝。模板名不能为空、不能含逗号、不能重名；`TemplateNamesCsv` 非空且与模型数据中的名称不一致时校验报错。
+- 模型标识：加载时把模板序号（字符串 "0"、"1"…）写入 `model_identifier`（22.11 实测该参数只接受字符串，默认是随机的 `SBM-xxxx`），结果按标识映射回模板序号与名称。
+- 输出：继承匹配基类全部输出；`MatchResultItem` 新增 `ModelIndex` / `ModelName`（单模板匹配分别为 0 / null）；新增 `ScaleRows`、`ScaleColumns`、`ModelIndices`、`ModelNames`、`BestModelIndex`（未找到为 -1）、`BestModelName`、`CountsPerModel`（长度 = 模板数）。数组随 `SortBy` 排序；搜索区域与排序由基类自动获得（用例固定）。
+- 跟随矩阵：`HomMat = hom_mat_2d · 基准位姿⁻¹`（基准位姿全部模板共用，为 0 时就是 `hom_mat_2d` 本身）；显示轮廓直接取 `get_generic_shape_model_result_object(…, 'contours')`，22.11 实测与 `affine_trans_contour_xld(模型轮廓, hom_mat_2d)` 逐点相同；`hom_mat_2d` 等于按 scale_row / scale_column → angle → row, column 组合的矩阵。用例固定各向异性缩放下 `HomMats` 与轮廓和直接算子调用逐项相同。
+- 建模参数（按使用方确认）：缩放方式与范围、金字塔、度量、优化、对比度、最小对比度、最小尺寸只在训练时生效（22.11 实测训练后修改缩放、金字塔、度量、对比度、优化、最小尺寸会使模型需要重新训练），侧栏不显示，示教页按 `ScaleMode` 显示对应的缩放分组（`IsScaleParameterVisible`）。角度范围训练与查找共用，侧栏可改。
+- 杂乱区域：示教页用 ROI 画出（示教图像坐标），`set_generic_shape_model_object(…, 'clutter_region')` 写入当前模板；HALCON 按训练位姿自动换算（`clutter_hom_mat_2d`），序列化后保留。22.11 实测：同一次查找的全部模型杂乱判定须一致——没有杂乱区域的模型不能开启 `use_clutter`（#8516），开关不一致时报 #8517，因此开启杂乱判定时运行前检查每个模板都有杂乱区域，缺少时明确报出模板名。重新训练会清除该模板的杂乱区域。
+- 句柄：结果句柄在 `finally` 中 `clear_handle`（含异常路径）；模板句柄逐个 `clear_handle`；超时（#9400）与“需要重新训练”（#8673）映射为中文错误；编辑窗口的示教测试与执行测试都在一次性副本上运行，结束后 `FlowResources.Release` 释放副本缓存的句柄。
+- 编辑窗口：评审建议复用 `WpfMatchToolEditWindow`，实际新建专用窗口 `WpfGenericShapeMatchEditWindow`：通用形状匹配是多模板、参数集合也不同（没有 `ShapeModelData`、`FindStartAngle` 等），塞进单模板窗口需要在每个分支判断工具类型。新窗口沿用同样的页签、卡片布局、ROI 控件、原点点选和 `ToolTestRun`。示教页：模板列表（添加、删除、改名、上移、下移，顺序调整后提示下游序号）、模型来源（图像 ROI / XLD / DXF，XLD 时度量锁定）、建模参数、原点、杂乱区域、基准姿态、示教测试结果；运行参数页：查找参数（对全部模板生效）、搜索区域、排序与测试结果（含模板名列）。
 
 ### MT-04 局部变形匹配增加透视变形模式
 
@@ -538,3 +559,61 @@ HALCON 版本基线：**20.11 及以上**。可以直接使用通用形状模型
 - 单元/集成测试：新增 `MatchMeasureBatch2Tests` 24 个用例（回归修复 3、MS-02 15、MS-07 4、输出隐藏防误伤 1、保存加载 1），全量 `dotnet test`（`Category!=Soak`）821 个通过；`examples\*.vflow.json` 全部可加载。
 - 界面验收：脚本经 Windows UI Automation 驱动真实的 `VisionFlow.WpfApp.exe`，在文件对话框打开测试流程，完成编辑、运行、保存、重新加载，共 42 项检查全部通过。覆盖：匹配窗口改数量与排序 → 执行测试（用新参数得 2 个结果）→ 取消 → 流程未标记修改、重新打开参数仍为原值，确定后才写入；卡尺窗口边缘模式下拉、边缘极性在两种模式间联动（`*_strongest` 切回单边缘时退回 `all`）、边缘对执行测试结果表宽度 20 / 20 / 40 与对照一致；单边缘选 `*_strongest` 校验报错；圆弧卡尺窗口同样可切边缘对；工具箱显示“单位换算”，侧栏 Angle / Length 参数显隐正确，`Length` 输入值下拉只列出边缘对模式的 `Widths`；边缘对显示轮廓比同位置单边缘多出尺寸线（像素对比与截图）；卡尺单边缘与旧版 `measure_pos`、边缘对与直接 `measure_pairs`、角度换算与旧版公式逐字一致；界面 29 个单值与 12 个数组长度与不走界面的对照运行逐字一致；保存文件与期望配置一致（枚举按数字保存，ID 仍为 `angle-convert`），重新加载后配置与结果不变。
 - 验证中发现的应用问题：侧栏数字参数按当前值是否为整数决定小数位，`PixelSize`（默认 1）输入 0.02 后文本框立即显示为 `0`（实际值 0.02 已写入，重新选中节点后显示正确）。这是共享控件 `NumericInputControl` 的既有行为，经使用方确认做最小修复：值的精度超过 `DecimalPlaces` 时补足有效小数（最多 6 位），精度不超过的值显示与原来完全相同。
+
+## 12. 第三批算子探测结论（MT-02 / MT-03）
+
+**探测环境**：本机原生运行库 **HALCON 22.11 Steady**（`get_system('version')` = 22.11）。**关键发现**：仓库原先编译引用的 `lib\halcon\halcondotnet.dll` 是 **20.11.1**，其中没有 `CreateGenericShapeModel` / `FindGenericShapeModel` 等方法——通用形状模型不是 20.11 的算子，计划原文“20.11 引入”有误。经使用方确认，把编译引用换成 22.11.1（`C:\Program Files\MVTec\HALCON-22.11-Steady\bin\dotnet35\halcondotnet.dll`，库文件不入库，需各开发机自行替换），应用最低版本随之提高到 22.11；替换后全量回归通过。以下结论均在 22.11 上取得。
+
+| 问题 | 结论 |
+|---|---|
+| 通用形状模型能否设置原点（评审 B3-1-2） | 能。`set_generic_shape_model_param` 的参数表含 `origin_row` / `origin_column`（读写均可，序列化后保留）；`set_shape_model_origin` 对通用形状模型句柄也可用。设置后 `find_generic_shape_model` 的 row / column / `hom_mat_2d` 平移到原点，结果轮廓仍在目标上。本批用 `origin_row` / `origin_column`，原点对通用形状匹配不降级 |
+| `serialize_shape_model` 能否序列化通用形状模型（B3-1-4） | 能。训练后的通用句柄可 `serialize_shape_model` / `deserialize_shape_model`（也可 `write_shape_model` / `read_shape_model`），往返后参数、原点、杂乱区域与 `use_clutter` 都保留；`clear_shape_model` 与 `clear_handle` 都能释放。未训练的句柄序列化后无法查找（#8673），打包前必须已训练 |
+| `find_generic_shape_model` 的 `timeout` 单位 | **毫秒**：`timeout = 50` 约 51 ms 后报 #9400，`1000` 约 1029 ms 后报 #9400；默认值 `"false"`（不限制） |
+| `create_shape_model_xld` 多轮廓（B3-1-6） | 不报错、也不只取第一条：多条轮廓全部进入模型（`get_shape_model_contours` 条数 = 输入条数）；`create_scaled_shape_model_xld`、`train_generic_shape_model` 相同。XLD 建模的度量只能是 `ignore_local_polarity`（`use_polarity` 报 #1306）；`train_generic_shape_model` 传 XLD 时自动用 `ignore_local_polarity`。XLD 模型参考点为轮廓外接矩形中心 |
+| 训练后修改哪些参数需要重新训练 | 需要重新训练（查找报 #8673）：`iso_scale_*`、`scale_row_*` / `scale_column_*`、`num_levels`、`metric`、`contrast_low`、`optimization`、`min_size`。不需要：`angle_start` / `angle_end`、`min_score`、`num_matches`（含 `"all"`）、`max_overlap`、`greediness`、`subpixel`、`border_shape_models`、`max_deformation`、`timeout`、`use_clutter`、`max_clutter`、`clutter_contrast`、`model_identifier`、`origin_*`、`min_contrast`。据此划分建模参数与查找参数 |
+| `model_identifier` | 只接受字符串（整数报 #1203），默认是随机的 `SBM-xxxx`；结果中按 `model_identifier` 区分模板 |
+| 结果矩阵与轮廓 | `get_generic_shape_model_result(…, 'hom_mat_2d')` 等于 `hom_mat2d_scale(scale_row, scale_column)` → `rotate(angle)` → `translate(row, column)` 的组合；`get_generic_shape_model_result_object(…, 'contours')` 与 `affine_trans_contour_xld(get_shape_model_contours, hom_mat_2d)` 逐点相同 |
+| 杂乱区域 | `set_generic_shape_model_object(区域, 模型, 'clutter_region')`，区域用示教图像坐标，`clutter_hom_mat_2d` 自动取训练位姿（模板参考点）；区域离模型轮廓太近报 #8515。多模板时全部模型的杂乱判定须一致：没有杂乱区域的模型设 `use_clutter = true` 报 #8516，开关不一致查找报 #8517 |
+| 越界匹配 | 目标左侧 10 列出图：`border_shape_models = false` 找不到，`true` 找到（得分 0.68） |
+| 经典模型原点（MT-02） | `set_shape_model_origin` / `set_ncc_model_origin` 后 `find_*` 输出平移原点偏移量，写读模型后原点保留；`get_shape_model_contours` / `get_ncc_model_region` 相对新原点给出 |
+| DXF | `read_contour_xld_dxf` 正常读入多条轮廓；文件不存在 #5200，内容非法 #3278 / #3279（`MatchModelBuilder.ReadDxf` 统一转成“DXF 文件不存在 / DXF 文件解析失败”） |
+| XLD 建模的金字塔参数 | `create_shape_model_xld` / `create_scaled_shape_model_xld` 不接受 `NumLevels = 0`（#1301，`create_shape_model` 接受）；示教页默认值 0 按 auto 传入（UI 验收发现，见第 13 节） |
+| 模型字节的确定性 | 同参数两次创建同一模型，序列化字节约有 7 个不同（共约 2 万字节），模型字节只能在同一句柄上比较；跨次建模按模型参数与查找结果比较 |
+| 通用形状模型的 XLD 参考点 | 与经典 XLD 模型不同，不是外接矩形中心：同一三角形轮廓，经典模型参考点 (370.00, 495.00)，通用形状模型约 (369.92, 495.0)；设置原点 (-30, 0) 后输出在锯齿三角形上平移 -30.056（L 形等直边目标平移误差 < 0.005），属亚像素拟合差异 |
+
+部署到其他机器前需确认已安装 22.11（或更高）运行库与授权；若后续仍需支持 20.11 运行库，通用形状匹配不可用，需要另行评审降级方案。
+
+## 13. 第三批（MT-02 + MT-03）评审处理与验收记录
+
+**评审意见处理**（[MATCH-MEASURE-TOOLS-PLAN-REVIEW.md](MATCH-MEASURE-TOOLS-PLAN-REVIEW.md) 第三批评审意见）
+
+| 条目 | 处理 |
+|---|---|
+| B3-1-1 `ModelNames` 命名冲突 | 参数改名 `TemplateNamesCsv`，输出保留 `ModelNames`；第二批守卫测试（输出名不与参数名相同）保持通过，另加专门用例 |
+| B3-1-2 通用形状模型原点 | 实测支持 `origin_row` / `origin_column`，原点功能对通用形状匹配完整提供，不降级 |
+| B3-1-3 按模板的查找参数 CSV | 砍掉，查找参数全局生效，MT-03 条目已同步修改 |
+| B3-1-4 `ModelsData` 格式 | 按评审格式实现（版本 1），`serialize_shape_model` 实测可用；版本不符、截断、多余字节明确报错，流程校验与运行都拒绝 |
+| B3-1-5 缓存键 | 沿用数组引用，示教/导入整体替换数组；用例固定同一数组复用句柄、替换数组重新加载、释放后重新加载 |
+| B3-1-6 XLD / DXF 输入约束 | 实测多轮廓共同组成模板（不报错），示教页提供轮廓序号；DXF 不存在 / 解析失败示教时明确报错，运行不依赖 DXF（用例删除 DXF 文件后照常运行） |
+| B3-2-1 度量锁定与校验 | XLD / DXF 来源时示教页度量锁定为 `ignore_local_polarity`、对比度不可用并说明原因；“XLD 来源 + 非 ignore_local_polarity”流程校验报错且运行拒绝 |
+| B3-2-2 原点与基准 | 修改原点后显示“请重新确定跟随基准”，`Base*` 不回填（UI 验收核对） |
+| B3-2-3 结果矩阵 | 跟随矩阵与轮廓用完整 `hom_mat_2d`；各向异性缩放下与直接算子调用逐项一致（单元测试 + UI 验收） |
+| B3-2-4 句柄生命周期 | 结果句柄 `finally` 释放（含异常路径），模板句柄逐个释放，编辑窗口测试走一次性副本并 `FlowResources.Release` |
+| B3-2-5 示教界面布局 | 模型来源、原点作为模板匹配示教页的独立卡片；通用形状匹配用专用窗口（理由见 MT-03 实现说明），模板列表与杂乱区域为示教页独立分组；ROI 控件仍由 `WindowsFormsHost` 承载 |
+| B3-2-6 新工具登记 | `BuiltinToolIdentities`、`ToolboxRegistry`、`WpfToolEditorRouter`（先于单模板匹配窗口路由并注释）、README、计划头部状态 |
+| B3-2-7 枚举与单位 | `ScaleMode`、`MatchModelSource` 按数字保存、默认值为原行为；`TimeoutMs` 为毫秒，写入算子处注释实测结论 |
+| B3-2-8 回归门禁 | 模板匹配图像 ROI 模型运行结果与直接调用逐项一致；原点为 0 时模型字节不变（形状、灰度）；新属性默认值与历史文件加载；搜索区域与排序在通用形状匹配上生效 |
+| B3-3 文档 | 头部状态与 HALCON 基线、MT-02 / MT-03 实现说明、第 12 节探测结论、README；`.github/copilot-instructions.md` 的 HALCON 先决条件同步为 22.11 |
+
+**验收结果**
+
+- 单元/集成测试：新增 `MatchMeasureBatch3Tests` 20 个用例（持久化往返与格式错误、模板名校验、缓存键、各向异性矩阵与轮廓、多模板、搜索区域与排序、杂乱区域含多模板一致性、越界与超时、通用形状原点、经典模型原点与零偏移字节不变、XLD 多轮廓与序号及金字塔 0、DXF 读取与错误、XLD 来源校验、回归门禁 ×2、命名守卫、参数显隐、新工具登记、未建模提示），全量 `dotnet test`（`Category!=Soak`）841 个通过。
+- 界面验收：脚本经 Windows UI Automation 驱动真实的 `VisionFlow.WpfApp.exe`（文件对话框打开流程、工具箱新建节点、在示教图像上用真实鼠标点击画 ROI 与点选原点），59 项检查全部通过：
+  - 模板匹配示教页：模型来源三选一；XLD / DXF 时度量锁定为 `ignore_local_polarity`、对比度不可用，切回图像 ROI 恢复原度量；DXF 文件不存在明确报错；DXF 建模与从 `轮廓T.Xld` 建模（示教结果在三角形外接矩形中心）；在图像上点选原点（回显偏移误差 < 2.5 像素）、应用原点后示教结果移到原点、显示“重新确定跟随基准”提示且基准不变；重新打开回显来源、原点、锁定状态；保存的模型原点为 (-30, 0)，查找结果与无界面同样建模的模型逐项相同。
+  - 通用形状匹配：工具箱新建；侧栏只显示查找参数（建模参数、`TemplateNamesCsv`、未启用时的杂乱参数隐藏）；模板列表添加（空名称自动命名）、改名、上移、下移、删除，重名与含逗号被拒，顺序调整提示；缩放方式切换显示对应分组；图像 ROI 训练各向异性 L 形（拉伸副本列缩放 1.3013）、从 XLD 训练三角形（度量锁定）、三角原点 (-30, 0)；两个模板分别画杂乱区域；运行参数页：不启用杂乱 4 个结果（每模板 3 / 1），只有一个模板有杂乱区域时开启杂乱判定明确报错，两个都有后启用杂乱 0.01 剔除杂乱区有亮线的 L3（每模板 2 / 1）。
+  - 对照：界面运行结果与无界面运行保存文件的 23 个单值、13 个数组长度逐字一致；编辑窗口测试结果表（序号 / 模板 / Row / Column / Angle / ScaleRow / ScaleColumn / Score）与无界面结果逐字一致；`HomMats` 与直接调用 `find_generic_shape_model` 的 `hom_mat_2d · 基准⁻¹` 逐项一致；模板默认节点与旧版直接调用逐字一致（回归门禁）；两种匹配的显示轮廓叠加在图像上；文件中 ID、ScaleMode / ModelSource 按数字、示教记录与模板名正确；重新加载后再运行逐字一致，模板列表、原点、建模参数回显正确。
+- 验证中发现并修复的应用问题：
+  1. XLD 建模报 #1301：示教页金字塔默认 0 不被 `create_*_shape_model_xld` 接受（单元测试当时传的是 "auto" 没覆盖到）。`MatchModelBuilder` 把 ≤ 0 的层数按 auto 处理，并补用例。
+  2. 模板匹配示教页只显示 `Input.Image` 或图像文件，图像来自上游节点（如 `图像1.Image`）时示教页没有图像，XLD 建模测试与原点点选无法进行（既有限制，本批功能依赖它）。改为从上次运行结果解析上游图像引用。
+  3. 通用形状匹配窗口应用原点后，列表刷新触发的选中事件立刻把“重新确定跟随基准”提示隐藏。改为只在选中的模板真正变化时清除示教结果与提示。
+- 说明：流程文件中的中文（含 `TemplateNamesCsv`）按现有序列化设置写成 `\uXXXX` 转义，名称为中文时在文件里不能直接阅读，这是既有行为，本批未改。验收期间 Lenovo 屏保（不响应模拟输入）遮住屏幕导致一次运行无效，由使用方解除后重跑。
