@@ -437,9 +437,32 @@ dotnet build .\VisionFlow.slnx --configuration Debug --no-restore --nologo --ver
 
 验证：`dotnet build VisionFlow.slnx` 0 警告 0 错误；无 HALCON 原生环境的 585 项非 HALCON 测试全部通过
 （含新增 5 例）；本机 shell 无 HALCON 原生运行库，105 项 HALCON 环境门禁用例独立失败，属预期，不计为回归。
-WPF 中“图像加载”供图流程的叠加显示效果以界面手工冒烟为准。
+WPF 中“图像加载”供图流程的叠加显示效果以界面手工冒烟为准（已于合入 main 后补做界面验收，见下）。
+
+界面验收（2026-10-07，修复合入 `main` 后补做，提交 c2c0cf2）：用 UI Automation 驱动真实的 `VisionFlow.WpfApp.exe`，
+流程为“图像加载”供图（背景灰度 140、亮矩形 230）+ 阈值分割（阈值分割没有 `Image` 输出，底图只能来自新增的回退）。
+在正常文件对话框打开流程并运行后，在结果显示下拉中**第一次就直接**选中 `阈值1.Region`：
+
+| 检查 | 合入后的 `main` | 修复前（batch5 `7b3be38`，同一脚本对照） |
+|---|---|---|
+| 直接显示区域输出时有底图 | 通过：画面平均亮度 81.6 | 失败：平均亮度 0.0（叠加画在黑底上） |
+| 与“先显示 `图像1.Image` 再切换到区域”的画面一致 | 通过：差异 0 像素，相对纯图像多出叠加 74655 像素 | 失败：差异 526264 像素 |
+
+同一脚本在修复前后结果相反，说明检查能区分有无修复，修复在界面上生效。
 
 ## 2026-10-07 状态更新：REGION 工具计划完成
 
 依据 `docs\REGION-TOOLS-PLAN-REVIEW.md` 的评审意见完成 RG-01 ~ RG-07（分支 `feature/region-tools`，
 提交 a18d7f5），界面验收 64 项检查全部通过，评审文档与计划状态已同步。
+
+## 2026-10-07 测试修复：EditorRunSessionTests 真实引擎取消用例的竞态
+
+现象：`CancelledFlow_ThroughRealEngine_ReportsSkippedResult` 在全量测试中偶发失败（期望 `Completed` + `Skipped`，实得 `Cancelled`）。
+
+原因（测试自身的竞态，产品行为正确）：`EditorRunSession.IsRunning` 在创建取消源后即为 true，早于
+`FlowEngine.RunAsync` 内 `Task.Run(…, token)` 真正开始执行；用例一看到 `IsRunning` 就叫停，若停在这个窗口里，
+任务直接以取消结束、引擎根本没有运行，会话按设计返回 `Cancelled`——这是“开始前取消”，不是用例要测的“执行中取消”。
+用临时循环复现：沿用旧写法 300 次中 297 次得到 `Cancelled`；改为等工具开始执行后再叫停，300 次全部得到 `Skipped`。
+
+改动：用例中的阻塞工具开始执行时置位 `ManualResetEventSlim`，测试等它置位后再 `Stop()`（并删除未使用的
+`CancellationTokenSource`）。产品代码未改；运行时以取消（`OperationCanceledException`）结束时会话返回 `Cancelled`，由 `Stop_DuringRun_ProducesCancelledOutcomeAndCleansUp` 覆盖。

@@ -177,9 +177,12 @@ public class EditorRunSessionTests
     public async Task CancelledFlow_ThroughRealEngine_ReportsSkippedResult()
     {
         // 真实引擎路径：执行中取消由 FlowEngine 转成 Skipped 结果（而非异常）
-        using var cts = new CancellationTokenSource();
+        // IsRunning 在引擎任务真正开始前就为 true；若此时叫停，Task.Run 直接取消、根本不执行（Cancelled）。
+        // 必须等阻塞工具开始执行后再叫停，才是“执行中取消”。
+        using var started = new ManualResetEventSlim(false);
         var blocking = new DelegateTool("阻塞", ctx =>
         {
+            started.Set();
             while (!ctx.CancellationToken.IsCancellationRequested)
             {
                 Thread.Sleep(10);
@@ -190,7 +193,8 @@ public class EditorRunSessionTests
         var session = new EditorRunSession(runtime);
 
         Task<EditorRunOutcome> run = session.RunAsync(CreateFlow(blocking), null, null);
-        Assert.True(SpinWait.SpinUntil(() => session.IsRunning, TimeSpan.FromSeconds(5)));
+        Assert.True(started.Wait(TimeSpan.FromSeconds(5)));
+        Assert.True(session.IsRunning);
         session.Stop();
 
         EditorRunOutcome outcome = await run;
