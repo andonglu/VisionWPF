@@ -131,12 +131,28 @@ namespace VisionFlow.WpfToolEditors.Controls
             _updatingText = true;
             try
             {
-                ValueText.Text = Value.ToString("F" + Math.Max(0, DecimalPlaces), CultureInfo.InvariantCulture);
+                ValueText.Text = FormatValue(Value, DecimalPlaces);
             }
             finally
             {
                 _updatingText = false;
             }
+        }
+
+        /// <summary>
+        /// 按 DecimalPlaces 位小数显示；值的精度超过该位数时补足有效小数（最多 6 位），
+        /// 避免把输入的 0.02 显示成 0。精度不超过 DecimalPlaces 的值显示与原来完全相同。
+        /// </summary>
+        public static string FormatValue(double value, int decimalPlaces)
+        {
+            int places = Math.Max(0, decimalPlaces);
+            string text = value.ToString("F" + places, CultureInfo.InvariantCulture);
+            if (places >= 6 || double.IsNaN(value) || double.IsInfinity(value)
+                || double.Parse(text, CultureInfo.InvariantCulture) == value)
+            {
+                return text;
+            }
+            return value.ToString("0." + new string('0', places) + new string('#', 6 - places), CultureInfo.InvariantCulture);
         }
     }
 }

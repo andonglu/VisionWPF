@@ -195,7 +195,7 @@ namespace VisionFlow.Editing
                 new ToolNode(new GeometryRelationTool(NextModuleName("几何关系")))));
             Register(new ToolboxItem("affine-point", "05 几何测量", "图像坐标转世界坐标", () =>
                 new ToolNode(new AffinePointTool(NextModuleName("坐标转换")))));
-            Register(new ToolboxItem("angle-convert", "05 几何测量", "角度换算(弧度/角度)", () =>
+            Register(new ToolboxItem("angle-convert", "05 几何测量", "单位换算", () =>
                 new ToolNode(new AngleConvertTool(NextModuleName("角度换算")))));
             Register(new ToolboxItem("barcode1d", "06 识别工具", "一维码", () =>
                 new ToolNode(new Barcode1DTool(NextModuleName("一维码")))));

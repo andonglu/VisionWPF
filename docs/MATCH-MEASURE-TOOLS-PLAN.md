@@ -1,7 +1,7 @@
 # 定位匹配与几何测量补充开发计划
 
 编写日期：2026-10-06
-状态：第一批 MT-01 / MS-01 已实现（分支 `feature/match-measure-batch1`，见第 10 节）；其余各项待开发，动工前各做一次小评审。
+状态：第一批 MT-01 / MS-01 已实现（分支 `feature/match-measure-batch1`，见第 10 节）；第二批 MS-02 / MS-07（Fixed）已实现并修复第一批“执行测试”回归（分支 `feature/match-measure-batch2`，见第 11 节）；其余各项待开发，动工前各做一次小评审。
 范围：工具箱“01 定位匹配”和“05 几何测量”中的模板匹配类、测量类工具（`HalconTools.cs`、`DescriptorMatchTools.cs`、`MeasureTools.cs`、`FollowMeasureTools.cs`、`AngleTools.cs`），以及新增的差分检测。
 HALCON 版本基线：**20.11 及以上**。可以直接使用通用形状模型（`*_generic_shape_model`）等 20.11 引入的算子，无需兼容更早版本。
 关联文档：
@@ -100,7 +100,7 @@ HALCON 版本基线：**20.11 及以上**。可以直接使用通用形状模型
 - 搜索区域先 `union1` 合并、检查面积后只 `reduce_domain` 一次，缩小图在 `finally` 中释放；多矩阵/循环场景不重复缩小。空区域输出 `MatchCount = 0` 并按 `FailWhenNotFound` 处理；引用无效直接失败。
 - 最佳结果在排序**之前**按 `Score` 降序选出，再传给 `SetMatchOutputs`（不再取 `items[0]`）。`Score` 排序保持算子返回顺序（HALCON 已按得分降序），因此默认行为与旧版逐项一致。
 - `RowThenColumn` 以每一行第一个结果的行坐标为基准，行差不超过 `RowTolerance` 的归为同一行，行内按列排序；`RowTolerance = 0` 时等同于先按行再按列的严格排序。`RowTolerance < 0` 在流程校验阶段报错，`RowTolerance` 只在 `RowThenColumn` 时显示。
-- 匹配编辑窗口“运行参数”页的“执行测试”改为在工作副本上调用工具自身的 `Run`，因此搜索区域、排序与流程运行结果完全一致；“示教建模”页的测试行为不变。
+- 匹配编辑窗口“运行参数”页的“执行测试”调用工具自身的 `Run`，因此搜索区域、排序与流程运行结果完全一致；“示教建模”页的测试行为不变。第一批的写法是先 `ApplyToTool()` 把界面参数写入窗口持有的工具实例再运行；主程序传给窗口的是编辑事务（`ToolEditTransaction`）的工作副本，取消时副本被丢弃，节点本身不会被改写，但窗口在测试时就改写了自己持有的实例，违背“参数只在确定时写入”的约定。第二批（评审 B2-0）改为在一次性副本上应用界面参数并运行（`ToolTestRun`），窗口持有的实例只在“确定”时写入，见第 11 节。
 - 描述子匹配继承基类，自动获得搜索区域和排序；其专用编辑窗口本批未改，可在侧栏属性中配置。
 
 ### MT-02 示教增加 XLD / DXF 建模与模型原点
@@ -317,6 +317,17 @@ HALCON 版本基线：**20.11 及以上**。可以直接使用通用形状模型
 - 显示轮廓中，边缘对用连线和宽度标注区分。
 - 对标 VisionPro `CogCaliperTool` 的边缘对模式和 VisionMaster 的卡尺宽度测量。
 
+**实现说明（第二批已完成）**
+
+- 新增中间基类 `CaliperMeasureToolBase`（`CaliperMeasureTools.cs`，一维卡尺与圆弧卡尺共用），放 `EdgeMode`、边缘对输出、`IToolConfigurationCheck` / `IToolParameterVisibility`，与 MS-01 的 `MetrologyMeasureToolBase` 同一做法，metrology 工具不受影响。`measure_pairs` 的调用与结果转换（`MeasureCaliperPairs`、`PairsToEdgeResults`）及尺寸线构建放在 `FollowMeasureToolBase`，与 `measure_pos` 的 `ToCaliperResults` 并列。
+- 圆弧卡尺沿圆弧布置的每个卡尺本身就是 `gen_measure_rectangle2` 矩形测量句柄（径向），直接对这些句柄调用 `measure_pairs`；合成圆环（内外半径 40 / 55）实测每个径向卡尺得到一对、宽度约 15，与逐卡尺直接调用结果逐项相同。
+- `Edge` 模式代码路径与原实现逐项相同（用例对照直接调用 `measure_pos`），边缘对输出写空数组、`PairCount = 0`、`FirstWidth = NaN`，并通过 `IToolParameterVisibility` 按输出名对引用候选隐藏（编辑器下拉与声明级校验共用同一作用域，单边缘模式下引用这些输出会在校验时报不可见）。
+- `Pair` 模式下原有边缘输出的语义：`Rows` / `Columns` / `Amplitudes` / `Results` 依次写入每对的第一、第二条边缘，长度 = 2 × `PairCount`，“第 N 条边缘”的序号含义随之变化；`Distances` 仍为同一卡尺内相邻边缘的距离，依次为宽度、间距交替（每个卡尺 2 × 对数 − 1 个）；`FirstDistance` 即第一对的宽度。
+- `PairResults`（`OneDCaliperPairResult`：定位结果序号、卡尺序号、卡尺内对序号、两条边缘的坐标与幅值、宽度、中心）与其他边缘对输出一样只含本次运行的结果（`Results` 仍按原约定跨循环累积）。
+- 校验（流程校验与运行前）：单边缘模式边缘极性只能是 `all` / `positive` / `negative`，选了 `*_strongest` 提示“只用于边缘对模式”；边缘对模式可用 6 个值；两种模式的边缘选择都只能是 `all` / `first` / `last`。
+- 显示轮廓：卡尺矩形 + 边缘十字之外，每对加 3 段尺寸线（两边缘连线 + 两端垂直于测量方向的挡线，挡线半长 = 卡尺半宽 + 十字大小），全部由 `XldLineHelper.Segments` 生成；仓库没有文字叠加能力、XLD 也不能携带文字，宽度数值在 `Widths` 输出、日志和编辑窗口结果表（边缘对模式显示 `PairResults`）中查看。
+- 编辑窗口 `WpfFollowMeasureToolEditWindow`：卡尺类工具显示“边缘模式”下拉（单边缘 / 边缘对（宽度测量）），边缘极性下拉随模式切换（当前值在新模式不可用时退回 `all`），边缘选择两种模式相同。
+
 ### MS-03 圆弧卡尺增加沿圆弧方向测量
 
 **功能**
@@ -412,6 +423,15 @@ HALCON 版本基线：**20.11 及以上**。可以直接使用通用形状模型
 - 标定文件读取复用 CB-01 标定服务的加载与缓存逻辑。
 - 面积换算（像素当量平方）作为 `Length` 模式下的 `IsArea` 开关一并提供。
 
+**实现说明（第二批已完成，仅 Fixed 当量）**
+
+- 本批 `ScaleSource` 只有 `Fixed` 一个取值；`Calibration` 来源（标定文件 / 标定矩阵）推迟到 CB-01 标定批评审后连同标定服务一起加，不预留无效选项。
+- 新增 `ConvertKind`（`Angle` 默认 / `Length`）、`ScaleSource`（`Fixed`）、`PixelSize`（毫米/像素，默认 1，须大于 0）、`LengthUnit`（`mm` 默认 / `um`）、`IsArea`；新枚举按数字保存，历史文件缺省时为 `Angle`，行为与旧版逐项相同（用例对照旧版公式穷举单位与范围组合）。
+- 换算：长度 = 像素值 × `PixelSize`；`IsArea` 时 × `PixelSize`²；`um` 时长度再 × 1000、面积再 × 1000²（mm² → um²）。`Value` / `Values` / `Count` 与 `Angle` 模式同构，NaN 原样输出。
+- 校验：`Length` 模式 `PixelSize` 必须大于 0（流程校验与运行时）；`Angle` 模式不新增任何校验，自定义范围仍只在运行时检查（与旧版相同）。
+- 参数显隐：`Angle` 模式只显示角度参数，`Length` 模式只显示 `ScaleSource` / `PixelSize` / `LengthUnit` / `IsArea`；输入引用的显示名由“角度”改为“输入值”。
+- 工具箱显示名改为“单位换算”，ID `angle-convert`、类型名 `AngleConvertTool` 与新建节点的默认模块名（“角度换算N”）不变；无专用编辑窗口，经侧栏配置。
+
 ## 6. 兼容性要求
 
 - 枚举参数按**数字**序列化（如 `"SortBy": 0`），新增值一律追加在末尾，不得插入或调整已有成员顺序；新增模式枚举的默认值等于现有行为。只有把现有字符串参数改成枚举时，才需要标注 `JsonStringEnumConverter` 强制按名称保存（REGION / XLD 两批的做法）；本计划第一批的新枚举（`MatchSortBy`、`MetrologyInterpolation`）没有对应的旧字符串参数，正常追加即可。
@@ -441,7 +461,7 @@ HALCON 版本基线：**20.11 及以上**。可以直接使用通用形状模型
 - MS-04：在含干扰边缘的图像中，开启模糊测量后只保留符合宽度的边缘对。
 - MS-05：对已知灰度渐变的合成图像，`Profile` 与真值一致。
 - MS-06：对合成矩形角，交点误差在 0.2 像素内，夹角误差在 0.1° 内。
-- MS-07：`Angle` 模式结果与旧版一致；`Length` 模式下固定当量和标定文件两种方式结果正确。
+- MS-07：`Angle` 模式结果与旧版一致；`Length` 模式下固定当量方式结果正确（标定文件方式随 CB-01 标定批验收）。
 - 全部回归测试和 `examples\*.vflow.json` 通过。
 
 ## 8. 开发顺序
@@ -493,4 +513,28 @@ HALCON 版本基线：**20.11 及以上**。可以直接使用通用形状模型
 
 - 单元/集成测试：新增 `MatchMeasureBatch1Tests` 33 个用例，全量 `dotnet test`（`Category!=Soak`）797 个通过；`examples\*.vflow.json` 全部可加载。
 - 界面验收：脚本经 Windows UI Automation 驱动真实的 `VisionFlow.WpfApp.exe`，在文件对话框打开含模板匹配和跟随测量的流程，完成编辑、运行、保存、重新加载，共 43 项检查全部通过。覆盖：默认参数与旧版直接调用逐字一致（兼容门禁）；5 种排序（含行容差 0 / 16）顺序正确且最佳得分始终为最高分；行容差仅在先行后列时显示、为负时校验报错；搜索区域下拉列出上游区域、配置后只找到区域内目标；高级参数默认收起、展开后显示 6 项且卡尺数大于 0 时隐藏卡尺间距、实例数为 0 校验报错；椭圆测量窗口同样有折叠区；`MeasurePoints` 和匹配轮廓叠加显示；界面数值（12 / 33 项）与不走界面的对照运行逐字一致；保存文件与期望配置一致，重新加载后配置与结果不变。
-- 验证中未发现应用本身的问题。
+- 验证中未发现应用本身的问题。第二批代码评审指出“执行测试”会先把界面参数写入窗口持有的工具实例（主程序中该实例是编辑事务的工作副本，取消后丢弃，节点未被改写），已在第二批修复，见第 11 节。
+
+## 11. 第二批（回归修复 + MS-02 + MS-07 Fixed）评审处理与验收记录
+
+**评审意见处理**（[MATCH-MEASURE-TOOLS-PLAN-REVIEW.md](MATCH-MEASURE-TOOLS-PLAN-REVIEW.md) 第二批评审意见）
+
+| 条目 | 处理 |
+|---|---|
+| B2-0 执行测试直写工具 | 采用方案 B：新增 UI 无关的 `ToolTestRun`（`VisionFlow.EditorCore\Ui`），复制配置（`ToolEditTransaction.CopyConfiguration`）→ 把界面参数写入副本 → 在预览上下文运行 → 释放副本缓存的模型句柄；匹配窗口 `ApplyToTool` 拆出 `ApplyTo(target)`，测试作用于副本、确定作用于窗口持有的工具。不选方案 A：主程序已用 `ToolEditTransaction` 为窗口提供工作副本并在确定时写回节点，窗口内再维护一份副本只是重复这层机制。核对时发现评审所说“路由传入活节点”与代码不符（`MainWindow.OpenToolEditor` 传入 `transaction.WorkingCopy`），因此主程序中取消从未改写节点；修复后窗口自身也满足“只在确定时写入”。用例固定：副本上运行用新参数、原工具全部参数不变、参数解析失败时原工具不变、编辑事务中测试后不提交节点不变 |
+| B2-1-1 Calibration 来源 | 本批 `ScaleSource` 只有 `Fixed`，不引入无效选项 |
+| B2-1-2 Pair 参数取值与编辑器 | 边缘极性按模式收紧校验；编辑窗口边缘极性下拉随模式切换 |
+| B2-1-3 Pair 复用边缘输出的语义 | 写入 MS-02 实现说明与 README |
+| B2-2-1 共用方法位置 | `measure_pairs` 调用与转换在 `FollowMeasureToolBase`；圆弧卡尺的径向矩形句柄实测可用 |
+| B2-2-2 Edge 模式写空并隐藏 | 写空数组 / 0 / NaN；`IToolParameterVisibility` 扩展为也可按输出名隐藏引用候选（用例保证现有工具的输出名都不与参数名重名，不会误伤） |
+| B2-2-3 宽度标注 | 尺寸线（连线 + 两端挡线）由 `XldLineHelper.Segments` 生成；仓库没有文字叠加能力，按使用方确认不新增，宽度数值见 `Widths`、日志与结果表 |
+| B2-2-4 换算语义 | 按评审实现；面积在 `um` 时乘 1000²（mm² → um²），评审的“× 1000”针对长度 |
+| B2-2-5 枚举序列化 | `EdgeMode` / `ConvertKind` / `ScaleSource` / `LengthUnit` 按数字保存，默认值为原行为 |
+| B2-2-6 编辑器同步 | 只改 `WpfFollowMeasureToolEditWindow`；单位换算只改 `ToolboxRegistry` 显示名与 README |
+| B2-3 文档 | 头部状态、MS-02 / MS-07 实现说明、第 10 节表述、README 均已更新 |
+
+**验收结果**
+
+- 单元/集成测试：新增 `MatchMeasureBatch2Tests` 24 个用例（回归修复 3、MS-02 15、MS-07 4、输出隐藏防误伤 1、保存加载 1），全量 `dotnet test`（`Category!=Soak`）821 个通过；`examples\*.vflow.json` 全部可加载。
+- 界面验收：脚本经 Windows UI Automation 驱动真实的 `VisionFlow.WpfApp.exe`，在文件对话框打开测试流程，完成编辑、运行、保存、重新加载，共 42 项检查全部通过。覆盖：匹配窗口改数量与排序 → 执行测试（用新参数得 2 个结果）→ 取消 → 流程未标记修改、重新打开参数仍为原值，确定后才写入；卡尺窗口边缘模式下拉、边缘极性在两种模式间联动（`*_strongest` 切回单边缘时退回 `all`）、边缘对执行测试结果表宽度 20 / 20 / 40 与对照一致；单边缘选 `*_strongest` 校验报错；圆弧卡尺窗口同样可切边缘对；工具箱显示“单位换算”，侧栏 Angle / Length 参数显隐正确，`Length` 输入值下拉只列出边缘对模式的 `Widths`；边缘对显示轮廓比同位置单边缘多出尺寸线（像素对比与截图）；卡尺单边缘与旧版 `measure_pos`、边缘对与直接 `measure_pairs`、角度换算与旧版公式逐字一致；界面 29 个单值与 12 个数组长度与不走界面的对照运行逐字一致；保存文件与期望配置一致（枚举按数字保存，ID 仍为 `angle-convert`），重新加载后配置与结果不变。
+- 验证中发现的应用问题：侧栏数字参数按当前值是否为整数决定小数位，`PixelSize`（默认 1）输入 0.02 后文本框立即显示为 `0`（实际值 0.02 已写入，重新选中节点后显示正确）。这是共享控件 `NumericInputControl` 的既有行为，经使用方确认做最小修复：值的精度超过 `DecimalPlaces` 时补足有效小数（最多 6 位），精度不超过的值显示与原来完全相同。

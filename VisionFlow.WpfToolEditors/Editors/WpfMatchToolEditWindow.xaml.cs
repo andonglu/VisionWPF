@@ -370,8 +370,9 @@ namespace VisionFlow.WpfToolEditors.Editors
         }
 
         /// <summary>
-        /// “运行参数”页的测试：把当前参数写入编辑副本后按运行时的完整流程执行（含搜索区域与结果排序），
-        /// 与流程运行结果一致；图像引用基于上次运行结果，Input.Image 取主窗口当前图像。
+        /// “运行参数”页的测试：把界面参数写入工具的一次性副本，按运行时的完整流程执行（含搜索区域与结果排序），
+        /// 与流程运行结果一致；窗口持有的工具不被修改，参数只在“确定”时写入。
+        /// 图像引用基于上次运行结果，Input.Image 取主窗口当前图像。
         /// </summary>
         private void TestRun_Click(object sender, RoutedEventArgs e)
         {
@@ -381,17 +382,14 @@ namespace VisionFlow.WpfToolEditors.Editors
                 return;
             }
 
-            FlowContext ctx = null;
+            ToolTestRun run = null;
             try
             {
-                ApplyToTool();
-                ctx = (_context.LastRunContext ?? new FlowContext()).CreatePreviewContext();
-                if (_context.InputImage != null && _context.InputImage.IsInitialized())
-                {
-                    ctx.SetVariable(Variable.Object("Input", "Image", new HalconImage(_context.InputImage), 1));
-                }
-                NodeResult result = ((ToolBase)_tool).Run(ctx);
-                string module = _tool.ModuleName;
+                run = ToolTestRun.Run((ToolBase)_tool, copy => ApplyTo((IHalconTemplateMatchTool)copy),
+                    _context.LastRunContext, _context.InputImage);
+                FlowContext ctx = run.Context;
+                NodeResult result = run.Result;
+                string module = run.ModuleName;
                 if (ctx.TryGetVariable(module, "Image", out Variable imageVar) && imageVar.Value is HalconImage image)
                 {
                     RunImageView.ShowImage(image.Object);
@@ -418,7 +416,7 @@ namespace VisionFlow.WpfToolEditors.Editors
             }
             finally
             {
-                ctx?.Dispose();
+                run?.Dispose();
             }
         }
 
@@ -974,30 +972,37 @@ namespace VisionFlow.WpfToolEditors.Editors
 
         private void ApplyToTool()
         {
-            _tool.ModuleName = (ModuleNameText.Text ?? string.Empty).Trim();
-            _tool.ImagePath = (ImagePathCombo.Text ?? string.Empty).Trim();
-            _tool.ShapeModelData = _modelData;
-            _tool.FindStartAngle = ParseDouble(FindStartAngleText.Text, "查找起始角");
-            _tool.FindExtentAngle = ParseDouble(FindExtentAngleText.Text, "查找角范围");
-            _tool.MinScore = ParseDouble(MinScoreText.Text, "最小分");
-            _tool.NumMatches = ParseInt(NumMatchesText.Text, "数量");
-            _tool.MaxOverlap = ParseDouble(MaxOverlapText.Text, "重叠");
-            _tool.SubPixel = SubPixelCombo.Text;
-            _tool.Greediness = ParseDouble(GreedinessText.Text, "贪婪度");
-            _tool.FailWhenNotFound = FailWhenNotFoundCheck.IsChecked == true;
+            ApplyTo(_tool);
+        }
+
+        /// <summary>把界面参数写入 target（确定时为窗口持有的工具，执行测试时为一次性副本）。</summary>
+        private void ApplyTo(IHalconTemplateMatchTool target)
+        {
+            var matchTarget = (HalconMatchToolBase)target;
+            target.ModuleName = (ModuleNameText.Text ?? string.Empty).Trim();
+            target.ImagePath = (ImagePathCombo.Text ?? string.Empty).Trim();
+            target.ShapeModelData = _modelData;
+            target.FindStartAngle = ParseDouble(FindStartAngleText.Text, "查找起始角");
+            target.FindExtentAngle = ParseDouble(FindExtentAngleText.Text, "查找角范围");
+            target.MinScore = ParseDouble(MinScoreText.Text, "最小分");
+            target.NumMatches = ParseInt(NumMatchesText.Text, "数量");
+            target.MaxOverlap = ParseDouble(MaxOverlapText.Text, "重叠");
+            target.SubPixel = SubPixelCombo.Text;
+            target.Greediness = ParseDouble(GreedinessText.Text, "贪婪度");
+            target.FailWhenNotFound = FailWhenNotFoundCheck.IsChecked == true;
             string searchRegion = (SearchRegionCombo.Text ?? string.Empty).Trim();
-            MatchTool.SearchRegionPath = searchRegion.Length == 0 ? null : searchRegion;
-            MatchTool.SortBy = SelectedSortBy;
-            MatchTool.RowTolerance = ParseDouble(RowToleranceText.Text, "行容差");
-            _tool.BaseRow = ParseDouble(BaseRowText.Text, "基准 Row");
-            _tool.BaseColumn = ParseDouble(BaseColumnText.Text, "基准 Col");
-            _tool.BaseAngle = ParseDouble(BaseAngleText.Text, "基准角");
-            if (_tool is HalconScaledShapeMatchTool scaled)
+            matchTarget.SearchRegionPath = searchRegion.Length == 0 ? null : searchRegion;
+            matchTarget.SortBy = SelectedSortBy;
+            matchTarget.RowTolerance = ParseDouble(RowToleranceText.Text, "行容差");
+            target.BaseRow = ParseDouble(BaseRowText.Text, "基准 Row");
+            target.BaseColumn = ParseDouble(BaseColumnText.Text, "基准 Col");
+            target.BaseAngle = ParseDouble(BaseAngleText.Text, "基准角");
+            if (target is HalconScaledShapeMatchTool scaled)
             {
                 scaled.ScaleMin = ParseDouble(ScaleMinText.Text, "最小缩放");
                 scaled.ScaleMax = ParseDouble(ScaleMaxText.Text, "最大缩放");
             }
-            if (_tool is HalconLocalDeformableMatchTool deformable)
+            if (target is HalconLocalDeformableMatchTool deformable)
             {
                 deformable.ScaleRowMin = ParseDouble(ScaleRowMinText.Text, "行缩放最小");
                 deformable.ScaleRowMax = ParseDouble(ScaleRowMaxText.Text, "行缩放最大");

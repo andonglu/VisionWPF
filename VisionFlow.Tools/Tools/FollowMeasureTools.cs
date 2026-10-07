@@ -550,7 +550,7 @@ namespace VisionFlow.Tools
     [ToolOutput("FailedCount", VariableKind.Single, VariableType.Int)]
     [ToolOutput("Results", VariableKind.Object, VariableType.Object, ElementClrType = typeof(List<OneDCaliperMeasureResult>))]
     [ToolOutput("ResultContour", VariableKind.Object, VariableType.Object, ElementClrType = typeof(HalconXld))]
-    public sealed class OneDCaliperFollowMeasureTool : FollowMeasureToolBase
+    public sealed class OneDCaliperFollowMeasureTool : CaliperMeasureToolBase
     {
         public double BaseRow { get; set; } = 100;
         public double BaseColumn { get; set; } = 150;
@@ -564,6 +564,11 @@ namespace VisionFlow.Tools
 
         public override NodeResult Run(FlowContext ctx)
         {
+            NodeResult invalid = CheckBeforeRun();
+            if (invalid != null)
+            {
+                return invalid;
+            }
             var edges = new List<OneDCaliperMeasureResult>();
             var distances = new List<double>();
             return RunMeasurements(ctx, "一维卡尺",
@@ -595,23 +600,13 @@ namespace VisionFlow.Tools
                 width, height, "nearest_neighbor", out HTuple measureHandle);
             try
             {
-                HOperatorSet.MeasurePos(image, measureHandle, MeasureSigma, MeasureThreshold,
-                    MeasureTransition, MeasureSelect, out HTuple rows, out HTuple columns, out HTuple amplitudes, out HTuple distances);
-                if (rows.Length == 0)
+                int edgeCount = MeasureCaliper(ctx, image, measureHandle, ResolveIndex(ctx, resultIndex), 0, 0, followed,
+                    row, col, phi, length1, length2, 12, edges, allDistances, out contour);
+                if (edgeCount == 0)
                 {
-                    return NodeResult.Fail($"一维卡尺测量失败（中心 {row:F1},{col:F1}）：未找到边缘");
+                    return NodeResult.Fail($"一维卡尺测量失败（中心 {row:F1},{col:F1}）：{NotFoundText}");
                 }
-
-                List<OneDCaliperMeasureResult> found = ToCaliperResults(rows, columns, amplitudes, distances,
-                    ResolveIndex(ctx, resultIndex), 0, followed);
-                foreach (OneDCaliperMeasureResult result in found)
-                {
-                    AddResult(ctx, ModuleName, result);
-                }
-                edges.AddRange(found);
-                allDistances.AddRange(distances.Length > 0 ? distances.DArr : new double[0]);
-                contour = BuildCaliperContour(row, col, phi, length1, length2, rows, columns, 12);
-                ctx.AddLog(FlowLogLevel.Info, $"[一维卡尺]{(followed ? "跟随" : "固定")} 找到边缘数={rows.Length}");
+                ctx.AddLog(FlowLogLevel.Info, $"[一维卡尺]{(followed ? "跟随" : "固定")} {FoundText(edgeCount)}");
                 return NodeResult.Ok;
             }
             finally
@@ -634,7 +629,7 @@ namespace VisionFlow.Tools
     [ToolOutput("FailedCount", VariableKind.Single, VariableType.Int)]
     [ToolOutput("Results", VariableKind.Object, VariableType.Object, ElementClrType = typeof(List<OneDCaliperMeasureResult>))]
     [ToolOutput("ResultContour", VariableKind.Object, VariableType.Object, ElementClrType = typeof(HalconXld))]
-    public sealed class ArcCaliperFollowMeasureTool : FollowMeasureToolBase
+    public sealed class ArcCaliperFollowMeasureTool : CaliperMeasureToolBase
     {
         public double BaseRow { get; set; } = 100;
         public double BaseColumn { get; set; } = 150;
@@ -649,6 +644,11 @@ namespace VisionFlow.Tools
 
         public override NodeResult Run(FlowContext ctx)
         {
+            NodeResult invalid = CheckBeforeRun();
+            if (invalid != null)
+            {
+                return invalid;
+            }
             var edges = new List<OneDCaliperMeasureResult>();
             var distances = new List<double>();
             return RunMeasurements(ctx, "一维圆弧卡尺",
@@ -706,22 +706,14 @@ namespace VisionFlow.Tools
                         width, height, "nearest_neighbor", out HTuple measureHandle);
                     try
                     {
-                        HOperatorSet.MeasurePos(image, measureHandle, MeasureSigma, MeasureThreshold,
-                            MeasureTransition, MeasureSelect, out HTuple rows, out HTuple columns, out HTuple amplitudes, out HTuple distances);
-                        if (rows.Length == 0)
+                        int edgeCount = MeasureCaliper(ctx, image, measureHandle, index, i, found, followed,
+                            row, col, phi, MeasureLength1, MeasureLength2, 10, edges, allDistances, out HObject caliperContour);
+                        if (edgeCount == 0)
                         {
                             continue;
                         }
+                        found += edgeCount;
 
-                        foreach (OneDCaliperMeasureResult result in ToCaliperResults(rows, columns, amplitudes, distances, index, found, followed))
-                        {
-                            AddResult(ctx, ModuleName, result);
-                            edges.Add(result);
-                        }
-                        allDistances.AddRange(distances.Length > 0 ? distances.DArr : new double[0]);
-                        found += rows.Length;
-
-                        HObject caliperContour = BuildCaliperContour(row, col, phi, MeasureLength1, MeasureLength2, rows, columns, 10);
                         HOperatorSet.ConcatObj(localContours, caliperContour, out HObject combined);
                         localContours.Dispose();
                         caliperContour.Dispose();
@@ -735,12 +727,12 @@ namespace VisionFlow.Tools
 
                 if (found == 0)
                 {
-                    return NodeResult.Fail($"一维圆弧卡尺测量失败（圆心 {centerRow:F1},{centerCol:F1}, R={radius:F1}）：未找到边缘");
+                    return NodeResult.Fail($"一维圆弧卡尺测量失败（圆心 {centerRow:F1},{centerCol:F1}, R={radius:F1}）：{NotFoundText}");
                 }
 
                 contour = localContours;
                 localContours = null;
-                ctx.AddLog(FlowLogLevel.Info, $"[一维圆弧卡尺]{(followed ? "跟随" : "固定")} 卡尺数={caliperCount}, 找到边缘数={found}");
+                ctx.AddLog(FlowLogLevel.Info, $"[一维圆弧卡尺]{(followed ? "跟随" : "固定")} 卡尺数={caliperCount}, {FoundText(found)}");
                 return NodeResult.Ok;
             }
             finally

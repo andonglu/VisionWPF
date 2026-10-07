@@ -56,3 +56,45 @@
 ## 6. 开工顺序确认
 
 第一批：MT-01 + MS-01（本评审覆盖）。第二批候选：MS-02（边缘对宽度，只动卡尺两工具，改动小）或 MT-02（示教建模，与 MT-03 强耦合建议合并评审）。具体由使用方按现场需求定。
+
+---
+
+# 第二批评审意见（MS-02 + MS-07 + 第一批回归修复）
+
+评审日期：2026-10-07
+评审对象：计划 MS-02（卡尺边缘对宽度）、MS-07（单位换算），以及第一批代码评审发现的回归项。
+评审方式：与第一批实现后的代码核对（`MeasureTools.cs` 测量基类、`FollowMeasureTools.cs` 两个卡尺工具、`AngleTools.cs`、`WpfMatchToolEditWindow.xaml.cs`）。
+评审结论：**可以开工，第二批 = MS-02 + MS-07（Fixed 当量模式）+ 匹配窗口"执行测试"回归修复。MS-07 的 `Calibration` 标定来源本批不做（CB-01 未开工），MT-02 + MT-03 合并为第三批。**
+
+## B2-0. 第一批回归修复（最高优先，先做）
+
+**问题**：`WpfMatchToolEditWindow.TestRun_Click`（第一批改动）第一步调用 `ApplyToTool()`，把全部参数直接写入 `_tool`——路由层（`WpfToolEditorRouter`）传入的是**活节点不是副本**，用户点"执行测试"后点"取消"，参数已被改写，违背"编辑只在 OK 时到达节点"的约定（LD-08 起确立）。第一批前旧代码中 `_tool.*` 只出现在 OK 的处理里，测试按钮只解析局部值。
+**修法**（二选一，建议方案 A）：
+- A. 窗口打开时克隆一个工作副本（反序列化节点 JSON 即可），测试按钮与 OK 都作用于副本；OK 时把副本参数写回节点。
+- B. 测试按钮解析文本框值到临时变量并赋值给一个一次性克隆，绝不触碰 `_tool`。
+**门禁**：新增 UI 无关测试固定该行为——执行测试路径不得修改原节点实例的任何参数（可对 `TestRun_Click` 抽出的核心方法测）；并人工走查：改参数 → 执行测试 → 取消 → 重新打开窗口确认值未被改写。
+
+## B2-1. P1：动工前确认
+
+1. **MS-07 的 `Calibration` 来源本批砍掉**：`vfcal.json` 的加载与缓存是 CB-01 标定服务的内容，标定计划未开工，代码里不存在该服务。本批只做 `ScaleSource = Fixed`（直接填像素当量）；`Calibration` 枚举值可以保留但流程校验时报"标定服务尚未实现（依赖 CB-01）"的明确错误，或干脆本批不引入该枚举值，待 CB-01 评审后连同标定批一起加。**倾向后者：本批 `ScaleSource` 只有 `Fixed` 一个取值，不预留无效选项。**
+2. **MS-02 的 Pair 模式参数取值集合变化必须体现在校验与编辑器**：`MeasureTransition` 在 Pair 下新增 `all_strongest` / `positive_strongest` / `negative_strongest` 三个值，`WpfFollowMeasureToolEditWindow` 的 Transition/Select 下拉是 `AddItems` 硬编码的，Edge / Pair 切换时下拉项要联动；`IToolConfigurationCheck` 校验按模式收紧。
+3. **Pair 模式复用现有边缘输出的语义要写进文档**：`Rows` / `Columns` 在 Pair 模式下依次写每对的两条边缘，数组长度 = 2 × PairCount，旧下游引用仍能取到点但"第 N 条边缘"的序号含义变化——README 工具表和计划实现说明里必须写明。
+
+## B2-2. P2：开发中落实
+
+1. **卡尺两工具共用方法放对位置**：`measure_pairs` 的调用与结果转换放 `FollowMeasureToolBase` 的受保护方法（与 `measure_pos` 路径并列），两个卡尺工具只传各自的测量对象句柄；圆弧卡尺同样走 `measure_pairs`（HALCON 对圆弧量测句柄同样适用），用合成图实测确认。
+2. **Pair 专属输出在 Edge 模式写空**：`Widths` / `Gaps` / `PairCenterRows` / `PairCenterColumns` / `FirstWidth` / `PairCount` / `PairResults` 在 Edge 模式写空数组与 NaN（与 MS-01 的空输出模式一致，防止循环中读到上一轮残留）；并用 `IToolParameterVisibility` 在 Edge 模式隐藏 Pair 专属输出与参数。
+3. **宽度标注显示轮廓**：边缘对的显示轮廓用连线 + 宽度文字区分（计划已写），复用现有显示轮廓构建代码，XLD 文字用 `XldLineHelper` 或现有标注助手，不要新造。
+4. **MS-07 的换算语义**：`Length` 模式下 `IsArea = true` 时结果 = 像素值 × PixelSize²；`LengthUnit = um` 时毫米结果 × 1000；`Value` / `Values` / `Count` 输出与 Angle 模式完全同构；`ConvertKind = Angle` 时行为与现版本逐项一致（回归硬门禁）。显示名改"单位换算"只动 `ToolboxRegistry` 的显示名，工具 ID `angle-convert` 与类型名不动。
+5. **枚举序列化**：`EdgeMode` / `ConvertKind` / `LengthUnit`（及本批若引入的 `ScaleSource`）按数字保存、追加在末尾、默认值 = 现有行为；新枚举没有旧字符串参数，不需 `JsonStringEnumConverter`。
+6. **编辑器同步**：MS-02 改 `WpfFollowMeasureToolEditWindow`（EdgeMode 切换 + 下拉联动）；MS-07 无专用编辑窗口（经侧栏属性配置），只需 `ToolboxRegistry` 显示名与 README；两工具都不涉及 `BuiltinToolIdentities` / `WpfToolEditorRouter` 变更。
+
+## B2-3. P3：文档维护
+
+1. 计划头部状态更新为"第二批 MS-02 / MS-07（Fixed）已实现"；MS-02、MS-07 条目补实现说明；MS-07 条目注明 `Calibration` 来源推迟到 CB-01 之后的标定批。
+2. README 工具表：几何测量行补"一维卡尺/圆弧卡尺支持边缘对宽度测量（宽度、间距、中心点）"；单位换算行改名并补"支持像素长度/面积换算（固定当量），标定当量待标定功能上线"。
+3. 第一批计划第 10 节"执行测试"描述改为如实表述（当前实现直写节点，修复后按实际写法更新）。
+
+## B2-4. 开工顺序确认
+
+第二批：回归修复 + MS-02 + MS-07（Fixed）。第三批候选：MT-02 + MT-03（示教界面一次改完，合并评审）。MS-07 的 Calibration 来源、MS-03 / MS-04（沿圆弧、模糊测量）留待标定批或第四批评审。

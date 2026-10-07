@@ -87,6 +87,42 @@ namespace VisionFlow.Tools
         }
     }
 
+    /// <summary>卡尺的边缘模式。</summary>
+    public enum EdgeMode
+    {
+        /// <summary>单边缘（measure_pos），默认，即原有行为。</summary>
+        Edge,
+        /// <summary>边缘对（measure_pairs）：成对的两条边缘，输出宽度、间距与中心。</summary>
+        Pair
+    }
+
+    /// <summary>卡尺边缘对（measure_pairs）的一项结果。</summary>
+    public sealed class OneDCaliperPairResult
+    {
+        /// <summary>定位结果序号（与边缘结果的 Index 相同）。</summary>
+        public int Index { get; set; }
+        /// <summary>所属卡尺序号（一维卡尺恒为 0，圆弧卡尺为第几个卡尺）。</summary>
+        public int CaliperIndex { get; set; }
+        /// <summary>卡尺内的边缘对序号（0 起）。</summary>
+        public int PairIndex { get; set; }
+        public double Row1 { get; set; }
+        public double Column1 { get; set; }
+        public double Amplitude1 { get; set; }
+        public double Row2 { get; set; }
+        public double Column2 { get; set; }
+        public double Amplitude2 { get; set; }
+        /// <summary>两条边缘的距离（measure_pairs 的 IntraDistance）。</summary>
+        public double Width { get; set; }
+        public double CenterRow { get; set; }
+        public double CenterColumn { get; set; }
+        public bool Followed { get; set; }
+
+        public override string ToString()
+        {
+            return $"#{(Followed ? Index.ToString() : "固定")}.{CaliperIndex}.{PairIndex} ({Row1:F2},{Column1:F2})-({Row2:F2},{Column2:F2}), W={Width:F2}";
+        }
+    }
+
     /// <summary>
     /// 支持“区域初始化”的测量工具：配置 InitRegionPath 后，按初始区域中每个对象的形状
     /// （矩形取 smallest_rectangle2，圆取 smallest_circle）作为初始几何做亚像素测量，无需示教与变换矩阵。
@@ -363,6 +399,109 @@ namespace VisionFlow.Tools
                 });
             }
             return results;
+        }
+
+        /// <summary>
+        /// 在一个卡尺测量句柄上执行 measure_pairs（一维卡尺与圆弧卡尺共用，圆弧卡尺的每个径向卡尺同样是矩形测量句柄），
+        /// 按算子顺序返回边缘对；gaps 为相邻边缘对之间的间距（InterDistance，每个卡尺 对数-1 个）。
+        /// </summary>
+        protected static List<OneDCaliperPairResult> MeasureCaliperPairs(HObject image, HTuple measureHandle,
+            double sigma, double threshold, string transition, string select, int index, int caliperIndex, bool followed,
+            out double[] gaps)
+        {
+            HOperatorSet.MeasurePairs(image, measureHandle, sigma, threshold, transition, select,
+                out HTuple rows1, out HTuple columns1, out HTuple amplitudes1,
+                out HTuple rows2, out HTuple columns2, out HTuple amplitudes2,
+                out HTuple intraDistances, out HTuple interDistances);
+            var pairs = new List<OneDCaliperPairResult>();
+            for (int i = 0; i < rows1.Length; i++)
+            {
+                pairs.Add(new OneDCaliperPairResult
+                {
+                    Index = index,
+                    CaliperIndex = caliperIndex,
+                    PairIndex = i,
+                    Row1 = rows1[i].D,
+                    Column1 = columns1[i].D,
+                    Amplitude1 = amplitudes1[i].D,
+                    Row2 = rows2[i].D,
+                    Column2 = columns2[i].D,
+                    Amplitude2 = amplitudes2[i].D,
+                    Width = intraDistances[i].D,
+                    CenterRow = (rows1[i].D + rows2[i].D) / 2.0,
+                    CenterColumn = (columns1[i].D + columns2[i].D) / 2.0,
+                    Followed = followed
+                });
+            }
+            gaps = interDistances.Length > 0 ? interDistances.DArr : new double[0];
+            return pairs;
+        }
+
+        /// <summary>
+        /// 把一个卡尺的边缘对展开为“边缘点”结果：每对依次写第一、第二条边缘；
+        /// Distance 与 measure_pos 语义一致，为同一卡尺内到下一条边缘的距离（依次为宽度、间距交替），最后一条为 NaN。
+        /// distances 为按同一语义的相邻边缘距离（每个卡尺 2×对数-1 个）。
+        /// </summary>
+        protected static List<OneDCaliperMeasureResult> PairsToEdgeResults(IList<OneDCaliperPairResult> pairs, IList<double> gaps,
+            int index, int firstEdgeIndex, bool followed, out List<double> distances)
+        {
+            var results = new List<OneDCaliperMeasureResult>();
+            distances = new List<double>();
+            for (int i = 0; i < pairs.Count; i++)
+            {
+                OneDCaliperPairResult pair = pairs[i];
+                distances.Add(pair.Width);
+                if (i < pairs.Count - 1)
+                {
+                    distances.Add(i < gaps.Count ? gaps[i] : double.NaN);
+                }
+            }
+            for (int i = 0; i < pairs.Count; i++)
+            {
+                OneDCaliperPairResult pair = pairs[i];
+                int edge = 2 * i;
+                results.Add(new OneDCaliperMeasureResult
+                {
+                    Index = index, EdgeIndex = firstEdgeIndex + edge, Row = pair.Row1, Column = pair.Column1,
+                    Amplitude = pair.Amplitude1, Distance = distances[edge], Followed = followed
+                });
+                results.Add(new OneDCaliperMeasureResult
+                {
+                    Index = index, EdgeIndex = firstEdgeIndex + edge + 1, Row = pair.Row2, Column = pair.Column2,
+                    Amplitude = pair.Amplitude2, Distance = edge + 1 < distances.Count ? distances[edge + 1] : double.NaN,
+                    Followed = followed
+                });
+            }
+            return results;
+        }
+
+        /// <summary>
+        /// 边缘对的尺寸线：两条边缘的连线，两端各一条垂直于测量方向（phi）的挡线，表示该对的宽度。
+        /// </summary>
+        protected static HObject BuildPairDimensionLines(IList<OneDCaliperPairResult> pairs, double phi, double tickHalfLength)
+        {
+            // 测量方向（行、列）为 (-sin φ, cos φ)，挡线沿其垂直方向 (cos φ, sin φ)
+            double dRow = Math.Cos(phi) * tickHalfLength;
+            double dColumn = Math.Sin(phi) * tickHalfLength;
+            var rows1 = new List<double>();
+            var columns1 = new List<double>();
+            var rows2 = new List<double>();
+            var columns2 = new List<double>();
+            foreach (OneDCaliperPairResult pair in pairs)
+            {
+                rows1.Add(pair.Row1);
+                columns1.Add(pair.Column1);
+                rows2.Add(pair.Row2);
+                columns2.Add(pair.Column2);
+                foreach ((double r, double c) in new[] { (pair.Row1, pair.Column1), (pair.Row2, pair.Column2) })
+                {
+                    rows1.Add(r - dRow);
+                    columns1.Add(c - dColumn);
+                    rows2.Add(r + dRow);
+                    columns2.Add(c + dColumn);
+                }
+            }
+            return XldLineHelper.Segments(rows1, columns1, rows2, columns2);
         }
 
         /// <summary>卡尺显示轮廓：测量矩形（XLD）+ 边缘十字。</summary>

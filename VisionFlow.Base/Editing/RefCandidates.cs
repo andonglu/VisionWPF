@@ -371,8 +371,13 @@ namespace VisionFlow.Editing
 
         private static void AddToolOutputs(ToolNode toolNode, List<RefCandidate> candidates)
         {
+            var visibility = toolNode.Tool as IToolParameterVisibility;
             foreach (ToolOutputDef def in ToolMetadata.GetOutputs(toolNode.Tool))
             {
+                if (visibility != null && !visibility.IsParameterVisible(def.Name))
+                {
+                    continue;
+                }
                 candidates.Add(new RefCandidate
                 {
                     Path = toolNode.Tool.ModuleName + "." + def.Name,

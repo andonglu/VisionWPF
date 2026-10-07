@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using HalconDotNet;
@@ -75,7 +76,19 @@ namespace VisionFlow.WpfToolEditors.Editors
             MeasureLength2Text.Value = _tool.MeasureLength2;
             MeasureSigmaText.Value = _tool.MeasureSigma;
             MeasureThresholdText.Value = _tool.MeasureThreshold;
-            AddItems(TransitionCombo, "all", "positive", "negative");
+            if (_tool is CaliperMeasureToolBase caliperTool)
+            {
+                EdgeModeCombo.Items.Add(new EdgeModeChoice(EdgeMode.Edge, "单边缘"));
+                EdgeModeCombo.Items.Add(new EdgeModeChoice(EdgeMode.Pair, "边缘对（宽度测量）"));
+                EdgeModeCombo.SelectedIndex = caliperTool.EdgeMode == EdgeMode.Pair ? 1 : 0;
+                FillTransitionItems(caliperTool.EdgeMode);
+            }
+            else
+            {
+                EdgeModeLabel.Visibility = Visibility.Collapsed;
+                EdgeModeCombo.Visibility = Visibility.Collapsed;
+                AddItems(TransitionCombo, "all", "positive", "negative");
+            }
             TransitionCombo.Text = _tool.MeasureTransition;
             AddItems(SelectCombo, "all", "first", "last");
             SelectCombo.Text = _tool.MeasureSelect;
@@ -204,6 +217,43 @@ namespace VisionFlow.WpfToolEditors.Editors
             {
                 combo.Items.Add(item);
             }
+        }
+
+        private sealed class EdgeModeChoice
+        {
+            public EdgeModeChoice(EdgeMode value, string label)
+            {
+                Value = value;
+                Label = label;
+            }
+
+            public EdgeMode Value { get; private set; }
+            public string Label { get; private set; }
+
+            public override string ToString()
+            {
+                return Label;
+            }
+        }
+
+        private EdgeMode SelectedEdgeMode => (EdgeModeCombo.SelectedItem as EdgeModeChoice)?.Value ?? EdgeMode.Edge;
+
+        /// <summary>边缘极性下拉随边缘模式切换：边缘对模式多出 *_strongest 三项；当前值在新模式下不可用时退回 all。</summary>
+        private void FillTransitionItems(EdgeMode mode)
+        {
+            string current = TransitionCombo.Text;
+            TransitionCombo.Items.Clear();
+            AddItems(TransitionCombo, CaliperMeasureToolBase.TransitionsFor(mode).ToArray());
+            TransitionCombo.Text = CaliperMeasureToolBase.TransitionsFor(mode).Contains(current) ? current : "all";
+        }
+
+        private void EdgeModeCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (!IsLoaded || !(_tool is CaliperMeasureToolBase))
+            {
+                return;
+            }
+            FillTransitionItems(SelectedEdgeMode);
         }
 
         private void ImagePathCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -562,6 +612,10 @@ namespace VisionFlow.WpfToolEditors.Editors
             _tool.MeasureThreshold = MeasureThresholdText.Value;
             _tool.MeasureTransition = TransitionCombo.Text.Trim();
             _tool.MeasureSelect = SelectCombo.Text.Trim();
+            if (_tool is CaliperMeasureToolBase caliperTool)
+            {
+                caliperTool.EdgeMode = SelectedEdgeMode;
+            }
             _tool.FailWhenNotFound = FailWhenNotFoundCheck.IsChecked == true;
             if (_tool is MetrologyMeasureToolBase metrology && _advanced != null)
             {
@@ -629,6 +683,12 @@ namespace VisionFlow.WpfToolEditors.Editors
             if (_context.LastRunContext.TryGetVariable(_tool.ModuleName, "Results", out Variable resultsVariable))
             {
                 ResultGrid.ItemsSource = resultsVariable.Value as IEnumerable;
+            }
+            // 边缘对模式的结果表显示每对的宽度与中心
+            if (_tool is CaliperMeasureToolBase caliperTool && caliperTool.EdgeMode == EdgeMode.Pair
+                && _context.LastRunContext.TryGetVariable(_tool.ModuleName, "PairResults", out Variable pairsVariable))
+            {
+                ResultGrid.ItemsSource = pairsVariable.Value as IEnumerable;
             }
         }
 

@@ -63,6 +63,8 @@
                                     <controls:NumericInputControl x:Name="MeasureSigmaText" Minimum="0" Maximum="100" Increment="0.1" DecimalPlaces="2" />
                                     <TextBlock Text="边缘阈值" Style="{StaticResource EditorFieldLabelStyle}" />
                                     <controls:NumericInputControl x:Name="MeasureThresholdText" Minimum="0" Maximum="255" Increment="1" DecimalPlaces="2" />
+                                    <TextBlock x:Name="EdgeModeLabel" Text="边缘模式" Style="{StaticResource EditorFieldLabelStyle}" />
+                                    <ComboBox x:Name="EdgeModeCombo" SelectionChanged="EdgeModeCombo_SelectionChanged" />
                                     <TextBlock Text="边缘极性" Style="{StaticResource EditorFieldLabelStyle}" />
                                     <ComboBox x:Name="TransitionCombo" IsEditable="True" />
                                     <TextBlock Text="边缘选择" Style="{StaticResource EditorFieldLabelStyle}" />
