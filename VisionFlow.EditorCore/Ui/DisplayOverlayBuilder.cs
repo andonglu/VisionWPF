@@ -28,7 +28,10 @@ namespace VisionFlow.Ui
                 || variable.Value is List<EllipseMeasureResult>;
         }
 
-        /// <summary>解析变量的显示底图：自身是图像用自身，否则找同模块 Image 变量，最后回退输入图像。</summary>
+        /// <summary>
+        /// 解析变量的显示底图：自身是图像用自身，否则找同模块 Image 变量，再回退输入图像，
+        /// 最后回退上下文中的第一个图像变量（如流程用“图像加载”供图时，其他模块的输出也能找到底图）。
+        /// </summary>
         public static HObject ResolveDisplayBaseImage(FlowContext context, Variable variable)
         {
             if (variable.Value is HalconImage image)
@@ -44,6 +47,13 @@ namespace VisionFlow.Ui
                 && input.Value is HalconImage inputImage)
             {
                 return inputImage.Object;
+            }
+            foreach (Variable candidate in context.GetAllVariables())
+            {
+                if (candidate.Value is HalconImage fallbackImage)
+                {
+                    return fallbackImage.Object;
+                }
             }
             return null;
         }
