@@ -417,3 +417,29 @@ dotnet build .\VisionFlow.slnx --configuration Debug --no-restore --nologo --ver
 - `NodeNamingTests`（4 用例 8 断言）、`EditorRunSessionTests`（7 用例：完成/重入/停止取消/异常/二次运行释放旧上下文/丢弃幂等/真实引擎取消转 Skipped）、`FlowDocumentControllerTests`（16 用例：路径规范化、首存对话框、取消不置脏、已有路径跳过对话框、写盘失败保原文档与原文件、关闭确认三分支、新建复位、保存-加载回环）。
 
 验证：全量 `dotnet build VisionFlow.slnx` 0 警告 0 错误；`dotnet test` 223 通过（基线 192 + 新增 31）。MainWindow.xaml.cs 降至约 950 行，窗口类只保留 UI 接线与对话框。新建/加载/保存/运行/停止/双击编辑器/未保存关闭提示的交互手感以界面手工冒烟为准。
+
+## 2026-10-07 独立小项：叠加显示底图回退（REGION 验收发现的既有问题）
+
+背景：REGION 计划界面验收（64 项检查）中发现——流程用“图像加载”工具供图、未打开 `Input.Image` 时，
+在结果显示下拉中直接选中其他模块的区域 / XLD 输出，叠加层画在黑底上；先选中图像变量再切换则正常。
+原因：`DisplayOverlayBuilder.ResolveDisplayBaseImage` 只按三级查找——变量自身是图像 → 同模块 `Image` 输出 →
+`Input.Image`；图像由“图像加载”节点提供时三级全部落空，返回 null，主窗口回退不到任何底图。
+
+改动：
+
+- `VisionFlow.EditorCore/Ui/DisplayOverlayBuilder.cs`：新增第四级回退——按上下文变量写入顺序扫描
+  `GetAllVariables()`，返回第一个 `HalconImage` 变量作为底图。查找优先级不变：自身 → 同模块 Image →
+  Input.Image → 上下文第一个图像。多图像并存时取最先写入者（通常即供图节点），已写进 XML 注释。
+- `VisionFlow.Tests/DisplayOverlayBaseImageTests.cs`（新增 5 例）：图像加载供图时区域输出回退找到底图、
+  Input.Image 优先于扫描回退、同模块 Image 输出仍最优先、图像变量返回自身、无任何图像时返回 null。
+  用例只引用未初始化 HObject，不依赖 HALCON 原生运行库。
+- `docs\REGION-TOOLS-PLAN.md` 验收章节的问题记录更新为“已另行修复”。
+
+验证：`dotnet build VisionFlow.slnx` 0 警告 0 错误；无 HALCON 原生环境的 585 项非 HALCON 测试全部通过
+（含新增 5 例）；本机 shell 无 HALCON 原生运行库，105 项 HALCON 环境门禁用例独立失败，属预期，不计为回归。
+WPF 中“图像加载”供图流程的叠加显示效果以界面手工冒烟为准。
+
+## 2026-10-07 状态更新：REGION 工具计划完成
+
+依据 `docs\REGION-TOOLS-PLAN-REVIEW.md` 的评审意见完成 RG-01 ~ RG-07（分支 `feature/region-tools`，
+提交 a18d7f5），界面验收 64 项检查全部通过，评审文档与计划状态已同步。

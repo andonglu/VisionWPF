@@ -149,7 +149,7 @@
 - 加载现有 `examples\*.vflow.json` 全部通过，回归测试全部通过。
 - 用例：`VisionFlow.Tests\RegionToolPlanTests.cs`（含旧文件中 `LightDark` 字符串读入枚举、新字段为空时区域筛选与旧版调用和日志一致、配对中含空区域、行列个数不一致等评审补充项）。
 - 界面验收（2026-10-07）：用 UI Automation 驱动 `VisionFlow.WpfApp.exe` 完成全部操作。所有编辑都在编辑窗口和侧栏中进行，区域距离节点从工具箱新建，依次运行、保存、重新加载，共 64 项检查全部通过；界面运行结果与无界面运行同一流程的数值逐字一致。
-- 验收中发现的既有问题（不属于本计划）：流程用“图像加载”工具取图、未打开 `Input.Image` 时，直接显示其他模块的区域 / XLD 输出没有底图。原因是 `DisplayOverlayBuilder.ResolveDisplayBaseImage` 只查找同模块的 `Image` 或 `Input.Image`。先显示该图像再切换到叠加对象可以正常查看。
+- 验收中发现的既有问题（不属于本计划，已另行修复）：流程用“图像加载”工具取图、未打开 `Input.Image` 时，直接显示其他模块的区域 / XLD 输出没有底图。原因是 `DisplayOverlayBuilder.ResolveDisplayBaseImage` 只查找同模块的 `Image` 或 `Input.Image`。先显示该图像再切换到叠加对象可以正常查看。已在独立小项中修复：底图解析新增最后一级回退——扫描上下文中的第一个图像变量，见 `REVIEW-FIX-PROGRESS.md` 修复记录与 `DisplayOverlayBaseImageTests.cs`。
 
 ## 9. 开发顺序
 
