@@ -1,7 +1,7 @@
 # 标定补充开发计划
 
 编写日期：2026-10-06
-状态：第一批 CB-01 / CB-02 / CB-05 已实现（分支 `feature/calibration-batch1`，见第 11、12 节）；CB-03 / CB-07（第二批）、CB-04 / CB-06（第三批）待开发，动工前各做一次小评审。
+状态：第一批 CB-01 / CB-02 / CB-05 已实现（分支 `feature/calibration-batch1`，见第 11、12 节）；评审 P1-1 / P1-2 / P1-3 已在计划中处理（CB-06 输出改名、CB-07 符号约定、CB-04 示例图像探测，见第 13 节）；CB-03 / CB-07（第二批）、CB-04 / CB-06（第三批）待开发，动工前各做一次小评审。
 范围：图像坐标与物理坐标之间的标定、换算和纠偏，涉及 `VisionFlow.Tools\Tools\GeometryTools.cs`（`AffinePointTool`）、编辑器标定界面，以及供上层调用的标定接口。
 HALCON 版本基线：22.11 及以上（与仓库现行基线一致，见 MATCH-MEASURE 计划第 12 节；原文写 20.11）。
 关联文档：
@@ -120,6 +120,7 @@ HALCON 版本基线：22.11 及以上（与仓库现行基线一致，见 MATCH-
 - 测量平面：选择一张标定板放在测量平面上的图像作为参考位姿，填写标定板厚度，用 `set_origin_pose` 把位姿修正到测量平面。
 - 显示：每张图像的标定板识别结果、重投影误差；识别失败的图像标出并允许移除。
 - 建议 10~20 张、覆盖视野不同位置和倾斜角度，界面给出提示。
+- 开工前置结论（评审 P1-3，22.11 实测，详见第 13 节）：HALCON 自带的单相机示例是 `%HALCONIMAGES%\calib\calib_single_camera_01.png` ~ `_07.png`（7 张，1292×964）配 `%HALCONROOT%\calib\calplate_80mm.cpd`（不是 160 mm），初始参数 `area_scan_division`、焦距 8 mm、像元 3.7 µm、主点 (646, 482)；实跑 7 张全部找到标定板，反投影误差 0.0775 像素。验收用这组数据，误差上限取 0.1 像素；路径由环境变量 `HALCONROOT` / `HALCONIMAGES` 解析，缺任一文件时用例明确失败、不计通过。`gen_cam_par_area_scan_division` 等是 HDevelop 过程，.NET 中直接拼参数元组（类型名在前）。
 
 ## 6. 运行工具
 
@@ -153,7 +154,8 @@ HALCON 版本基线：22.11 及以上（与仓库现行基线一致，见 MATCH-
 - 输入：图像（必填）。
 - 参数：`CalibrationFile` / `CalibrationData`（`Camera` 类型）、`PixelSize`（校正后每像素对应的物理长度，0 表示按原图中心比例自动计算）、输出区域（以测量平面坐标给出的左上角和宽高，默认覆盖整个视野）、`Interpolation`。
 - 算子：`gen_image_to_world_plane_map`（只在参数或标定变化时生成，结果缓存，参与预热）+ `map_image`。
-- 输出：`Image`；`PixelSize`（实际比例）；`Matrix`（校正图像素坐标 → 测量平面坐标的仿射矩阵，供“图像坐标转世界坐标”和单位换算使用）。
+- 输出：`Image`；`ActualPixelSize`（实际比例；参数 `PixelSize` 为 0 时由原图中心比例算出）；`Matrix`（校正图像素坐标 → 测量平面坐标的仿射矩阵，供“图像坐标转世界坐标”和单位换算使用）。
+- 命名（评审 P1-1）：输出原写 `PixelSize`，与同名参数冲突，会使第二批“输出名不与参数名相同”的守卫测试失败，改名 `ActualPixelSize`；参数 `PixelSize` 保持不变（与 MS-07 单位换算的 `PixelSize` 含义一致）。
 
 ### CB-07 纠偏计算（新工具）
 
@@ -166,10 +168,38 @@ HALCON 版本基线：22.11 及以上（与仓库现行基线一致，见 MATCH-
   - `Mode`：
     - `TranslationOnly`：只补偿平移（物理坐标差值）。
     - `RotateAroundCenter`（默认）：先绕旋转中心转回 `dθ`，再计算剩余平移，适用于吸嘴或旋转台。
-  - `CameraMounting`：`Fixed`（相机固定，看工件）/ `OnAxis`（相机随轴运动）；决定偏移量的符号约定。
+  - `CameraMounting`：`Fixed`（相机固定，看工件）/ `OnAxis`（相机随轴运动）；决定偏移量的符号约定（见下方“符号约定”）。
   - `AngleUnit`：输出角度用度或弧度。
-- 输出：`DeltaX`、`DeltaY`、`DeltaAngle`、`WorldX`、`WorldY`（当前位置的物理坐标）、`Valid`（输入不是 NaN 时为 true）。
+- 输出：`DeltaX`、`DeltaY`、`DeltaAngle`、`AngleDifference`（测得的角度差 dθ，仅供参考与判定）、`WorldX`、`WorldY`（当前位置的物理坐标）、`Valid`（输入不是 NaN 时为 true）。
 - 输入为 NaN（如匹配未找到）时输出 NaN 与 `Valid = false`，不按失败处理，由后续判定决定 NG。
+
+**符号约定（评审 P1-2，写代码前钉死，2026-10-07 与使用方逐项确认）**
+
+坐标系与量（全部在物理坐标系中计算）：
+
+- 物理坐标沿用 CB-05：X = `WorldRow`、Y = `WorldColumn`（标定点对的物理 X / Y）。旋转 R(α) 以“从 +X 转向 +Y”为正：R(α)·(x, y) = (x·cos α − y·sin α, x·sin α + y·cos α)；绕点 C 旋转记 R(C, α)·P = C + R(α)·(P − C)。
+- 当前位姿：P = (X, Y) 与 θ 由当前图像位姿 (行, 列, 角度) 经 CB-05 的同一换算得到；基准位姿：B 与 θb 由 `BaseRow` / `BaseColumn` / `BaseAngle` 同样换算。
+- 角度差 dθ = θ − θb（折算到 (−π, π]）：用 CB-05 的 `WorldAngle` 相减，正值表示当前件相对基准“从 +X 转向 +Y”转过的角度。镜像标定（矩阵行列式为负）时依然正确——方向向量经变换后再求角，图像中的逆时针在物理系中自动变成相应方向。
+- 角度方向更正：评审原文“图像坐标，顺时针为正，与匹配 Angle 一致”自相矛盾。22.11 实测（第 13 节）HALCON 匹配 `Angle` 与 `hom_mat2d_rotate` 都是**屏幕上逆时针为正**（行轴向下）；本约定不在图像系中定义角度差，避免这一歧义。
+- 旋转中心 C：取标定内容中 `RotationCenter` 的物理坐标 X / Y（CB-03 输出；只有图像坐标时用同一 `Affine2D` 换算）。假定旋转中心是在拍照时的机构位置下标定的。
+
+输出含义：**平台补偿量**——把当前件移回基准位姿所需的运动；执行顺序为先绕 C 转 `DeltaAngle`，再平移 (`DeltaX`, `DeltaY`)。`AngleDifference` 总是输出 dθ（不论方式），`DeltaAngle` 只在实际补偿旋转时非零。
+
+| `CameraMounting` | `Mode` | `DeltaAngle` | (`DeltaX`, `DeltaY`) |
+|---|---|---|---|
+| `Fixed`（相机固定看工件，轴带着工件动） | `RotateAroundCenter` | −dθ | B − R(C, −dθ)·P |
+| `Fixed` | `TranslationOnly` | 0 | B − P |
+| `OnAxis`（相机装在轴上看固定目标） | `TranslationOnly` | 0 | P − B（与 `Fixed` 符号相反：轴移动 Δ，目标在相机中的相对位置移动 −Δ） |
+| `OnAxis` | `RotateAroundCenter` | — | 第二批不支持，流程校验报错 |
+
+两行公式（评审要求）：
+
+- 相机固定：`DeltaAngle = −dθ`，`(DeltaX, DeltaY) = B − R(C, −dθ)·P`（`TranslationOnly` 时按 dθ = 0 计算，即 `B − P`，`DeltaAngle = 0`）。
+- 相机随轴：`DeltaAngle = 0`，`(DeltaX, DeltaY) = P − B`（只支持 `TranslationOnly`）。
+
+`OnAxis` + `RotateAroundCenter` 的限制：相机随轴旋转后，后续平移所对应的相对位移取决于机构叠放方式（θ 轴装在 XY 上，还是 XY 装在 θ 轴上），没有实际机构信息前无法给出唯一公式。第二批对该组合在流程校验与运行中都给出中文说明（建议改用 `TranslationOnly`，或由上层按机构计算），待有现场机构时单独立项。
+
+验收用例按约定反推真值（用例即约定的可执行文档）：给定标定矩阵（含一例镜像矩阵）、旋转中心 C、基准 B / θb 与期望补偿 (Δ, −dθ)，由 P = R(C, dθ)·(B − Δ)、θ = θb + dθ 反算当前物理位姿，再经标定逆变换得到当前图像位姿作为输入；输出须与 Δ、−dθ 一致。`OnAxis` 用例验证 P − B 与 `Fixed` 结果互为相反数，`OnAxis` + `RotateAroundCenter` 验证校验报错。
 
 ## 7. 暂缓
 
@@ -188,10 +218,10 @@ HALCON 版本基线：22.11 及以上（与仓库现行基线一致，见 MATCH-
 - CB-01：`.vfcal.json` 保存后重新读取，所有数值一致；旧 `write_tuple` 矩阵文件仍可被读取。
 - CB-02：用已知仿射变换生成的点对（加 0.1 像素噪声）求解，矩阵误差在噪声量级内；共线点、少于 3 个点给出明确提示。
 - CB-03：对已知圆心旋转生成的点（加噪声），圆心误差小于 0.2 像素。
-- CB-04：使用 HALCON 安装目录自带的标定板示例图像完成标定，重投影误差在 HALCON 示例给出的量级内；缺少示例图像时用例明确失败，不计为通过（与现有 HALCON 用例约定一致）。
+- CB-04：使用 HALCON 安装目录自带的标定板示例图像完成标定（`calib_single_camera_01~07` + `calplate_80mm.cpd`，见 CB-04 前置结论），重投影误差不超过 0.1 像素（22.11 实测 0.0775）；缺少示例图像或描述文件时用例明确失败，不计为通过（与现有 HALCON 用例约定一致）。
 - CB-05：数组输入与逐个单值输入结果一致；含镜像的矩阵下角度换算正确；`Camera` 方式与直接调用 `image_points_to_world_plane` 一致。
-- CB-06：校正后的标定板图像中，相邻标记点间距与真实间距误差小于 0.5%。
-- CB-07：构造已知平移与旋转的前后位姿，输出的 `DeltaX` / `DeltaY` / `DeltaAngle` 与真值一致；`TranslationOnly` 与 `RotateAroundCenter` 两种方式各一例；输入 NaN 时 `Valid = false`。
+- CB-06：校正后的标定板图像中，相邻标记点间距与真实间距误差小于 0.5%；输出名 `ActualPixelSize` 与参数 `PixelSize` 不冲突（守卫测试保持通过）。
+- CB-07：按 CB-07“符号约定”反推真值构造前后位姿（含镜像标定一例），输出的 `DeltaX` / `DeltaY` / `DeltaAngle` / `AngleDifference` 与真值一致；`Fixed` 下 `TranslationOnly` 与 `RotateAroundCenter` 各一例，`OnAxis` 的 `TranslationOnly` 与 `Fixed` 互为相反数，`OnAxis` + `RotateAroundCenter` 校验报错；输入 NaN 时 `Valid = false`。
 - 全部回归测试和 `examples\*.vflow.json` 通过。
 
 ## 10. 开发顺序
@@ -219,9 +249,9 @@ HALCON 版本基线：22.11 及以上（与仓库现行基线一致，见 MATCH-
 
 | 条目 | 处理 |
 |---|---|
-| P1-1 CB-06 `PixelSize` 同名 | 属第三批；CB-06 输出届时改名 `ActualPixelSize`。本批新增输出均不与参数同名（守卫用例） |
-| P1-2 CB-07 符号约定 | 属第二批，动工前补“符号约定”一节；本批先钉死 CB-05 的角度约定（第 6 节实现说明），CB-07 在其上定义 |
-| P1-3 CB-04 示例图像 | 属第三批，届时探测 |
+| P1-1 CB-06 `PixelSize` 同名 | 已在计划中处理：CB-06 输出改名 `ActualPixelSize`、参数 `PixelSize` 不变（第 6 节 CB-06、第 9 节）；实现属第三批。本批新增输出均不与参数同名（守卫用例） |
+| P1-2 CB-07 符号约定 | 已在计划中钉死（第 6 节 CB-07“符号约定”，与使用方逐项确认），并更正评审中“顺时针为正”的表述（第 13 节实测）；实现属第二批，CB-07 建立在本批 CB-05 的角度约定上 |
+| P1-3 CB-04 示例图像 | 已探测：示例图像、标定板描述文件、初始参数与参考误差见 CB-04 前置结论与第 13 节；实现属第三批 |
 | P1-4 Camera 校验双路径 | 流程校验、运行、预热都报“来源 + 实际类型 + 期望类型”（用例覆盖文件、旧版矩阵文件、内嵌三种来源）；`Scale` 语义见第 11 节并在代码中注释 |
 | P1-5 新建宿主窗口 | `WpfAffinePointToolEditWindow`（运行参数页 + N 点标定页），执行测试经 `ToolTestRun`；主窗口没有“工具”菜单，以工具栏“标定助手”按钮代替 |
 | P2-1 服务形态 | 静态、纯计算、不依赖 FlowContext；旧版 `write_tuple` 按内容识别放在 `Load` |
@@ -247,3 +277,18 @@ HALCON 版本基线：22.11 及以上（与仓库现行基线一致，见 MATCH-
   2. 点对表格直接显示完整精度的双精度数，在助手页的列宽下全部被截断成“240....”（界面截图发现）；改为按位数格式化显示、编辑框绑定原值，并加宽右栏。
   3. `vector_to_hom_mat2d` 结果不可逐位复现（见第 11 节）：属 HALCON 行为，不是应用问题；验收脚本原先要求重解矩阵逐位相同，改为相对 1e-12 并记录在案。
 - 脚本问题（已修脚本）：区域方向特征以 180° 为周期（实测 −160.92° 与 20° 同一方向轴）；DataGrid 按需生成行，读取与截图前先滚动到目标行；运行后侧栏不再显示该工具，需要重新选中节点；PowerShell 数组字面量中逗号优先于 `+`，批量替换脚本丢失了几行，改用编辑工具。
+
+## 13. 后续批次前置结论（评审 P1-1 / P1-2 / P1-3）
+
+**探测环境**：HALCON 22.11 Steady（`HALCONROOT` = `C:\Program Files\MVTec\HALCON-22.11-Steady`，`HALCONIMAGES` = `C:\Users\Public\Documents\MVTec\HALCON-22.11-Steady\examples\images`）；部署到其他版本或其他安装路径前需复核。
+
+| 条目 | 结论 |
+|---|---|
+| P1-1 CB-06 命名 | 输出 `PixelSize` → `ActualPixelSize`，参数 `PixelSize` 不变（第 6 节 CB-06）。第二批引入的“输出名不与参数名相同”守卫测试在第三批实现时保持通过 |
+| P1-2 匹配角度方向 | 实测：把同一图形在屏幕上逆时针转 10°（长臂朝右上、行坐标变小），`find_shape_model` 的 `Angle` = +10.14°；顺时针转 10° 得 −10.11°；`hom_mat2d_rotate(+10°)` 把中心右侧的点变到行更小的位置。即 HALCON 匹配角度与旋转矩阵都是**屏幕上逆时针为正**（行轴向下），与 `HomMat2D` 中的注释一致；评审“顺时针为正，与匹配 Angle 一致”的表述不成立 |
+| P1-2 物理系角度差 | CB-05 的 `WorldAngle` = atan2(−ΔX, ΔY)。对物理系中从 +X 转向 +Y 的方向角 β，`WorldAngle` = β − 90°（恒等式），因此 `WorldAngle` 之差就是物理系中“从 +X 转向 +Y”的转角，与镜像无关。CB-07 的 dθ 据此定义 |
+| P1-2 使用方确认的 4 项选择 | ① 角度差在物理系中计算；② 输出为平台补偿量（把当前件移回基准的运动）；③ `TranslationOnly` 时 `DeltaAngle = 0`，测得的角度差放在新输出 `AngleDifference`；④ `OnAxis` 第二批只支持 `TranslationOnly`（补偿 = P − B，与 `Fixed` 相反），`OnAxis` + `RotateAroundCenter` 由流程校验拒绝。公式与表见第 6 节 CB-07“符号约定” |
+| P1-3 标定板描述文件 | `%HALCONROOT%\calib\` 下有 `calplate_5mm` / `10mm` / `20mm` / `40mm` / `80mm` / `160mm` / `320mm` / `640mm` / `1200mm.cpd`（20 / 40 / 80 mm 另有 `_dark_on_light` 版本），以及旧式 `caltab_*.descr` |
+| P1-3 示例图像 | `%HALCONIMAGES%\calib\` 共 153 个文件；HALCON 示例 `Calibration\Multi-View\calibrate_cameras_monocular.hdev` 用其中的 `calib_single_camera_01.png` ~ `_07.png`（7 张，1292×964）配 `calplate_80mm.cpd`，初始参数 `area_scan_division`、焦距 0.008 m、kappa 0、像元 3.7e-6 m、主点 (646, 482)。`calplate_160mm.cpd` 只在多相机质量检查与拼接示例中使用，不适合作单相机验收 |
+| P1-3 参考误差 | 按上述参数在 .NET 中实跑 `create_calib_data` → `set_calib_data_cam_param` / `set_calib_data_calib_object` → 逐张 `find_calib_object` → `calibrate_cameras`：7 张全部找到标定板，反投影误差 0.0775 像素；结果焦距 8.343 mm、kappa −1546.0、主点 (638.73, 470.68)，`sy` 保持 3.7e-6（默认不优化）。CB-04 验收上限取 0.1 像素 |
+| P1-3 实现注意 | `gen_cam_par_area_scan_division` 与 `get_cam_par_names` 一样是 HDevelop 过程，.NET 中没有，初始参数直接拼元组（类型名在前）；`read_image` 的相对路径按 `HALCONIMAGES` 解析。用例取 `HALCONROOT` / `HALCONIMAGES` 拼出绝对路径，缺任一文件时明确失败 |
