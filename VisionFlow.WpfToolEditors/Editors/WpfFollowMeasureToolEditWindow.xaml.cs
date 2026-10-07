@@ -34,6 +34,7 @@ namespace VisionFlow.WpfToolEditors.Editors
         private readonly ExtraTextBox _startPhi = new ExtraTextBox();
         private readonly ExtraTextBox _endPhi = new ExtraTextBox();
         private readonly ExtraTextBox _caliperCount = new ExtraTextBox();
+        private MetrologyAdvancedExpander _advanced;
 
         public WpfFollowMeasureToolEditWindow(FollowMeasureToolBase tool, ToolEditContext context)
         {
@@ -79,6 +80,13 @@ namespace VisionFlow.WpfToolEditors.Editors
             AddItems(SelectCombo, "all", "first", "last");
             SelectCombo.Text = _tool.MeasureSelect;
             FailWhenNotFoundCheck.IsChecked = _tool.FailWhenNotFound;
+            if (_tool is MetrologyMeasureToolBase metrology)
+            {
+                // 一维卡尺类工具不走 metrology，没有高级参数
+                _advanced = new MetrologyAdvancedExpander();
+                _advanced.Load(metrology);
+                AdvancedHost.Content = _advanced;
+            }
 
             if (_tool is CircleFollowMeasureTool circle)
             {
@@ -555,6 +563,10 @@ namespace VisionFlow.WpfToolEditors.Editors
             _tool.MeasureTransition = TransitionCombo.Text.Trim();
             _tool.MeasureSelect = SelectCombo.Text.Trim();
             _tool.FailWhenNotFound = FailWhenNotFoundCheck.IsChecked == true;
+            if (_tool is MetrologyMeasureToolBase metrology && _advanced != null)
+            {
+                _advanced.Apply(metrology);
+            }
 
             if (_tool is CircleFollowMeasureTool circle)
             {

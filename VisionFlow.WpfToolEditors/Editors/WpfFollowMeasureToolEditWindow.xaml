@@ -67,6 +67,7 @@
                                     <ComboBox x:Name="TransitionCombo" IsEditable="True" />
                                     <TextBlock Text="边缘选择" Style="{StaticResource EditorFieldLabelStyle}" />
                                     <ComboBox x:Name="SelectCombo" IsEditable="True" />
+                                    <ContentControl x:Name="AdvancedHost" />
                                     <StackPanel x:Name="ArcSettingsPanel" />
                                     <CheckBox x:Name="FailWhenNotFoundCheck" Margin="0,12,0,0"
                                               Content="未找到边缘时失败（取消后输出 Found=false 并继续）" />

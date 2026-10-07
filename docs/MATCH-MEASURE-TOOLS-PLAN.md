@@ -1,7 +1,7 @@
 # 定位匹配与几何测量补充开发计划
 
 编写日期：2026-10-06
-状态：待开发
+状态：第一批 MT-01 / MS-01 已实现（分支 `feature/match-measure-batch1`，见第 10 节）；其余各项待开发，动工前各做一次小评审。
 范围：工具箱“01 定位匹配”和“05 几何测量”中的模板匹配类、测量类工具（`HalconTools.cs`、`DescriptorMatchTools.cs`、`MeasureTools.cs`、`FollowMeasureTools.cs`、`AngleTools.cs`），以及新增的差分检测。
 HALCON 版本基线：**20.11 及以上**。可以直接使用通用形状模型（`*_generic_shape_model`）等 20.11 引入的算子，无需兼容更早版本。
 关联文档：
@@ -94,6 +94,14 @@ HALCON 版本基线：**20.11 及以上**。可以直接使用通用形状模型
 
 - 搜索定义域限制的是模型参考点（示教区域的重心），不是整个模板，也不受 `set_shape_model_origin` 设置的原点影响。界面提示文字需说明这一点。
 - 模板超出图像边界时默认找不到；需要越界匹配时使用通用形状匹配（MT-03）的 `border_shape_models`。
+
+**实现说明（已完成）**
+
+- 搜索区域先 `union1` 合并、检查面积后只 `reduce_domain` 一次，缩小图在 `finally` 中释放；多矩阵/循环场景不重复缩小。空区域输出 `MatchCount = 0` 并按 `FailWhenNotFound` 处理；引用无效直接失败。
+- 最佳结果在排序**之前**按 `Score` 降序选出，再传给 `SetMatchOutputs`（不再取 `items[0]`）。`Score` 排序保持算子返回顺序（HALCON 已按得分降序），因此默认行为与旧版逐项一致。
+- `RowThenColumn` 以每一行第一个结果的行坐标为基准，行差不超过 `RowTolerance` 的归为同一行，行内按列排序；`RowTolerance = 0` 时等同于先按行再按列的严格排序。`RowTolerance < 0` 在流程校验阶段报错，`RowTolerance` 只在 `RowThenColumn` 时显示。
+- 匹配编辑窗口“运行参数”页的“执行测试”改为在工作副本上调用工具自身的 `Run`，因此搜索区域、排序与流程运行结果完全一致；“示教建模”页的测试行为不变。
+- 描述子匹配继承基类，自动获得搜索区域和排序；其专用编辑窗口本批未改，可在侧栏属性中配置。
 
 ### MT-02 示教增加 XLD / DXF 建模与模型原点
 
@@ -278,6 +286,14 @@ HALCON 版本基线：**20.11 及以上**。可以直接使用通用形状模型
 - 多个定位矩阵与多实例同时存在时，实例数组按“定位结果 → 实例”顺序展开，并输出 `InstanceSeedIndices`（所属定位结果序号）。
 - 编辑窗口增加“高级参数”折叠区，默认收起。
 
+**实现说明（已完成）**
+
+- 新基类位于 `MetrologyMeasureTools.cs`，新增 `MetrologyInterpolation` 枚举（`nearest_neighbor` / `bilinear` / `bicubic`）。测量基类 `RunSeeds` 增加 `OnSeedsStarting` / `WriteSeedOutputs` 两个虚钩子，一维卡尺类工具不重写，行为不变。
+- 多实例沿用 `SeedCount` / `SeedIndex` 机制：每个实例记录所属定位结果序号，输出 `InstanceSeedIndices`。
+- `Score` 为最后一次成功测量第一个实例的得分（无结果时为 NaN）；`MeasurePoints` 用 `XldLineHelper.Crosses` 生成，包含测量失败的定位结果上找到的边缘点，便于排查卡尺问题。
+- 参数校验（流程校验阶段报错，运行时也检查）：卡尺数不能小于 0；按间距布置时卡尺间距必须大于 0；最低得分在 0 到 1 之间；实例数大于 0；距离阈值不能小于 0。`NumMeasures > 0` 时隐藏 `MeasureDistance`。
+- “高级参数”折叠区（`MetrologyAdvancedExpander`）同时用于跟随测量编辑窗口和椭圆测量编辑窗口。
+
 ### MS-02 卡尺增加边缘对（宽度）测量
 
 **影响工具**：一维卡尺测量、一维圆弧卡尺测量。
@@ -398,13 +414,14 @@ HALCON 版本基线：**20.11 及以上**。可以直接使用通用形状模型
 
 ## 6. 兼容性要求
 
-- 枚举按名称序列化，新增值一律追加在末尾；新增模式枚举的默认值等于现有行为。
+- 枚举参数按**数字**序列化（如 `"SortBy": 0`），新增值一律追加在末尾，不得插入或调整已有成员顺序；新增模式枚举的默认值等于现有行为。只有把现有字符串参数改成枚举时，才需要标注 `JsonStringEnumConverter` 强制按名称保存（REGION / XLD 两批的做法）；本计划第一批的新枚举（`MatchSortBy`、`MetrologyInterpolation`）没有对应的旧字符串参数，正常追加即可。
 - 历史 `.vflow.json` 加载后行为不变：
   - 匹配：未配置搜索区域、`SortBy = Score`、`DeformationType = Local`；模板匹配和缩放形状匹配算法不变。
   - 测量：metrology 新参数等于 HALCON 默认值；`EdgeMode = Edge`、`ArcDirection = Radial`、`FuzzyEnabled = false`；`ConvertKind = Angle`。
 - 已有输出名称、类型和含义不变，只新增输出。
 - 改名的工具（单位换算）只改显示名，工具 ID 与类型名不变。
 - 修改模型类型的选项（`DeformationType` 等）必须纳入模型缓存键，切换后要求重新示教，不能用旧模型数据运行新模式。
+- 同步清单（含编辑器）：新参数除工具类、`[ToolOutput]` / `[InputRef]`、`IToolParameterVisibility` / `IToolConfigurationCheck`、测试外，还必须同步编辑窗口——匹配类改 `WpfMatchToolEditWindow`（经 `WindowsFormsHost` 承载 ROI 控件，新增 WPF 控件注意 DPI 与布局风格），metrology 测量改 `WpfFollowMeasureToolEditWindow` 和 `WpfEllipseMeasureToolEditWindow`；新工具另需 `BuiltinToolIdentities`、`ToolboxRegistry`、`WpfToolEditorRouter` 与 README 工具表。
 
 ## 7. 验收
 
@@ -435,3 +452,45 @@ HALCON 版本基线：**20.11 及以上**。可以直接使用通用形状模型
 4. MS-06（找角）、MS-05（灰度投影）。
 5. MT-06（差分检测）。
 6. MT-05（组件匹配）、MT-04（透视变形）、MS-03（沿圆弧测量）、MS-04（模糊测量）。
+
+## 9. 第一批算子探测结论（MS-01）
+
+**探测环境**：本机安装的是 **HALCON 22.11 Steady**（`get_system('version')` = 22.11），不是本文的版本基线 20.11，以下结论都在 22.11 上取得；部署到 20.11 前需复核。方法：`get_param_info` 读取 metrology 算子的参数表；再对新建的 metrology 模型（只加一条直线、不设任何通用参数）用 `get_metrology_object_param` 读出运行时实际默认值；最后在合成图上实际测量，对比“旧版参数”和“显式传入全部默认值”的结果。
+
+| 参数 | 实测默认 | 说明 |
+|---|---|---|
+| `num_measures` | 由长度推算（400 像素直线读出 41） | 未设置时不是 0，而是按 `measure_distance` 布置后得到的卡尺数。本工具用 `NumMeasures = 0` 表示“不设置，按 `measure_distance` 布置” |
+| `measure_distance` | 10 | `get_metrology_object_param` 不允许读取（#1303），由 400 像素直线布置 41 个卡尺（400 / 10 + 1）间接证实 |
+| `min_score` | 0.7 | |
+| `num_instances` | 1 | |
+| `distance_threshold` | 3.5 | |
+| `measure_interpolation` | `nearest_neighbor` | `nearest_neighbor` / `bilinear` / `bicubic` 三个取值实测均可用 |
+| （参考）`rand_seed` | 42 | 默认固定随机种子，同一图像结果可复现 |
+
+- `get_param_info` 给出的通用参数名清单（`set_metrology_object_param` 的 `GenParamName`）含上述全部 6 项；它不提供每个通用参数各自的默认值，所以默认值以运行时读出为准。
+- **兼容性实测**：同一图像上，旧版调用（只传 `measure_transition` / `measure_select`）与显式传入 `measure_distance=10, min_score=0.7, num_instances=1, distance_threshold=3.5, measure_interpolation=nearest_neighbor` 的结果完全相同（拟合参数、得分、41 个边缘点、41 个卡尺）。
+- **二选一**：同时传 `num_measures` 与 `measure_distance` 时 `add_metrology_object_line_measure` 报 #1211，因此只能传其中一个。
+- **多实例**：两条平行边、卡尺覆盖两者、`num_instances = 2` 时得到两个实例，参数按实例首尾相接返回（`get_metrology_object_result` 的实例参数传 `all`），`score` 每个实例一个值；`get_metrology_object_measures` 返回全部边缘点。
+
+## 10. 第一批（MT-01 + MS-01）评审处理与验收记录
+
+**评审意见处理**（[MATCH-MEASURE-TOOLS-PLAN-REVIEW.md](MATCH-MEASURE-TOOLS-PLAN-REVIEW.md)）
+
+| 条目 | 处理 |
+|---|---|
+| P1-1 排序击穿 best 取值 | 排序前按 `Score` 降序显式选出最佳结果并传入 `SetMatchOutputs`；用例固定单值不随 5 种排序变化、数组按新顺序输出且 `Index` 重写 |
+| P1-2 枚举序列化表述 | 第 6 节已改为“按数字保存、新值追加在末尾” |
+| P1-3 缩小图生命周期 | 只缩小一次，`finally` 释放；`Image` 输出仍为原图 |
+| P1-4 编辑器纳入同步清单 | 第 6 节补充；匹配窗口加搜索区域/排序，跟随与椭圆测量窗口加“高级参数”折叠区 |
+| P2-1 复用种子机制 | `InstanceSeedIndices` 由 `SeedIndex` 生成，多矩阵 × 多实例按“定位结果 → 实例”展开 |
+| P2-2 二选一传参 | `NumMeasures > 0` 只传 `num_measures`，否则只传 `measure_distance` |
+| P2-3 默认值实测 | 见第 9 节（HALCON 22.11） |
+| P2-4 `MeasurePoints` | 直接用 `XldLineHelper.Crosses` |
+| P2-5 回归门禁 | 默认参数下形状匹配、灰度匹配和 4 个 metrology 测量工具与旧版直接调用逐项一致；5 种排序 × 行容差 {0, 16} |
+| P2-6 语义提示 | 匹配窗口搜索区域下方提示“限制的是模型参考点（示教区域的重心）” |
+
+**验收结果**
+
+- 单元/集成测试：新增 `MatchMeasureBatch1Tests` 33 个用例，全量 `dotnet test`（`Category!=Soak`）797 个通过；`examples\*.vflow.json` 全部可加载。
+- 界面验收：脚本经 Windows UI Automation 驱动真实的 `VisionFlow.WpfApp.exe`，在文件对话框打开含模板匹配和跟随测量的流程，完成编辑、运行、保存、重新加载，共 43 项检查全部通过。覆盖：默认参数与旧版直接调用逐字一致（兼容门禁）；5 种排序（含行容差 0 / 16）顺序正确且最佳得分始终为最高分；行容差仅在先行后列时显示、为负时校验报错；搜索区域下拉列出上游区域、配置后只找到区域内目标；高级参数默认收起、展开后显示 6 项且卡尺数大于 0 时隐藏卡尺间距、实例数为 0 校验报错；椭圆测量窗口同样有折叠区；`MeasurePoints` 和匹配轮廓叠加显示；界面数值（12 / 33 项）与不走界面的对照运行逐字一致；保存文件与期望配置一致，重新加载后配置与结果不变。
+- 验证中未发现应用本身的问题。

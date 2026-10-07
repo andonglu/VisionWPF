@@ -256,6 +256,32 @@
                                                   Margin="0,12,0,0"
                                                   Content="未匹配到目标时失败（取消后输出 Found=false 并继续）" />
                                     </Grid>
+                                    <Grid Margin="0,12,0,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="96" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                        </Grid.RowDefinitions>
+                                        <TextBlock Grid.Row="0" Grid.Column="0" Text="搜索区域" Style="{StaticResource EditorFieldLabelStyle}" />
+                                        <ComboBox x:Name="SearchRegionCombo" Grid.Row="0" Grid.Column="1" IsEditable="True" />
+                                        <TextBlock x:Name="SearchRegionHintText" Grid.Row="1" Grid.Column="1" Margin="0,4,0,8" TextWrapping="Wrap"
+                                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                                   Text="可选，留空则在整幅图像中查找。搜索区域限制的是模型参考点（示教区域的重心）落在区域内，不是整个模板落在区域内。" />
+                                        <TextBlock Grid.Row="2" Grid.Column="0" Text="排序方式" Style="{StaticResource EditorFieldLabelStyle}" />
+                                        <ComboBox x:Name="SortByCombo" Grid.Row="2" Grid.Column="1" SelectionChanged="SortByCombo_SelectionChanged" />
+                                        <TextBlock x:Name="RowToleranceLabel" Grid.Row="3" Grid.Column="0" Text="行容差" Style="{StaticResource EditorFieldLabelStyle}" />
+                                        <TextBox x:Name="RowToleranceText" Grid.Row="3" Grid.Column="1"
+                                                 ToolTip="行差不超过该值（像素）的结果视为同一行，同一行内按列排序；0 表示不分行" />
+                                        <TextBlock Grid.Row="4" Grid.Column="1" Margin="0,4,0,0" TextWrapping="Wrap"
+                                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                                   Text="排序只改变结果数组（Items / Scores / HomMats / Contours）的顺序；最佳结果与 Row / Column / Angle / Score 始终取得分最高的一项。" />
+                                    </Grid>
                                     <Button Content="执行测试" Margin="0,16,0,0" HorizontalAlignment="Right" Click="TestRun_Click" />
                                 </StackPanel>
                             </Border>

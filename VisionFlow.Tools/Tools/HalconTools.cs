@@ -110,20 +110,53 @@ namespace VisionFlow.Tools
     }
 
     /// <summary>
+    /// 匹配结果的排序方式（MT-01）。只改变 Items / Scores / HomMats / Contours 等数组的顺序和每项的 Index；
+    /// BestMatch 与 Row / Column / Angle / Score 单值固定取得分最高的一项。
+    /// </summary>
+    public enum MatchSortBy
+    {
+        /// <summary>保持算子返回的顺序（HALCON 按得分从高到低返回），等于旧版行为。</summary>
+        Score,
+        /// <summary>按行坐标从小到大。</summary>
+        Row,
+        /// <summary>按列坐标从小到大。</summary>
+        Column,
+        /// <summary>先按行分行（行差 ≤ RowTolerance 视为同一行），同一行内按列从小到大。</summary>
+        RowThenColumn,
+        /// <summary>先按列、列相同再按行。</summary>
+        ColumnThenRow
+    }
+
+    /// <summary>
     /// 匹配工具公共基类：统一图像加载、输出写入、“未找到”处理、模型句柄缓存与预热/释放（TR-06/TR-10/TR-13）。
     /// 派生类提供模型来源（缓存键与加载方式）并负责查找，生成每个结果的轮廓与跟随矩阵。
     /// 输出：MatchCount、Found、Scores、Items、HomMats、BestMatch、BestHomMat、
     /// Contours（每个匹配的 XLD）、ResultContour（全部匹配轮廓合并的 XLD）、Image，
     /// 以及最佳结果的 Row / Column / Angle / Score 单值（未找到时为 NaN）。
+    /// 搜索区域与结果排序（MT-01）对所有派生的匹配工具生效。
     /// </summary>
-    public abstract class HalconMatchToolBase : ToolBase, INotFoundPolicy, IToolResourceLifecycle
+    public abstract class HalconMatchToolBase : ToolBase, INotFoundPolicy, IToolResourceLifecycle, IToolConfigurationCheck, IToolParameterVisibility
     {
         [InputRef("图像", typeof(HalconImage))]
         public string ImagePath { get; set; } = "Input.Image";
+
+        /// <summary>
+        /// 搜索区域（可选）：只在该区域内查找。限制的是模型参考点（示教区域的重心）落在区域内，
+        /// 不是整个模板落在区域内；未配置时在整幅图像中查找。
+        /// </summary>
+        [InputRef("搜索区域", typeof(HalconRegion), Optional = true)]
+        public string SearchRegionPath { get; set; }
+
         public double MinScore { get; set; } = 0.5;
         public int NumMatches { get; set; } = 10;
         /// <summary>未匹配到目标时是否失败（默认 true）；关闭后输出 Found=false、MatchCount=0 并继续。</summary>
         public bool FailWhenNotFound { get; set; } = true;
+
+        /// <summary>结果排序方式；默认 Score 保持算子返回顺序。</summary>
+        public MatchSortBy SortBy { get; set; } = MatchSortBy.Score;
+
+        /// <summary>按行再按列排序时，行差不超过该值（像素）的结果视为同一行；0 表示不分行，只按行、再按列。</summary>
+        public double RowTolerance { get; set; }
 
         private readonly object _modelSync = new object();
         private HTuple _cachedModel;
@@ -167,7 +200,23 @@ namespace VisionFlow.Tools
                 return NodeResult.Fail(imageError);
             }
 
+            // 搜索区域：只缩小一次定义域，缩小图归本次运行所有，查找结束后立即释放；Image 输出仍为原图（VF-04）
+            if (!TryCreateSearchImage(ctx, image, out HObject searchImage, out bool emptySearchRegion, out string regionError))
+            {
+                if (ownsImage)
+                {
+                    image.Dispose();
+                }
+                return NodeResult.Fail(regionError);
+            }
+
             var items = new List<MatchResultItem>();
+            if (emptySearchRegion)
+            {
+                SetMatchOutputs(ctx, image, ownsImage, items, null);
+                return NotFoundOutcome.Resolve(ctx, this, $"{MatchLabel}的搜索区域为空，未查找");
+            }
+
             try
             {
                 // 模型句柄在同一工具实例内复用（TR-13）；同一实例的并发运行串行执行
@@ -199,7 +248,7 @@ namespace VisionFlow.Tools
                     }
                     try
                     {
-                        FindMatches(ctx, image, model, items);
+                        FindMatches(ctx, searchImage ?? image, model, items);
                     }
                     finally
                     {
@@ -219,13 +268,134 @@ namespace VisionFlow.Tools
                 }
                 return NodeResult.Fail($"{ModuleName} {MatchLabel}失败：{ex.Message}");
             }
+            finally
+            {
+                searchImage?.Dispose();
+            }
 
-            SetMatchOutputs(ctx, image, ownsImage, items);
+            // 最佳结果在排序之前按得分显式选出（同分取算子返回顺序中靠前的一项），不随排序方式变化
+            MatchResultItem best = items.OrderByDescending(i => i.Score).FirstOrDefault();
+            SortItems(items);
+            SetMatchOutputs(ctx, image, ownsImage, items, best);
             if (items.Count == 0)
             {
                 return NotFoundOutcome.Resolve(ctx, this, $"{MatchLabel}未匹配到任何目标");
             }
+            if (SortBy != MatchSortBy.Score)
+            {
+                ctx.AddLog(FlowLogLevel.Info, $"[{MatchLabel}] 结果按 {SortBy} 排序" + (SortBy == MatchSortBy.RowThenColumn && RowTolerance > 0 ? $"（行容差 {RowTolerance}）" : string.Empty));
+            }
             return NodeResult.Ok;
+        }
+
+        public IEnumerable<ToolConfigurationIssue> CheckConfiguration()
+        {
+            if (RowTolerance < 0)
+            {
+                yield return new ToolConfigurationIssue(nameof(RowTolerance), "行容差不能小于 0");
+            }
+        }
+
+        public bool IsParameterVisible(string propertyName)
+        {
+            return propertyName != nameof(RowTolerance) || SortBy == MatchSortBy.RowThenColumn;
+        }
+
+        /// <summary>
+        /// 按搜索区域缩小图像定义域。未配置搜索区域时 searchImage 为 null；区域为空时 empty 为 true；
+        /// 引用无效时返回 false 并给出错误。多个区域对象按合并后的区域处理。
+        /// </summary>
+        private bool TryCreateSearchImage(FlowContext ctx, HObject image, out HObject searchImage, out bool empty, out string error)
+        {
+            searchImage = null;
+            empty = false;
+            error = null;
+            if (string.IsNullOrWhiteSpace(SearchRegionPath))
+            {
+                return true;
+            }
+            HObject region;
+            try
+            {
+                region = Input<HalconRegion>(ctx, SearchRegionPath).Object;
+            }
+            catch (Exception ex) when (ex is InvalidOperationException || ex is KeyNotFoundException || ex is FormatException
+                || ex is InvalidCastException || ex is ArgumentException)
+            {
+                error = $"{ModuleName} 搜索区域引用无效：{SearchRegionPath}，{ex.Message}";
+                return false;
+            }
+            HOperatorSet.Union1(region, out HObject union);
+            try
+            {
+                HOperatorSet.AreaCenter(union, out HTuple area, out _, out _);
+                if (area.Length == 0 || area.D <= 0)
+                {
+                    empty = true;
+                    return true;
+                }
+                HOperatorSet.ReduceDomain(image, union, out searchImage);
+                ctx.AddLog(FlowLogLevel.Info, $"[{MatchLabel}] 只在搜索区域 {SearchRegionPath} 内查找（面积 {area.D:F0}）");
+                return true;
+            }
+            finally
+            {
+                union.Dispose();
+            }
+        }
+
+        /// <summary>按 SortBy 重排结果并重写每项 Index（0 起）。Score 保持算子返回的顺序。</summary>
+        private void SortItems(List<MatchResultItem> items)
+        {
+            if (SortBy != MatchSortBy.Score && items.Count > 1)
+            {
+                List<MatchResultItem> sorted = SortMatches(items, SortBy, RowTolerance);
+                items.Clear();
+                items.AddRange(sorted);
+            }
+            for (int i = 0; i < items.Count; i++)
+            {
+                items[i].Index = i;
+            }
+        }
+
+        /// <summary>
+        /// 排序规则（稳定排序，相同键保持原顺序）。按行再按列时：先按行从小到大，
+        /// 与当前行第一项的行差不超过 rowTolerance 的归为同一行，同一行内按列从小到大。
+        /// </summary>
+        public static List<MatchResultItem> SortMatches(IEnumerable<MatchResultItem> items, MatchSortBy sortBy, double rowTolerance)
+        {
+            List<MatchResultItem> list = items.ToList();
+            switch (sortBy)
+            {
+                case MatchSortBy.Row:
+                    return list.OrderBy(i => i.Row).ToList();
+                case MatchSortBy.Column:
+                    return list.OrderBy(i => i.Column).ToList();
+                case MatchSortBy.ColumnThenRow:
+                    return list.OrderBy(i => i.Column).ThenBy(i => i.Row).ToList();
+                case MatchSortBy.RowThenColumn:
+                    var result = new List<MatchResultItem>();
+                    var line = new List<MatchResultItem>();
+                    double lineRow = double.NaN;
+                    foreach (MatchResultItem item in list.OrderBy(i => i.Row))
+                    {
+                        if (line.Count > 0 && item.Row - lineRow > Math.Max(0, rowTolerance))
+                        {
+                            result.AddRange(line.OrderBy(i => i.Column));
+                            line.Clear();
+                        }
+                        if (line.Count == 0)
+                        {
+                            lineRow = item.Row;
+                        }
+                        line.Add(item);
+                    }
+                    result.AddRange(line.OrderBy(i => i.Column));
+                    return result;
+                default:
+                    return list;
+            }
         }
 
         /// <summary>
@@ -338,7 +508,11 @@ namespace VisionFlow.Tools
             return item;
         }
 
-        private void SetMatchOutputs(FlowContext ctx, HObject image, bool ownsImage, List<MatchResultItem> items)
+        /// <summary>
+        /// 写入匹配输出。数组按 items 当前顺序（即排序后的顺序）输出；best 由调用方按得分显式选出，
+        /// 不能取 items[0]（排序后首项不一定是最高分）。
+        /// </summary>
+        private void SetMatchOutputs(FlowContext ctx, HObject image, bool ownsImage, List<MatchResultItem> items, MatchResultItem best)
         {
             HOperatorSet.GenEmptyObj(out HObject resultContour);
             foreach (MatchResultItem item in items)
@@ -349,7 +523,6 @@ namespace VisionFlow.Tools
             }
 
             List<HomMat2D> homMats = items.Select(i => i.HomMat).ToList();
-            MatchResultItem best = items.Count > 0 ? items[0] : null;
             SetOutput(ctx, Variable.Single(ModuleName, "MatchCount", VariableType.Int, items.Count));
             SetOutput(ctx, Variable.Single(ModuleName, "Found", VariableType.Bool, best != null));
             SetOutput(ctx, Variable.Array(ModuleName, "Scores", VariableType.Double, items.Select(i => i.Score)));

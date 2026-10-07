@@ -39,6 +39,7 @@ namespace VisionFlow.WpfToolEditors.Editors
             MeasureSigmaText.Text = Format(_tool.MeasureSigma);
             MeasureThresholdText.Text = Format(_tool.MeasureThreshold);
             FailWhenNotFoundCheck.IsChecked = _tool.FailWhenNotFound;
+            AdvancedExpander.Load(_tool);
         }
 
         private void FillRefs(ComboBox combo, Type expectedType, string current, bool optional, bool acceptsCollection = false)
@@ -78,6 +79,7 @@ namespace VisionFlow.WpfToolEditors.Editors
                 _tool.MeasureSigma = Parse(MeasureSigmaText.Text, nameof(_tool.MeasureSigma));
                 _tool.MeasureThreshold = Parse(MeasureThresholdText.Text, nameof(_tool.MeasureThreshold));
                 _tool.FailWhenNotFound = FailWhenNotFoundCheck.IsChecked == true;
+                AdvancedExpander.Apply(_tool);
                 DialogResult = true;
                 Close();
             }

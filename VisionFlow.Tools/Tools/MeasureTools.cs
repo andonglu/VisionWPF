@@ -250,6 +250,7 @@ namespace VisionFlow.Tools
             string lastError = seedCount == 0 ? emptyMessage : null;
             SeedCount = seedCount;
             SeedIndex = 0;
+            OnSeedsStarting();
             try
             {
                 for (int i = 0; i < seedCount; i++)
@@ -300,6 +301,7 @@ namespace VisionFlow.Tools
                 ClearSingleOutputs(ctx);
             }
             writeSummary?.Invoke(successCount);
+            WriteSeedOutputs(ctx);
             SetOutput(ctx, Variable.Object(ModuleName, "ResultContour", new HalconXld(allContours), successCount));
             SetOutput(ctx, Variable.Single(ModuleName, "Found", VariableType.Bool, successCount > 0));
             SetOutput(ctx, Variable.Single(ModuleName, "FailedCount", VariableType.Int, failedCount));
@@ -308,6 +310,16 @@ namespace VisionFlow.Tools
                 return NodeResult.Ok;
             }
             return NotFoundOutcome.Resolve(ctx, this, lastError ?? $"{label}失败：未找到有效结果");
+        }
+
+        /// <summary>开始逐项测量前调用（SeedCount 已设置），派生类在此清空本次运行的累积数据。</summary>
+        protected virtual void OnSeedsStarting()
+        {
+        }
+
+        /// <summary>全部测量项结束后、公共输出写入前调用，派生类在此写入按测量项累积的输出。</summary>
+        protected virtual void WriteSeedOutputs(FlowContext ctx)
+        {
         }
 
         /// <summary>把声明的 Double 单值输出置为 NaN。</summary>
@@ -330,21 +342,6 @@ namespace VisionFlow.Tools
                 : new List<T>();
             results.Add(result);
             ctx.SetVariable(Variable.Object(moduleName, "Results", results, results.Count));
-        }
-
-        protected void AddMetrologyParams(out HTuple names, out HTuple values)
-        {
-            names = new HTuple("measure_transition").TupleConcat("measure_select");
-            values = new HTuple(MeasureTransition).TupleConcat(MeasureSelect);
-        }
-
-        /// <summary>执行 metrology 模型，返回第 0 个对象的结果参数与结果轮廓（轮廓归调用方释放）。</summary>
-        protected static HTuple ApplyMetrology(HObject image, HTuple metrology, out HObject contour)
-        {
-            HOperatorSet.ApplyMetrologyModel(image, metrology);
-            HOperatorSet.GetMetrologyObjectResult(metrology, 0, "all", "result_type", "all_param", out HTuple param);
-            HOperatorSet.GetMetrologyObjectResultContour(out contour, metrology, "all", "all", 1.5);
-            return param;
         }
 
         /// <summary>把 measure_pos 结果（边缘点）逐条转换为卡尺结果，Distance 为到下一条边缘的距离。</summary>

@@ -15,8 +15,17 @@ namespace VisionFlow.Tools
     [ToolOutput("FailedCount", VariableKind.Single, VariableType.Int)]
     [ToolOutput("Results", VariableKind.Object, VariableType.Object, ElementClrType = typeof(List<LineMeasureResult>))]
     [ToolOutput("ResultContour", VariableKind.Object, VariableType.Object, ElementClrType = typeof(HalconXld))]
-    public sealed class LineFollowMeasureTool : FollowMeasureToolBase
+    [ToolOutput("InstanceRows1", VariableKind.Array, VariableType.Double)]
+    [ToolOutput("InstanceColumns1", VariableKind.Array, VariableType.Double)]
+    [ToolOutput("InstanceRows2", VariableKind.Array, VariableType.Double)]
+    [ToolOutput("InstanceColumns2", VariableKind.Array, VariableType.Double)]
+    public sealed class LineFollowMeasureTool : MetrologyMeasureToolBase
     {
+        protected override string[] InstanceOutputNames
+        {
+            get { return new[] { "InstanceRows1", "InstanceColumns1", "InstanceRows2", "InstanceColumns2" }; }
+        }
+
         public double BaseRow1 { get; set; } = 100;
         public double BaseColumn1 { get; set; } = 100;
         public double BaseRow2 { get; set; } = 100;
@@ -28,6 +37,11 @@ namespace VisionFlow.Tools
 
         public override NodeResult Run(FlowContext ctx)
         {
+            NodeResult invalid = CheckBeforeRun();
+            if (invalid != null)
+            {
+                return invalid;
+            }
             return RunMeasurements(ctx, "直线测量",
                 (HObject image, HomMat2D matrix, int resultIndex, out HObject contour) =>
                     MeasureOne(ctx, image, matrix, resultIndex, out contour),
@@ -102,8 +116,18 @@ namespace VisionFlow.Tools
     [ToolOutput("FailedCount", VariableKind.Single, VariableType.Int)]
     [ToolOutput("Results", VariableKind.Object, VariableType.Object, ElementClrType = typeof(List<RectangleMeasureResult>))]
     [ToolOutput("ResultContour", VariableKind.Object, VariableType.Object, ElementClrType = typeof(HalconXld))]
-    public sealed class RectangleFollowMeasureTool : FollowMeasureToolBase, IRegionSeededMeasureTool
+    [ToolOutput("InstanceRows", VariableKind.Array, VariableType.Double)]
+    [ToolOutput("InstanceColumns", VariableKind.Array, VariableType.Double)]
+    [ToolOutput("InstancePhis", VariableKind.Array, VariableType.Double)]
+    [ToolOutput("InstanceLengths1", VariableKind.Array, VariableType.Double)]
+    [ToolOutput("InstanceLengths2", VariableKind.Array, VariableType.Double)]
+    public sealed class RectangleFollowMeasureTool : MetrologyMeasureToolBase, IRegionSeededMeasureTool
     {
+        protected override string[] InstanceOutputNames
+        {
+            get { return new[] { "InstanceRows", "InstanceColumns", "InstancePhis", "InstanceLengths1", "InstanceLengths2" }; }
+        }
+
         public double BaseRow { get; set; } = 100;
         public double BaseColumn { get; set; } = 150;
         public double BasePhi { get; set; }
@@ -123,6 +147,11 @@ namespace VisionFlow.Tools
 
         public override NodeResult Run(FlowContext ctx)
         {
+            NodeResult invalid = CheckBeforeRun();
+            if (invalid != null)
+            {
+                return invalid;
+            }
             double[] rows = null;
             double[] columns = null;
             double[] phis = null;
@@ -244,8 +273,16 @@ namespace VisionFlow.Tools
     [ToolOutput("FailedCount", VariableKind.Single, VariableType.Int)]
     [ToolOutput("Results", VariableKind.Object, VariableType.Object, ElementClrType = typeof(List<CircleMeasureResult>))]
     [ToolOutput("ResultContour", VariableKind.Object, VariableType.Object, ElementClrType = typeof(HalconXld))]
-    public sealed class CircleFollowMeasureTool : FollowMeasureToolBase, IRegionSeededMeasureTool
+    [ToolOutput("InstanceRows", VariableKind.Array, VariableType.Double)]
+    [ToolOutput("InstanceColumns", VariableKind.Array, VariableType.Double)]
+    [ToolOutput("InstanceRadii", VariableKind.Array, VariableType.Double)]
+    public sealed class CircleFollowMeasureTool : MetrologyMeasureToolBase, IRegionSeededMeasureTool
     {
+        protected override string[] InstanceOutputNames
+        {
+            get { return new[] { "InstanceRows", "InstanceColumns", "InstanceRadii" }; }
+        }
+
         public double BaseRow { get; set; } = 100;
         public double BaseColumn { get; set; } = 150;
         public double BaseRadius { get; set; } = 50;
@@ -265,6 +302,11 @@ namespace VisionFlow.Tools
 
         public override NodeResult Run(FlowContext ctx)
         {
+            NodeResult invalid = CheckBeforeRun();
+            if (invalid != null)
+            {
+                return invalid;
+            }
             double[] rows = null;
             double[] columns = null;
             double[] radii = null;
@@ -387,8 +429,18 @@ namespace VisionFlow.Tools
     [ToolOutput("FailedCount", VariableKind.Single, VariableType.Int)]
     [ToolOutput("Results", VariableKind.Object, VariableType.Object, ElementClrType = typeof(List<EllipseMeasureResult>))]
     [ToolOutput("ResultContour", VariableKind.Object, VariableType.Object, ElementClrType = typeof(HalconXld))]
-    public sealed class EllipseFollowMeasureTool : FollowMeasureToolBase
+    [ToolOutput("InstanceRows", VariableKind.Array, VariableType.Double)]
+    [ToolOutput("InstanceColumns", VariableKind.Array, VariableType.Double)]
+    [ToolOutput("InstancePhis", VariableKind.Array, VariableType.Double)]
+    [ToolOutput("InstanceLengths1", VariableKind.Array, VariableType.Double)]
+    [ToolOutput("InstanceLengths2", VariableKind.Array, VariableType.Double)]
+    public sealed class EllipseFollowMeasureTool : MetrologyMeasureToolBase
     {
+        protected override string[] InstanceOutputNames
+        {
+            get { return new[] { "InstanceRows", "InstanceColumns", "InstancePhis", "InstanceLengths1", "InstanceLengths2" }; }
+        }
+
         // 初始测量位置（图像坐标系下的椭圆定义）
         public double EllipseRow { get; set; } = 100;
         public double EllipseColumn { get; set; } = 100;
@@ -406,6 +458,11 @@ namespace VisionFlow.Tools
 
         public override NodeResult Run(FlowContext ctx)
         {
+            NodeResult invalid = CheckBeforeRun();
+            if (invalid != null)
+            {
+                return invalid;
+            }
             return RunMeasurements(ctx, "椭圆测量",
                 (HObject image, HomMat2D matrix, int resultIndex, out HObject contour) =>
                     MeasureOne(ctx, image, matrix, resultIndex, out contour),

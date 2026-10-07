@@ -8,6 +8,7 @@ using System.Windows.Controls;
 using HalconDotNet;
 using Microsoft.Win32;
 using VisionFlow.Controls;
+using VisionFlow.Core;
 using VisionFlow.Editing;
 using VisionFlow.Tools;
 using VisionFlow.Ui;
@@ -101,6 +102,57 @@ namespace VisionFlow.WpfToolEditors.Editors
                     }
                 }
             }
+
+            SearchRegionCombo.Items.Add(string.Empty);
+            if (_context.Root != null && _context.Node != null)
+            {
+                foreach (RefCandidate candidate in RefCandidateService.ForInput(_context.Root, _context.Node, typeof(HalconRegion)))
+                {
+                    if (!SearchRegionCombo.Items.Contains(candidate.Path))
+                    {
+                        SearchRegionCombo.Items.Add(candidate.Path);
+                    }
+                }
+            }
+            SortByCombo.ItemsSource = SortChoices;
+        }
+
+        private sealed class SortChoice
+        {
+            public SortChoice(MatchSortBy value, string label)
+            {
+                Value = value;
+                Label = label;
+            }
+
+            public MatchSortBy Value { get; private set; }
+            public string Label { get; private set; }
+
+            public override string ToString()
+            {
+                return Label;
+            }
+        }
+
+        private static readonly SortChoice[] SortChoices =
+        {
+            new SortChoice(MatchSortBy.Score, "得分（算子返回顺序）"),
+            new SortChoice(MatchSortBy.Row, "行（从上到下）"),
+            new SortChoice(MatchSortBy.Column, "列（从左到右）"),
+            new SortChoice(MatchSortBy.RowThenColumn, "先行后列（逐行从左到右）"),
+            new SortChoice(MatchSortBy.ColumnThenRow, "先列后行（逐列从上到下）")
+        };
+
+        private HalconMatchToolBase MatchTool => (HalconMatchToolBase)_tool;
+
+        private MatchSortBy SelectedSortBy => (SortByCombo.SelectedItem as SortChoice)?.Value ?? MatchSortBy.Score;
+
+        private void SortByCombo_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+        {
+            // 行容差只在“先行后列”时生效
+            Visibility visibility = SelectedSortBy == MatchSortBy.RowThenColumn ? Visibility.Visible : Visibility.Collapsed;
+            RowToleranceLabel.Visibility = visibility;
+            RowToleranceText.Visibility = visibility;
         }
 
         private void LoadFromTool()
@@ -131,6 +183,10 @@ namespace VisionFlow.WpfToolEditors.Editors
             GreedinessText.Text = Format(_tool.Greediness);
             SubPixelCombo.Text = string.IsNullOrWhiteSpace(_tool.SubPixel) ? "least_squares" : _tool.SubPixel;
             FailWhenNotFoundCheck.IsChecked = _tool.FailWhenNotFound;
+            SearchRegionCombo.Text = MatchTool.SearchRegionPath ?? string.Empty;
+            SortByCombo.SelectedItem = SortChoices.First(c => c.Value == MatchTool.SortBy);
+            RowToleranceText.Text = Format(MatchTool.RowTolerance);
+            SortByCombo_SelectionChanged(null, null);
             if (IsGrayMatch && string.IsNullOrWhiteSpace(SubPixelCombo.Text))
             {
                 SubPixelCombo.Text = "true";
@@ -313,41 +369,11 @@ namespace VisionFlow.WpfToolEditors.Editors
             }
         }
 
+        /// <summary>
+        /// “运行参数”页的测试：把当前参数写入编辑副本后按运行时的完整流程执行（含搜索区域与结果排序），
+        /// 与流程运行结果一致；图像引用基于上次运行结果，Input.Image 取主窗口当前图像。
+        /// </summary>
         private void TestRun_Click(object sender, RoutedEventArgs e)
-        {
-            if (RunImageView.ImageObject == null)
-            {
-                TryShowSelectedImage();
-            }
-            if (RunImageView.ImageObject == null)
-            {
-                ShowInfo("请先选择运行图像。");
-                return;
-            }
-
-            try
-            {
-                ExecuteMatch(RunImageView.ImageObject, RunImageView, RunResultGrid,
-                    ParseDouble(FindStartAngleText.Text, "起始角"),
-                    ParseDouble(FindExtentAngleText.Text, "角范围"),
-                    ParseDouble(MinScoreText.Text, "最小分"),
-                    ParseInt(NumMatchesText.Text, "数量"),
-                    ParseDouble(MaxOverlapText.Text, "重叠"),
-                    SubPixelCombo.Text,
-                    _tool.NumLevelsFind,
-                    ParseDouble(GreedinessText.Text, "贪婪度"),
-                    updateTeachMatches: false);
-                SetStatus("运行测试完成。");
-            }
-            catch (Exception ex)
-            {
-                ShowError("运行测试失败：" + ex.Message);
-            }
-        }
-
-        private void ExecuteMatch(HObject image, HalconImageView view, DataGrid grid,
-            double startAngle, double extentAngle, double minScore, int numMatches,
-            double maxOverlap, string subPixel, int numLevels, double greediness, bool updateTeachMatches)
         {
             if (!HasModel)
             {
@@ -355,15 +381,44 @@ namespace VisionFlow.WpfToolEditors.Editors
                 return;
             }
 
-            HTuple modelId = DeserializeModel();
+            FlowContext ctx = null;
             try
             {
-                ExecuteMatch(modelId, image, view, grid, startAngle, extentAngle, minScore, numMatches,
-                    maxOverlap, subPixel, numLevels, greediness, updateTeachMatches);
+                ApplyToTool();
+                ctx = (_context.LastRunContext ?? new FlowContext()).CreatePreviewContext();
+                if (_context.InputImage != null && _context.InputImage.IsInitialized())
+                {
+                    ctx.SetVariable(Variable.Object("Input", "Image", new HalconImage(_context.InputImage), 1));
+                }
+                NodeResult result = ((ToolBase)_tool).Run(ctx);
+                string module = _tool.ModuleName;
+                if (ctx.TryGetVariable(module, "Image", out Variable imageVar) && imageVar.Value is HalconImage image)
+                {
+                    RunImageView.ShowImage(image.Object);
+                }
+                if (ctx.TryGetVariable(module, "ResultContour", out Variable contourVar) && contourVar.Value is HalconXld contour)
+                {
+                    RunImageView.SetOverlay(contour.Object);
+                }
+                else
+                {
+                    RunImageView.ClearOverlay();
+                }
+                IEnumerable<MatchResultItem> items = ctx.TryGetVariable(module, "Items", out Variable itemsVar)
+                    && itemsVar.Value is IEnumerable<MatchResultItem> found ? found : Enumerable.Empty<MatchResultItem>();
+                RunResultGrid.ItemsSource = ToRows(items);
+                double bestScore = ctx.TryGetVariable(module, "Score", out Variable scoreVar) ? Convert.ToDouble(scoreVar.Value, CultureInfo.CurrentCulture) : double.NaN;
+                SetStatus(result.IsSuccess
+                    ? $"运行测试完成：{RunResultGrid.Items.Count} 个结果（按{SortByCombo.SelectedItem}排序），最佳得分 {bestScore:F4}。"
+                    : "运行测试：" + result.Message);
+            }
+            catch (Exception ex)
+            {
+                ShowError("运行测试失败：" + ex.Message);
             }
             finally
             {
-                ClearModel(modelId);
+                ctx?.Dispose();
             }
         }
 
@@ -930,6 +985,10 @@ namespace VisionFlow.WpfToolEditors.Editors
             _tool.SubPixel = SubPixelCombo.Text;
             _tool.Greediness = ParseDouble(GreedinessText.Text, "贪婪度");
             _tool.FailWhenNotFound = FailWhenNotFoundCheck.IsChecked == true;
+            string searchRegion = (SearchRegionCombo.Text ?? string.Empty).Trim();
+            MatchTool.SearchRegionPath = searchRegion.Length == 0 ? null : searchRegion;
+            MatchTool.SortBy = SelectedSortBy;
+            MatchTool.RowTolerance = ParseDouble(RowToleranceText.Text, "行容差");
             _tool.BaseRow = ParseDouble(BaseRowText.Text, "基准 Row");
             _tool.BaseColumn = ParseDouble(BaseColumnText.Text, "基准 Col");
             _tool.BaseAngle = ParseDouble(BaseAngleText.Text, "基准角");
