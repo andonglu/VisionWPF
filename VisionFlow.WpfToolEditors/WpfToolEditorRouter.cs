@@ -88,6 +88,8 @@ namespace VisionFlow.WpfToolEditors
                 || tool is XldToolBase
                 || tool is XldToRegionTool
                 || tool is RegionDistanceTool
+                || tool is ContourDistanceTool
+                || tool is GeometryRelationTool
                 || tool is XldFeaturesTool
                 || tool is FitLineTool
                 || tool is FitCircleTool

@@ -68,6 +68,10 @@ namespace VisionFlow.Tools
             FlowSerializer.RegisterToolType(typeof(FitLineTool), "fit-line");
             FlowSerializer.RegisterToolType(typeof(FitCircleTool), "fit-circle");
             FlowSerializer.RegisterToolType(typeof(IntersectionLinesTool), "intersection-lines");
+            FlowSerializer.RegisterToolType(typeof(XldProcessTool), "xld-process");
+            FlowSerializer.RegisterToolType(typeof(FitEllipseRectTool), "fit-ellipse-rect");
+            FlowSerializer.RegisterToolType(typeof(ContourDistanceTool), "contour-distance");
+            FlowSerializer.RegisterToolType(typeof(GeometryRelationTool), "geometry-relation");
             FlowSerializer.RegisterToolType(typeof(AffinePointTool), "affine-point");
             FlowSerializer.RegisterToolType(typeof(Barcode1DTool), "barcode1d", "ldwelding.barcode1d");
         }

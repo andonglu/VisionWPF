@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using HalconDotNet;
 using VisionFlow.Core;
 using VisionFlow.Variables;
@@ -173,107 +174,137 @@ namespace VisionFlow.Tools
         }
     }
 
+    /// <summary>交点计算模式。</summary>
+    public enum IntersectionMode
+    {
+        /// <summary>直线与直线（intersection_lines，原“线线交点”）。</summary>
+        LineLine,
+        /// <summary>直线与轮廓（intersection_line_contour_xld）：输入 1 按直线（无限长）处理，输入 2 为任意轮廓。</summary>
+        LineContour,
+        /// <summary>轮廓与轮廓（intersection_contours_xld）。</summary>
+        ContourContour
+    }
+
+    /// <summary>轮廓与轮廓求交的范围（成员名即 HALCON 参数值）。</summary>
+    public enum ContourIntersectionType
+    {
+        /// <summary>只求两组轮廓之间的交点。</summary>
+        mutual,
+        /// <summary>两组之间以及各组内部的交点。</summary>
+        all,
+        /// <summary>各条轮廓自身的交点。</summary>
+        self
+    }
+
+    /// <summary>
+    /// 交点计算（原“线线交点”，XG-05）：直线与直线、直线与轮廓、轮廓与轮廓。
+    /// 直线输入按 <see cref="XldLineHelper"/> 解释（两点轮廓取首尾点，多点轮廓先拟合直线）。
+    /// 多个交点时输出 Rows / Columns 数组，Row / Column 取第一个；Xld 为各交点的十字标记，便于叠加显示。
+    /// </summary>
     [ToolOutput("Xld", VariableKind.Object, VariableType.Object, ElementClrType = typeof(HalconXld))]
     [ToolOutput("Row", VariableKind.Single, VariableType.Double)]
     [ToolOutput("Column", VariableKind.Single, VariableType.Double)]
     [ToolOutput("Overlap", VariableKind.Single, VariableType.Int)]
     [ToolOutput("Found", VariableKind.Single, VariableType.Bool)]
-    public sealed class IntersectionLinesTool : ToolBase, INotFoundPolicy
+    [ToolOutput("Rows", VariableKind.Array, VariableType.Double)]
+    [ToolOutput("Columns", VariableKind.Array, VariableType.Double)]
+    [ToolOutput("Count", VariableKind.Single, VariableType.Int)]
+    public sealed class IntersectionLinesTool : ToolBase, INotFoundPolicy, IToolParameterVisibility
     {
-        [InputRef("直线1", typeof(HalconXld))]
+        [InputRef("直线/轮廓1", typeof(HalconXld))]
         public string Line1Path { get; set; }
 
-        [InputRef("直线2", typeof(HalconXld))]
+        [InputRef("直线/轮廓2", typeof(HalconXld))]
         public string Line2Path { get; set; }
 
-        /// <summary>两线平行或重合（无唯一交点）时是否失败（默认 true）；关闭后输出 Found=false、Row/Column=NaN 并继续。</summary>
+        /// <summary>交点计算模式；默认直线与直线，与原“线线交点”一致。</summary>
+        public IntersectionMode Mode { get; set; } = IntersectionMode.LineLine;
+
+        /// <summary>轮廓与轮廓求交的范围（仅轮廓与轮廓模式）。</summary>
+        public ContourIntersectionType IntersectionType { get; set; } = ContourIntersectionType.mutual;
+
+        /// <summary>没有交点（平行、重合或不相交）时是否失败（默认 true）；关闭后输出 Found=false、Row/Column=NaN 并继续。</summary>
         public bool FailWhenNotFound { get; set; } = true;
 
         public IntersectionLinesTool(string moduleName) : base(moduleName)
         {
         }
 
-        public override NodeResult Run(FlowContext ctx)
+        public bool IsParameterVisible(string propertyName)
         {
-            HObject line1 = Input<HalconXld>(ctx, Line1Path).Object;
-            HObject line2 = Input<HalconXld>(ctx, Line2Path).Object;
-            if (!TryGetLinePoints(line1, out HTuple r1, out HTuple c1, out HTuple r2, out HTuple c2, out string error1))
-            {
-                return NodeResult.Fail("直线1" + error1);
-            }
-            if (!TryGetLinePoints(line2, out HTuple r3, out HTuple c3, out HTuple r4, out HTuple c4, out string error2))
-            {
-                return NodeResult.Fail("直线2" + error2);
-            }
-            HOperatorSet.IntersectionLines(r1, c1, r2, c2, r3, c3, r4, c4, out HTuple row, out HTuple col, out HTuple overlap);
-            int overlapValue = overlap.Length > 0 ? overlap.I : 0;
-            if (row.Length == 0 || col.Length == 0)
-            {
-                HOperatorSet.GenEmptyObj(out HObject empty);
-                SetOutput(ctx, Variable.Object(ModuleName, "Xld", new HalconXld(empty), 0));
-                SetOutput(ctx, Variable.Single(ModuleName, "Row", VariableType.Double, double.NaN));
-                SetOutput(ctx, Variable.Single(ModuleName, "Column", VariableType.Double, double.NaN));
-                SetOutput(ctx, Variable.Single(ModuleName, "Overlap", VariableType.Int, overlapValue));
-                SetOutput(ctx, Variable.Single(ModuleName, "Found", VariableType.Bool, false));
-                string reason = overlapValue != 0 ? "两条直线重合" : "两条直线平行";
-                return NotFoundOutcome.Resolve(ctx, this, $"[线线交点] {reason}，无唯一交点");
-            }
-            HOperatorSet.GenCrossContourXld(out HObject cross, row, col, 15, 0.57);
-
-            SetOutput(ctx, Variable.Object(ModuleName, "Xld", new HalconXld(cross), 1));
-            SetOutput(ctx, Variable.Single(ModuleName, "Row", VariableType.Double, row.D));
-            SetOutput(ctx, Variable.Single(ModuleName, "Column", VariableType.Double, col.D));
-            SetOutput(ctx, Variable.Single(ModuleName, "Overlap", VariableType.Int, overlapValue));
-            SetOutput(ctx, Variable.Single(ModuleName, "Found", VariableType.Bool, true));
-            ctx.AddLog(FlowLogLevel.Info, $"[线线交点] Row={row.D:F2}, Column={col.D:F2}, Overlap={overlapValue}");
-            return NodeResult.Ok;
+            return propertyName != nameof(IntersectionType) || Mode == IntersectionMode.ContourContour;
         }
 
-        /// <summary>
-        /// 取 XLD 中第一条轮廓代表的直线：两点轮廓直接取首尾点（拟合直线、直线测量的输出）；
-        /// 多点轮廓先做直线拟合，避免外接矩形把反斜线取成另一条对角线。
-        /// </summary>
-        private static bool TryGetLinePoints(HObject line, out HTuple row1, out HTuple col1,
-            out HTuple row2, out HTuple col2, out string error)
+        public override NodeResult Run(FlowContext ctx)
         {
-            row1 = col1 = row2 = col2 = null;
-            error = null;
-            HOperatorSet.CountObj(line, out HTuple count);
-            if (count.I == 0)
+            HObject input1 = Input<HalconXld>(ctx, Line1Path).Object;
+            HObject input2 = Input<HalconXld>(ctx, Line2Path).Object;
+            HTuple rows;
+            HTuple columns;
+            HTuple overlap;
+            string label;
+            switch (Mode)
             {
-                error = " XLD 为空";
-                return false;
+                case IntersectionMode.LineContour:
+                    if (!XldLineHelper.TryGetLine(input1, 0, out double lr1, out double lc1, out double lr2, out double lc2, out string lineError))
+                    {
+                        return NodeResult.Fail("直线/轮廓1" + lineError);
+                    }
+                    HOperatorSet.IntersectionLineContourXld(input2, lr1, lc1, lr2, lc2, out rows, out columns, out overlap);
+                    label = "直线与轮廓交点";
+                    break;
+                case IntersectionMode.ContourContour:
+                    HOperatorSet.IntersectionContoursXld(input1, input2, IntersectionType.ToString(), out rows, out columns, out overlap);
+                    label = $"轮廓与轮廓交点（{IntersectionType}）";
+                    break;
+                default:
+                    if (!XldLineHelper.TryGetLine(input1, 0, out double r1, out double c1, out double r2, out double c2, out string error1))
+                    {
+                        return NodeResult.Fail("直线1" + error1);
+                    }
+                    if (!XldLineHelper.TryGetLine(input2, 0, out double r3, out double c3, out double r4, out double c4, out string error2))
+                    {
+                        return NodeResult.Fail("直线2" + error2);
+                    }
+                    HOperatorSet.IntersectionLines(r1, c1, r2, c2, r3, c3, r4, c4, out rows, out columns, out overlap);
+                    label = "线线交点";
+                    break;
             }
-            HOperatorSet.SelectObj(line, out HObject first, 1);
-            try
+
+            int overlapValue = 0;
+            for (int i = 0; i < overlap.Length; i++)
             {
-                HOperatorSet.GetContourXld(first, out HTuple rows, out HTuple cols);
-                if (rows.Length < 2)
-                {
-                    error = " 轮廓点数不足 2 个";
-                    return false;
-                }
-                if (rows.Length == 2)
-                {
-                    row1 = rows[0];
-                    col1 = cols[0];
-                    row2 = rows[1];
-                    col2 = cols[1];
-                    return true;
-                }
-                HOperatorSet.FitLineContourXld(first, "tukey", -1, 0, 5, 2,
-                    out row1, out col1, out row2, out col2, out _, out _, out _);
-                if (row1.Length == 0)
-                {
-                    error = " 直线拟合失败";
-                    return false;
-                }
-                return true;
+                overlapValue = Math.Max(overlapValue, overlap[i].I);
             }
-            finally
+            List<double> rowList = HalconTupleConvert.ToDoubles(rows).ToList();
+            List<double> columnList = HalconTupleConvert.ToDoubles(columns).ToList();
+            bool found = rowList.Count > 0 && rowList.Count == columnList.Count;
+            if (!found)
             {
-                first.Dispose();
+                rowList.Clear();
+                columnList.Clear();
             }
+
+            HObject cross = XldLineHelper.Crosses(rowList, columnList);
+            SetOutput(ctx, Variable.Object(ModuleName, "Xld", new HalconXld(cross), rowList.Count));
+            SetOutput(ctx, Variable.Single(ModuleName, "Row", VariableType.Double, found ? rowList[0] : double.NaN));
+            SetOutput(ctx, Variable.Single(ModuleName, "Column", VariableType.Double, found ? columnList[0] : double.NaN));
+            SetOutput(ctx, Variable.Single(ModuleName, "Overlap", VariableType.Int, overlapValue));
+            SetOutput(ctx, Variable.Single(ModuleName, "Found", VariableType.Bool, found));
+            SetOutput(ctx, Variable.Array(ModuleName, "Rows", VariableType.Double, rowList));
+            SetOutput(ctx, Variable.Array(ModuleName, "Columns", VariableType.Double, columnList));
+            SetOutput(ctx, Variable.Single(ModuleName, "Count", VariableType.Int, rowList.Count));
+            if (!found)
+            {
+                string reason = Mode == IntersectionMode.LineLine
+                    ? (overlapValue != 0 ? "两条直线重合" : "两条直线平行") + "，无唯一交点"
+                    : (overlapValue != 0 ? "存在重合部分，没有离散交点" : "没有交点");
+                return NotFoundOutcome.Resolve(ctx, this, $"[{label}] {reason}");
+            }
+            ctx.AddLog(FlowLogLevel.Info, Mode == IntersectionMode.LineLine
+                ? $"[线线交点] Row={rowList[0]:F2}, Column={columnList[0]:F2}, Overlap={overlapValue}"
+                : $"[{label}] {rowList.Count} 个交点，第一个 Row={rowList[0]:F2}, Column={columnList[0]:F2}");
+            return NodeResult.Ok;
         }
     }
 

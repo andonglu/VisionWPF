@@ -177,14 +177,22 @@ namespace VisionFlow.Editing
                 new ToolNode(new XldFeaturesTool(NextModuleName("XLD特征")))));
             Register(new ToolboxItem("region-to-xld", "04 XLD轮廓", "Region 转 XLD", () =>
                 new ToolNode(new RegionToXldTool(NextModuleName("Region转XLD")))));
+            Register(new ToolboxItem("xld-process", "04 XLD轮廓", "XLD 处理", () =>
+                new ToolNode(new XldProcessTool(NextModuleName("XLD处理")))));
             Register(new ToolboxItem("fit-line", "05 几何测量", "拟合直线", () =>
                 new ToolNode(new FitLineTool(NextModuleName("拟合直线")))));
             Register(new ToolboxItem("fit-circle", "05 几何测量", "拟合圆", () =>
                 new ToolNode(new FitCircleTool(NextModuleName("拟合圆")))));
-            Register(new ToolboxItem("intersection-lines", "05 几何测量", "线线交点", () =>
-                new ToolNode(new IntersectionLinesTool(NextModuleName("线线交点")))));
+            Register(new ToolboxItem("intersection-lines", "05 几何测量", "交点计算", () =>
+                new ToolNode(new IntersectionLinesTool(NextModuleName("交点计算")))));
             Register(new ToolboxItem("region-distance", "05 几何测量", "区域距离", () =>
                 new ToolNode(new RegionDistanceTool(NextModuleName("区域距离")))));
+            Register(new ToolboxItem("fit-ellipse-rect", "05 几何测量", "拟合椭圆/矩形", () =>
+                new ToolNode(new FitEllipseRectTool(NextModuleName("拟合椭圆矩形")))));
+            Register(new ToolboxItem("contour-distance", "05 几何测量", "轮廓距离", () =>
+                new ToolNode(new ContourDistanceTool(NextModuleName("轮廓距离")))));
+            Register(new ToolboxItem("geometry-relation", "05 几何测量", "几何关系测量", () =>
+                new ToolNode(new GeometryRelationTool(NextModuleName("几何关系")))));
             Register(new ToolboxItem("affine-point", "05 几何测量", "图像坐标转世界坐标", () =>
                 new ToolNode(new AffinePointTool(NextModuleName("坐标转换")))));
             Register(new ToolboxItem("angle-convert", "05 几何测量", "角度换算(弧度/角度)", () =>

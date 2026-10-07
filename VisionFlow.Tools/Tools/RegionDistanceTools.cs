@@ -254,8 +254,8 @@ namespace VisionFlow.Tools
             return values.Count > 0 ? values[0] : double.NaN;
         }
 
-        /// <summary>读取单值或数组引用为数值列表。</summary>
-        private static List<double> ReadNumbers(FlowContext ctx, string path, string what)
+        /// <summary>读取单值或数组引用为数值列表（区域距离、轮廓距离、几何关系测量共用）。</summary>
+        internal static List<double> ReadNumbers(FlowContext ctx, string path, string what)
         {
             object raw = VariableReference.Parse(path).Resolve(ctx);
             IEnumerable<object> items = raw is IEnumerable enumerable && !(raw is string)
