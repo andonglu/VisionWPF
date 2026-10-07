@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using HalconDotNet;
@@ -72,7 +73,7 @@ namespace VisionFlow.Tools
             {
                 yield return new ToolConfigurationIssue(nameof(MinScore), "最低得分必须在 0 到 1 之间");
             }
-            if (NumInstances < 1)
+            if (ExposesNumInstances && NumInstances < 1)
             {
                 yield return new ToolConfigurationIssue(nameof(NumInstances), "实例数必须大于 0");
             }
@@ -84,7 +85,19 @@ namespace VisionFlow.Tools
 
         public virtual bool IsParameterVisible(string propertyName)
         {
+            if (propertyName == nameof(NumInstances))
+            {
+                return ExposesNumInstances;
+            }
             return propertyName != nameof(MeasureDistance) || NumMeasures <= 0;
+        }
+
+        /// <summary>
+        /// 是否向使用者开放实例数（找角固定每条边只取第一个实例，不开放）；不开放时模型中按 1 个实例设置，界面与侧栏隐藏该参数。
+        /// </summary>
+        public virtual bool ExposesNumInstances
+        {
+            get { return true; }
         }
 
         /// <summary>参数配置错误时返回失败结果，否则返回 null。</summary>
@@ -113,29 +126,43 @@ namespace VisionFlow.Tools
                 values = values.TupleConcat(MeasureDistance);
             }
             names = names.TupleConcat("min_score").TupleConcat("num_instances").TupleConcat("distance_threshold").TupleConcat("measure_interpolation");
-            values = values.TupleConcat(MinScore).TupleConcat(NumInstances).TupleConcat(DistanceThreshold).TupleConcat(MeasureInterpolation.ToString());
+            values = values.TupleConcat(MinScore).TupleConcat(ExposesNumInstances ? NumInstances : 1).TupleConcat(DistanceThreshold).TupleConcat(MeasureInterpolation.ToString());
         }
 
         /// <summary>
-        /// 执行 metrology 模型，返回第 0 个对象全部实例的结果参数（按实例首尾相接）与结果轮廓（轮廓归调用方释放）。
-        /// 同时记录本测量项的边缘点；至少得到一个完整实例时记录各实例的参数与得分（归属当前 SeedIndex）。
+        /// 执行 metrology 模型并读取第 0 个对象（单对象工具：直线 / 矩形 / 圆 / 椭圆测量），见 <see cref="ReadMetrologyObject"/>。
         /// </summary>
         protected HTuple ApplyMetrology(HObject image, HTuple metrology, out HObject contour)
         {
-            HOperatorSet.ApplyMetrologyModel(image, metrology);
-            HOperatorSet.GetMetrologyObjectResult(metrology, 0, "all", "result_type", "all_param", out HTuple param);
-            HOperatorSet.GetMetrologyObjectResultContour(out contour, metrology, "all", "all", 1.5);
+            RunMetrology(image, metrology);
+            return ReadMetrologyObject(metrology, 0, InstanceOutputNames.Length, out contour);
+        }
 
-            HOperatorSet.GetMetrologyObjectMeasures(out HObject measureRegions, metrology, "all", "all", out HTuple rows, out HTuple columns);
+        /// <summary>只执行 metrology 模型（apply_metrology_model），每个测量项执行一次；之后按对象序号逐个读取。</summary>
+        protected static void RunMetrology(HObject image, HTuple metrology)
+        {
+            HOperatorSet.ApplyMetrologyModel(image, metrology);
+        }
+
+        /// <summary>
+        /// 读取第 index 个对象全部实例的结果参数（按实例首尾相接，每个实例 paramsPerInstance 个）与该对象的结果轮廓（归调用方释放）。
+        /// 同时累积该对象的边缘点；得到完整实例时累积各实例的参数与得分（归属当前 SeedIndex）。单值 Score 取对象 0 的第一个实例。
+        /// </summary>
+        protected HTuple ReadMetrologyObject(HTuple metrology, int index, int paramsPerInstance, out HObject contour)
+        {
+            HOperatorSet.GetMetrologyObjectResult(metrology, index, "all", "result_type", "all_param", out HTuple param);
+            HOperatorSet.GetMetrologyObjectResultContour(out contour, metrology, index, "all", 1.5);
+
+            HOperatorSet.GetMetrologyObjectMeasures(out HObject measureRegions, metrology, index, "all", out HTuple rows, out HTuple columns);
             measureRegions.Dispose();
             _pointRows.AddRange(HalconTupleConvert.ToDoubles(rows));
             _pointColumns.AddRange(HalconTupleConvert.ToDoubles(columns));
 
-            int perInstance = InstanceOutputNames.Length;
+            int perInstance = Math.Max(1, paramsPerInstance);
             int instances = param.Length / perInstance;
             if (instances > 0)
             {
-                HOperatorSet.GetMetrologyObjectResult(metrology, 0, "all", "result_type", "score", out HTuple scores);
+                HOperatorSet.GetMetrologyObjectResult(metrology, index, "all", "result_type", "score", out HTuple scores);
                 for (int i = 0; i < instances; i++)
                 {
                     var values = new double[perInstance];
@@ -147,7 +174,10 @@ namespace VisionFlow.Tools
                     _instanceScores.Add(i < scores.Length ? scores[i].D : double.NaN);
                     _instanceSeeds.Add(SeedIndex);
                 }
-                _lastFirstScore = scores.Length > 0 ? scores[0].D : double.NaN;
+                if (index == 0)
+                {
+                    _lastFirstScore = scores.Length > 0 ? scores[0].D : double.NaN;
+                }
             }
             return param;
         }

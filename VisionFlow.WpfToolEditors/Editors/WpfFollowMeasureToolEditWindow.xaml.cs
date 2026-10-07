@@ -47,6 +47,10 @@ namespace VisionFlow.WpfToolEditors.Editors
             DrawRoiButton.Content = "绘制/重绘" + GetShapeName(tool) + "基准";
             InitializeFields();
             TeachRoiEditor.Rois.Changed += (s, e) => UpdateCaliperOverlay();
+            if (tool is GrayProjectionFollowTool)
+            {
+                ProfileChart.SizeChanged += (s, e) => UpdateProfileChart(FindBaseRoi() as Rectangle2Roi);
+            }
             LoadBaseRoi();
             TryShowTeachImage();
             ShowLastRunResult();
@@ -93,6 +97,21 @@ namespace VisionFlow.WpfToolEditors.Editors
             AddItems(SelectCombo, "all", "first", "last");
             SelectCombo.Text = _tool.MeasureSelect;
             FailWhenNotFoundCheck.IsChecked = _tool.FailWhenNotFound;
+            if (_tool is GrayProjectionFollowTool projection)
+            {
+                // 灰度投影不找边缘：卡尺长度、边缘阈值、极性、选择等参数与它无关
+                foreach (UIElement element in new UIElement[]
+                         {
+                             MeasureLength1Label, MeasureLength1Text, MeasureLength2Label, MeasureLength2Text, MeasureSigmaLabel, MeasureSigmaText,
+                             MeasureThresholdLabel, MeasureThresholdText, TransitionLabel, TransitionCombo, SelectLabel, SelectCombo
+                         })
+                {
+                    element.Visibility = Visibility.Collapsed;
+                }
+                ProjectionPanel.Visibility = Visibility.Visible;
+                SmoothText.Value = projection.Smooth;
+                FailWhenNotFoundCheck.Content = "测量矩形超出图像时失败（取消后输出 Found=false 并继续）";
+            }
             if (_tool is MetrologyMeasureToolBase metrology)
             {
                 // 一维卡尺类工具不走 metrology，没有高级参数
@@ -258,7 +277,8 @@ namespace VisionFlow.WpfToolEditors.Editors
 
         private void ImagePathCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
-            TryShowTeachImage();
+            // SelectionChanged 时可编辑下拉框的 Text 尚未更新为新选项，等选择生效后再取图
+            Dispatcher.BeginInvoke(new Action(TryShowTeachImage));
         }
 
         private void TeachModeCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -283,6 +303,20 @@ namespace VisionFlow.WpfToolEditors.Editors
 
         private void DrawRoi_Click(object sender, RoutedEventArgs e)
         {
+            if (_tool is CornerFindTool)
+            {
+                // 找角依次画两条边：已有两条时重新开始；第一条为边 1，第二条为边 2
+                if (CornerRois().Count >= 2)
+                {
+                    TeachRoiEditor.Rois.Clear();
+                    TeachRoiEditor.ClearOverlay();
+                }
+                TeachRoiEditor.BeginAddRoi(RoiKind.Line);
+                StatusText.Text = CornerRois().Count == 0
+                    ? "请在图像上点击放置边 1（再点一次“绘制”放置边 2），拖动端点调整。"
+                    : "请在图像上点击放置边 2，拖动端点调整。";
+                return;
+            }
             TeachRoiEditor.Rois.Clear();
             TeachRoiEditor.ClearOverlay();
             TeachRoiEditor.BeginAddRoi(GetRoiKind(_tool));
@@ -360,6 +394,10 @@ namespace VisionFlow.WpfToolEditors.Editors
                 if (image != null && image.IsInitialized())
                 {
                     TeachRoiEditor.ShowImage(image);
+                    if (_tool is GrayProjectionFollowTool)
+                    {
+                        UpdateProfileChart(FindBaseRoi() as Rectangle2Roi);
+                    }
                 }
             }
             catch (Exception ex)
@@ -388,7 +426,10 @@ namespace VisionFlow.WpfToolEditors.Editors
         private void LoadBaseRoi()
         {
             TeachRoiEditor.Rois.Clear();
-            TeachRoiEditor.Rois.Add(CreateBaseRoi());
+            foreach (RoiShape roi in CreateBaseRois())
+            {
+                TeachRoiEditor.Rois.Add(roi);
+            }
             UpdateCaliperOverlay();
         }
 
@@ -399,19 +440,33 @@ namespace VisionFlow.WpfToolEditors.Editors
                 return;
             }
 
-            RoiShape roi = CreateBaseRoi();
-            if (IsCurrentTeachMode())
-            {
-                HomMat2D pose = ResolveMatrix(TeachPosePathCombo.Text);
-                if (pose != null)
-                {
-                    roi = TransformRoi(roi, pose);
-                }
-            }
-
+            HomMat2D pose = IsCurrentTeachMode() ? ResolveMatrix(TeachPosePathCombo.Text) : null;
             TeachRoiEditor.Rois.Clear();
-            TeachRoiEditor.Rois.Add(roi);
+            foreach (RoiShape roi in CreateBaseRois())
+            {
+                TeachRoiEditor.Rois.Add(pose != null ? TransformRoi(roi, pose) : roi);
+            }
             UpdateCaliperOverlay();
+        }
+
+        /// <summary>示教基准 ROI：找角为两条边（边1、边2），其余工具一个。</summary>
+        private List<RoiShape> CreateBaseRois()
+        {
+            if (_tool is CornerFindTool corner)
+            {
+                return new List<RoiShape>
+                {
+                    new LineRoi("边1", corner.TeachLine1Row1, corner.TeachLine1Column1, corner.TeachLine1Row2, corner.TeachLine1Column2),
+                    new LineRoi("边2", corner.TeachLine2Row1, corner.TeachLine2Column1, corner.TeachLine2Row2, corner.TeachLine2Column2)
+                };
+            }
+            return new List<RoiShape> { CreateBaseRoi() };
+        }
+
+        /// <summary>找角的两条边：按 ROI 列表顺序取前两条直线 ROI。</summary>
+        private List<LineRoi> CornerRois()
+        {
+            return TeachRoiEditor.Rois.Items.OfType<LineRoi>().Take(2).ToList();
         }
 
         private RoiShape CreateBaseRoi()
@@ -428,6 +483,10 @@ namespace VisionFlow.WpfToolEditors.Editors
             {
                 return new Rectangle2Roi("基准卡尺", caliper.BaseRow, caliper.BaseColumn, caliper.BasePhi, caliper.BaseLength1, caliper.BaseLength2);
             }
+            if (_tool is GrayProjectionFollowTool projection)
+            {
+                return new Rectangle2Roi("投影矩形", projection.BaseRow, projection.BaseColumn, projection.BasePhi, projection.BaseLength1, projection.BaseLength2);
+            }
             if (_tool is ArcCaliperFollowMeasureTool arc)
             {
                 return new CircleRoi("基准圆弧", arc.BaseRow, arc.BaseColumn, arc.BaseRadius);
@@ -438,6 +497,10 @@ namespace VisionFlow.WpfToolEditors.Editors
 
         private bool SaveBaseRoi()
         {
+            if (_tool is CornerFindTool corner)
+            {
+                return SaveCornerRois(corner);
+            }
             RoiShape roi = FindBaseRoi();
             if (roi == null)
             {
@@ -489,8 +552,49 @@ namespace VisionFlow.WpfToolEditors.Editors
             return null;
         }
 
+        /// <summary>找角：前两条直线 ROI 依次写入边 1、边 2 的示教位置（当前图像示教时先按当前姿态反算回基准）。</summary>
+        private bool SaveCornerRois(CornerFindTool corner)
+        {
+            List<LineRoi> lines = CornerRois();
+            if (lines.Count < 2)
+            {
+                return false;
+            }
+            HomMat2D inverse = null;
+            if (IsCurrentTeachMode())
+            {
+                HomMat2D pose = ResolveMatrix(TeachPosePathCombo.Text);
+                if (pose == null)
+                {
+                    StatusText.Text = "当前图像示教必须选择可解析的当前姿态。";
+                    return false;
+                }
+                inverse = pose.Inverted();
+            }
+            LineRoi edge1 = inverse == null ? lines[0] : (LineRoi)TransformRoi(lines[0], inverse);
+            LineRoi edge2 = inverse == null ? lines[1] : (LineRoi)TransformRoi(lines[1], inverse);
+            corner.TeachLine1Row1 = edge1.Row1;
+            corner.TeachLine1Column1 = edge1.Column1;
+            corner.TeachLine1Row2 = edge1.Row2;
+            corner.TeachLine1Column2 = edge1.Column2;
+            corner.TeachLine2Row1 = edge2.Row1;
+            corner.TeachLine2Column1 = edge2.Column1;
+            corner.TeachLine2Row2 = edge2.Row2;
+            corner.TeachLine2Column2 = edge2.Column2;
+            return true;
+        }
+
         private void ApplyBaseRoi(RoiShape roi)
         {
+            if (_tool is GrayProjectionFollowTool projection && roi is Rectangle2Roi projectionRoi)
+            {
+                projection.BaseRow = projectionRoi.Row;
+                projection.BaseColumn = projectionRoi.Column;
+                projection.BasePhi = projectionRoi.Phi;
+                projection.BaseLength1 = projectionRoi.Length1;
+                projection.BaseLength2 = projectionRoi.Length2;
+                return;
+            }
             if (_tool is LineFollowMeasureTool line && roi is LineRoi lineRoi)
             {
                 line.BaseRow1 = lineRoi.Row1;
@@ -633,6 +737,10 @@ namespace VisionFlow.WpfToolEditors.Editors
                 arc.EndPhi = _endPhi.TextBox.Value;
                 arc.CaliperCount = Math.Max(1, (int)Math.Round(_caliperCount.TextBox.Value));
             }
+            else if (_tool is GrayProjectionFollowTool projection)
+            {
+                projection.Smooth = SmoothText.Value;
+            }
         }
 
         private static double ParseDouble(string text, string name)
@@ -658,6 +766,14 @@ namespace VisionFlow.WpfToolEditors.Editors
             else if (_tool is CircleFollowMeasureTool)
             {
                 ctx.SetVariable(Variable.Object(_tool.ModuleName, "Results", new List<CircleMeasureResult>(), 0));
+            }
+            else if (_tool is CornerFindTool)
+            {
+                ctx.SetVariable(Variable.Object(_tool.ModuleName, "Results", new List<CornerMeasureResult>(), 0));
+            }
+            else if (_tool is GrayProjectionFollowTool)
+            {
+                ctx.SetVariable(Variable.Object(_tool.ModuleName, "Results", new List<OneDProjectionResult>(), 0));
             }
             else
             {
@@ -699,12 +815,20 @@ namespace VisionFlow.WpfToolEditors.Editors
                 return;
             }
 
+            if (_tool is CornerFindTool)
+            {
+                UpdateCornerOverlay();
+                return;
+            }
+
             RoiShape roi = FindBaseRoi();
             if (roi == null)
             {
                 TeachRoiEditor.ClearOverlay();
+                UpdateProfileChart(null);
                 return;
             }
+            UpdateProfileChart(roi as Rectangle2Roi);
 
             try
             {
@@ -721,6 +845,91 @@ namespace VisionFlow.WpfToolEditors.Editors
             catch
             {
                 TeachRoiEditor.ClearOverlay();
+            }
+        }
+
+        /// <summary>找角：两条边各自的卡尺与模型线叠加显示。</summary>
+        private void UpdateCornerOverlay()
+        {
+            List<LineRoi> lines = CornerRois();
+            if (lines.Count == 0)
+            {
+                TeachRoiEditor.ClearOverlay();
+                return;
+            }
+            try
+            {
+                HOperatorSet.GenEmptyObj(out HObject overlay);
+                foreach (LineRoi line in lines)
+                {
+                    HObject preview = BuildLineMeasurePreview(line.Row1, line.Column1, line.Row2, line.Column2,
+                        MeasureLength1Text.Value, MeasureLength2Text.Value, MeasureSigmaText.Value, MeasureThresholdText.Value);
+                    HOperatorSet.ConcatObj(overlay, preview, out HObject joined);
+                    overlay.Dispose();
+                    preview.Dispose();
+                    overlay = joined;
+                }
+                try
+                {
+                    TeachRoiEditor.SetOverlay(overlay);
+                }
+                finally
+                {
+                    overlay.Dispose();
+                }
+            }
+            catch
+            {
+                TeachRoiEditor.ClearOverlay();
+            }
+        }
+
+        /// <summary>
+        /// 灰度投影：按当前测量矩形（示教图像坐标）与平滑系数在示教图像上计算曲线并画成 Polyline（与运行时同一算法），随 ROI 与参数刷新。
+        /// </summary>
+        private void UpdateProfileChart(Rectangle2Roi rect)
+        {
+            if (!(_tool is GrayProjectionFollowTool) || ProfileLine == null)
+            {
+                return;
+            }
+            ProfileLine.Points.Clear();
+            DerivativeLine.Points.Clear();
+            HObject image = TeachRoiEditor.CurrentImage;
+            if (rect == null || image == null)
+            {
+                ProfileSummaryText.Text = image == null ? "没有示教图像，无法显示曲线。" : "请先绘制投影矩形。";
+                return;
+            }
+            try
+            {
+                if (!GrayProjectionFollowTool.TryComputeProfile(image, rect.Row, rect.Column, rect.Phi, rect.Length1, rect.Length2,
+                        SmoothText.Value, out double[] profile, out double[] derivative, out string error))
+                {
+                    ProfileSummaryText.Text = "曲线：" + error;
+                    return;
+                }
+                double width = ProfileChart.ActualWidth > 4 ? ProfileChart.ActualWidth - 2 : 330;
+                double height = ProfileChart.Height - 2;
+                double maxSlope = Math.Max(1e-9, derivative.Select(Math.Abs).DefaultIfEmpty(0).Max());
+                for (int i = 0; i < profile.Length; i++)
+                {
+                    double x = profile.Length == 1 ? 0 : width * i / (profile.Length - 1);
+                    ProfileLine.Points.Add(new Point(x, height - Math.Max(0, Math.Min(255, profile[i])) / 255.0 * height));
+                    if (i < derivative.Length)
+                    {
+                        DerivativeLine.Points.Add(new Point(x, height / 2 - derivative[i] / maxSlope * height / 2 * 0.9));
+                    }
+                }
+                int minPosition = Array.IndexOf(profile, profile.Min());
+                int maxPosition = Array.IndexOf(profile, profile.Max());
+                ProfileSummaryText.Text = string.Format(CultureInfo.InvariantCulture,
+                    "曲线 {0} 点：最小 {1:F2}（序号 {2}），最大 {3:F2}（序号 {4}），均值 {5:F2}；虚线为一阶导数。",
+                    profile.Length, profile[minPosition], minPosition, profile[maxPosition], maxPosition, profile.Average());
+            }
+            catch (HalconException ex)
+            {
+                ProfileSummaryText.Text = "曲线计算失败：" + ex.Message;
             }
         }
 
@@ -743,7 +952,7 @@ namespace VisionFlow.WpfToolEditors.Editors
             }
             else if (roi is Rectangle2Roi rect)
             {
-                if (_tool is OneDCaliperFollowMeasureTool)
+                if (_tool is OneDCaliperFollowMeasureTool || _tool is GrayProjectionFollowTool)
                 {
                     AppendCaliper(ref rows, ref columns, ref phis, ref length1, ref length2,
                         rect.Row, rect.Column, rect.Phi, rect.Length1, rect.Length2);
@@ -873,14 +1082,16 @@ namespace VisionFlow.WpfToolEditors.Editors
 
         private static RoiKind GetRoiKind(FollowMeasureToolBase tool)
         {
-            if (tool is LineFollowMeasureTool) return RoiKind.Line;
-            if (tool is RectangleFollowMeasureTool || tool is OneDCaliperFollowMeasureTool) return RoiKind.Rectangle2;
+            if (tool is LineFollowMeasureTool || tool is CornerFindTool) return RoiKind.Line;
+            if (tool is RectangleFollowMeasureTool || tool is OneDCaliperFollowMeasureTool || tool is GrayProjectionFollowTool) return RoiKind.Rectangle2;
             return RoiKind.Circle;
         }
 
         private static string GetTitle(FollowMeasureToolBase tool)
         {
             if (tool is LineFollowMeasureTool) return "直线测量";
+            if (tool is CornerFindTool) return "找角";
+            if (tool is GrayProjectionFollowTool) return "灰度投影";
             if (tool is OneDCaliperFollowMeasureTool) return "一维卡尺测量";
             if (tool is ArcCaliperFollowMeasureTool) return "一维圆弧卡尺测量";
             if (tool is RectangleFollowMeasureTool) return "矩形测量";
@@ -891,6 +1102,8 @@ namespace VisionFlow.WpfToolEditors.Editors
         private static string GetShapeName(FollowMeasureToolBase tool)
         {
             if (tool is LineFollowMeasureTool) return "直线";
+            if (tool is CornerFindTool) return "两条边";
+            if (tool is GrayProjectionFollowTool) return "投影矩形";
             if (tool is OneDCaliperFollowMeasureTool) return "卡尺";
             if (tool is ArcCaliperFollowMeasureTool) return "圆弧卡尺";
             if (tool is RectangleFollowMeasureTool) return "矩形";

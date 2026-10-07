@@ -19,6 +19,7 @@ namespace VisionFlow.WpfToolEditors.Controls
         private readonly TextBox _distanceThreshold = new TextBox();
         private readonly ComboBox _interpolation = new ComboBox();
         private readonly TextBlock _measureDistanceLabel;
+        private readonly TextBlock _numInstancesLabel;
 
         public MetrologyAdvancedExpander()
         {
@@ -30,7 +31,7 @@ namespace VisionFlow.WpfToolEditors.Controls
             AddField(panel, "卡尺数（0 = 按间距）", _numMeasures, "卡尺数量；0 表示不设置，按卡尺间距布置");
             _measureDistanceLabel = AddField(panel, "卡尺间距", _measureDistance, "相邻卡尺中心的间距（像素），仅卡尺数为 0 时使用");
             AddField(panel, "最低得分", _minScore, "实例的最低得分（有效边缘点占比，0 ~ 1）");
-            AddField(panel, "实例数", _numInstances, "最多查找的实例数，如两条平行直线设为 2");
+            _numInstancesLabel = AddField(panel, "实例数", _numInstances, "最多查找的实例数，如两条平行直线设为 2");
             AddField(panel, "距离阈值", _distanceThreshold, "边缘点到拟合几何的最大距离（像素），超过视为离群点");
             _interpolation.ItemsSource = Enum.GetNames(typeof(MetrologyInterpolation));
             AddField(panel, "插值方式", _interpolation, "卡尺灰度插值方式");
@@ -72,6 +73,10 @@ namespace VisionFlow.WpfToolEditors.Controls
             _numInstances.Text = tool.NumInstances.ToString(CultureInfo.InvariantCulture);
             _distanceThreshold.Text = Format(tool.DistanceThreshold);
             _interpolation.SelectedItem = tool.MeasureInterpolation.ToString();
+            // 找角每条边固定只取第一个实例，不开放实例数
+            Visibility instances = tool.ExposesNumInstances ? Visibility.Visible : Visibility.Collapsed;
+            _numInstancesLabel.Visibility = instances;
+            _numInstances.Visibility = instances;
             UpdateMeasureDistanceVisibility();
         }
 
@@ -81,7 +86,10 @@ namespace VisionFlow.WpfToolEditors.Controls
             tool.NumMeasures = ParseInt(_numMeasures.Text, "卡尺数");
             tool.MeasureDistance = ParseDouble(_measureDistance.Text, "卡尺间距");
             tool.MinScore = ParseDouble(_minScore.Text, "最低得分");
-            tool.NumInstances = ParseInt(_numInstances.Text, "实例数");
+            if (tool.ExposesNumInstances)
+            {
+                tool.NumInstances = ParseInt(_numInstances.Text, "实例数");
+            }
             tool.DistanceThreshold = ParseDouble(_distanceThreshold.Text, "距离阈值");
             tool.MeasureInterpolation = (MetrologyInterpolation)Enum.Parse(typeof(MetrologyInterpolation),
                 (_interpolation.SelectedItem as string) ?? nameof(MetrologyInterpolation.nearest_neighbor));

@@ -108,6 +108,10 @@ namespace VisionFlow.Editing
                 new ToolNode(new OneDCaliperFollowMeasureTool(NextModuleName("一维卡尺")))));
             Register(new ToolboxItem("measure-arc-caliper1d", "05 几何测量", "一维圆弧卡尺测量", () =>
                 new ToolNode(new ArcCaliperFollowMeasureTool(NextModuleName("圆弧卡尺")))));
+            Register(new ToolboxItem("corner-find", "05 几何测量", "找角", () =>
+                new ToolNode(new CornerFindTool(NextModuleName("找角")))));
+            Register(new ToolboxItem("gray-projection", "05 几何测量", "灰度投影", () =>
+                new ToolNode(new GrayProjectionFollowTool(NextModuleName("灰度投影")))));
             Register(new ToolboxItem("measurerectangle", "05 几何测量", "矩形测量", () =>
                 new ToolNode(new RectangleFollowMeasureTool(NextModuleName("矩形测量")))));
             Register(new ToolboxItem("measurecircle", "05 几何测量", "圆形测量", () =>

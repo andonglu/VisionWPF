@@ -1,7 +1,7 @@
 # 定位匹配与几何测量补充开发计划
 
 编写日期：2026-10-06
-状态：第一批 MT-01 / MS-01 已实现（分支 `feature/match-measure-batch1`，见第 10 节）；第二批 MS-02 / MS-07（Fixed）已实现并修复第一批“执行测试”回归（分支 `feature/match-measure-batch2`，见第 11 节）；第三批 MT-02 / MT-03 已实现（分支 `feature/match-measure-batch3`，见第 12、13 节）；其余各项待开发，动工前各做一次小评审。
+状态：第一批 MT-01 / MS-01 已实现（分支 `feature/match-measure-batch1`，见第 10 节）；第二批 MS-02 / MS-07（Fixed）已实现并修复第一批“执行测试”回归（分支 `feature/match-measure-batch2`，见第 11 节）；第三批 MT-02 / MT-03 已实现（分支 `feature/match-measure-batch3`，见第 12、13 节）；第四批 MS-06（找角）/ MS-05（灰度投影）已实现（分支 `feature/match-measure-batch4`，见第 14、15 节）；其余各项待开发，动工前各做一次小评审。
 范围：工具箱“01 定位匹配”和“05 几何测量”中的模板匹配类、测量类工具（`HalconTools.cs`、`DescriptorMatchTools.cs`、`MeasureTools.cs`、`FollowMeasureTools.cs`、`AngleTools.cs`），以及新增的差分检测。
 HALCON 版本基线：**22.11 及以上**（第三批起）。原文写“通用形状模型是 20.11 引入的算子”有误：`create_generic_shape_model` 等算子不在 20.11 中，仓库原先引用的 `halcondotnet.dll` 20.11.1 没有这些方法；第三批经使用方确认把编译引用换成 22.11.1（`HALCON-22.11-Steady\bin\dotnet35\halcondotnet.dll`），整个应用的最低 HALCON 版本随之提高到 22.11（见第 12 节）。
 关联文档：
@@ -403,6 +403,16 @@ HALCON 版本基线：**22.11 及以上**（第三批起）。原文写“通用
 
 - 编辑窗口：在现有跟随测量窗口中增加曲线显示区（WPF `Polyline` 即可），曲线随参数实时刷新。
 
+**实现说明（第四批已完成）**
+
+- 类型：`GrayProjectionFollowTool`（`GrayProjectionTools.cs`）与新结果类型 `OneDProjectionResult`（Index、Followed、测量矩形、Profile、Derivative、MinGray / MaxGray / MeanGray / MinPosition / MaxPosition）；`Results` 元素类型为 `List<OneDProjectionResult>`，与卡尺的边缘点结果分开。
+- 曲线约定（22.11 实测，见第 14 节）：沿测量矩形长轴（Length1 方向，即 Phi 方向）从“中心 − Length1”到“中心 + Length1”逐像素采样，共 floor(2·Length1)+1 点，每点为 Length2 宽度上的平均灰度；Phi 加 π 时曲线反向。`MinPosition` / `MaxPosition` 为该方向的采样序号（0 起，多处相同取第一个）。
+- `Smooth = 0` 不调用 `smooth_funct_1d_gauss`；> 0 时平滑，σ 相对曲线过大时 HALCON 报 #3022（101 点约 σ ≤ 12.8，约为 (点数 − 1) / 8），转成“平滑系数 … 相对曲线长度过大”的中文错误。`Derivative` 为（平滑后）曲线的 `derivate_funct_1d` 一阶导数。平坦（全零 / 常数）曲线平滑与求导都不产生 NaN。
+- 出界：`measure_projection` 对图像外像素按 0 计入且不报错，工具检查测量矩形四个角都在图像内，出界的矩阵按该项未找到（`FailedCount` 计数、日志警告），不拖垮其他矩阵；全部出界按 `FailWhenNotFound` 处理，输出空数组、NaN 与 -1。
+- 多定位矩阵：每个矩阵一条曲线进入 `Results`（`Index` 沿用测量基类约定：未配置结果序号时为成功测量的序号），`Profile` 等单值取最后一次成功的测量。
+- 校验：`Smooth < 0`、测量矩形半长 < 1、半宽 ≤ 0 报流程校验错误（运行时同样拒绝）；卡尺边缘参数（卡尺长度、Sigma、阈值、极性、选择）与投影无关，侧栏与窗口都隐藏。
+- 编辑窗口：沿用 `WpfFollowMeasureToolEditWindow`，ROI 为旋转矩形；新增“曲线平滑”与曲线区（`Polyline` 画曲线、虚线画导数，纵轴 0 ~ 255），下方摘要给出点数、最小 / 最大值及序号、均值；曲线用与运行时相同的 `TryComputeProfile` 在示教图像上计算，随 ROI 拖动、平滑系数与图像切换即时刷新。
+
 ### MS-06 找角（新工具）
 
 **定位**
@@ -412,8 +422,9 @@ HALCON 版本基线：**22.11 及以上**（第三批起）。原文写“通用
 
 **参数**
 
-- 两条边的示教位置：`Line1Row1` / `Line1Column1` / `Line1Row2` / `Line1Column2`，`Line2Row1` / `Line2Column1` / `Line2Row2` / `Line2Column2`。
+- 两条边的示教位置：`TeachLine1Row1` / `TeachLine1Column1` / `TeachLine1Row2` / `TeachLine1Column2`，`TeachLine2Row1` / `TeachLine2Column1` / `TeachLine2Row2` / `TeachLine2Column2`（原计划命名 `Line1Row1` 等与输出同名，按第四批评审 B4-1-1 改名）。
 - 其他测量参数继承 `MetrologyMeasureToolBase`（MS-01）。
+- 多实例本批固定：每条边只取第一个实例求交点，`num_instances` 对找角固定为 1，界面与侧栏不显示实例数；`Scores` 依次输出两条边的得分。多实例 × 多交点组合待有现场需求再立项（第四批评审 B4-1-3）。
 
 **输出**
 
@@ -426,6 +437,14 @@ HALCON 版本基线：**22.11 及以上**（第三批起）。原文写“通用
 
 - 两条边平行（夹角小于 0.5°）时无交点，按“未找到”处理。
 - 编辑窗口：在现有直线测量窗口基础上支持绘制两条线。
+
+**实现说明（第四批已完成）**
+
+- 基类重构（评审 B4-1-2）：`MetrologyMeasureToolBase.ApplyMetrology` 拆成 `RunMetrology`（只执行 `apply_metrology_model`）与 `ReadMetrologyObject(index, 每实例参数个数)`（按对象读取参数、结果轮廓与边缘点，累积实例 / 得分 / 种子；单值 `Score` 取对象 0 的第一个实例）；`ApplyMetrology` 保留为“执行 + 读对象 0”，4 个 metrology 工具经它调用。用例把拆分后 4 个工具的实例参数、`Scores`、`Score`、边缘点数与结果轮廓逐点对照拆分前的 `"all"` 读法，全部一致；两个卡尺工具不经过该路径，第二批的 `measure_pos` 对照用例照常通过。新增虚属性 `ExposesNumInstances`（默认开放），找角关闭后实例数按 1 传给模型、校验与显隐都跳过该参数。
+- 找角：同一 metrology 模型放两条直线，`RunMetrology` 一次，`ReadMetrologyObject(0/1)` 各一次（边缘点、得分、种子由基类累积，`MeasurePoints` 含两条边的边缘点，`InstanceCount` 每个测量项 2）；取两条边第一个实例的拟合端点，`angle_ll` 求夹角（弧度，从边 1 到边 2 逆时针为正，范围 [-π, π]），`intersection_lines` 求交点。`AngleDeg` 用 `AngleMath.ToDegrees`。
+- 退化：任一边没有完整实例、得分低于 `MinScore`、两边夹角或其补角小于 0.5°（`CornerFindTool.ParallelToleranceDeg`）、`intersection_lines` 返回空（平行 / 共线，22.11 实测）时该测量项失败，按 `FailWhenNotFound` 处理，全部失败时 `CornerRow` / `CornerColumn` / `Angle` / `AngleDeg` 等单值为 NaN、`Found = false`。
+- 输出：`CornerRow` / `CornerColumn` / `Angle` / `AngleDeg`、两条边端点 `Line1Row1` 等 8 个、`Score1` / `Score2`、`Found`、`FailedCount`、`Results`（新结果类型 `CornerMeasureResult`）、`ResultContour`（两条边的结果轮廓 + 交点十字），以及 metrology 基类的 `Score` / `Scores` / `InstanceCount` / `InstanceSeedIndices` / `MeasurePoints`。
+- 编辑窗口：没有新建专用窗口，沿用 `WpfFollowMeasureToolEditWindow`——示教 ROI 改为可放两条直线（“绘制/重绘两条边基准”依次放边 1、边 2，按 ROI 列表顺序取前两条直线），两条边的卡尺同时预览，当前图像示教时两条边一起按姿态反算；“高级参数”折叠区对找角隐藏实例数。改动只在 ROI 的创建 / 回显 / 保存 / 预览几处分支，不影响其他工具。
 
 ### MS-07 角度换算扩展为单位换算
 
@@ -617,3 +636,41 @@ HALCON 版本基线：**22.11 及以上**（第三批起）。原文写“通用
   2. 模板匹配示教页只显示 `Input.Image` 或图像文件，图像来自上游节点（如 `图像1.Image`）时示教页没有图像，XLD 建模测试与原点点选无法进行（既有限制，本批功能依赖它）。改为从上次运行结果解析上游图像引用。
   3. 通用形状匹配窗口应用原点后，列表刷新触发的选中事件立刻把“重新确定跟随基准”提示隐藏。改为只在选中的模板真正变化时清除示教结果与提示。
 - 说明：流程文件中的中文（含 `TemplateNamesCsv`）按现有序列化设置写成 `\uXXXX` 转义，名称为中文时在文件里不能直接阅读，这是既有行为，本批未改。验收期间 Lenovo 屏保（不响应模拟输入）遮住屏幕导致一次运行无效，由使用方解除后重跑。
+
+## 14. 第四批算子探测结论（MS-06 / MS-05）
+
+**探测环境**：HALCON 22.11 Steady（原生库与 .NET 库均为 22.11，见第 12 节）；部署到其他版本前需复核。
+
+| 问题 | 结论 |
+|---|---|
+| `intersection_lines` 平行时的返回值 | 没有专门的“平行”标志：两线平行不重合时 `Row` / `Column` 为空元组、`IsOverlapping = 0`；共线重合时同样为空、`IsOverlapping = 1`；近平行（0.3°）仍返回一个很远的交点（例中列 1909.8）。因此找角先按夹角（< 0.5°）判退化，再把空交点也视为平行 |
+| `angle_ll` 单位与范围 | 弧度，从直线 A 到直线 B 逆时针为正，范围 [-π, π]：A 向右、B 向上 = π/2；B 向下 = -π/2；方向相反 = -π；同向 = 0；B 左下 135° = -3π/4。结果与端点顺序（直线方向）有关，平行判定用夹角与其补角中较小者 |
+| `measure_projection` 采样方向与点数 | 沿测量矩形长轴（Length1 方向，即 Phi 方向）从“中心 − Length1”到“中心 + Length1”逐像素采样，Length2 为平均宽度：Length1 = 50 → 101 点、50.5 → 101 点、20 → 41 点（floor(2·Length1)+1）；Phi = π 时方向相反（从大列到小列）；Phi = π/2 时沿行方向 |
+| `measure_projection` 出界 | 测量矩形部分或全部在图像外时不报错，图像外的像素按 0 计入（完全出界得到全 0 曲线）；工具改为检查四个角是否在图像内 |
+| 平坦曲线的平滑与求导 | 全零、常数 128 的 101 点曲线经 `smooth_funct_1d_gauss`（σ = 2）与 `derivate_funct_1d` 后都没有 NaN（导数全 0）；线性曲线导数恒为 1 |
+| 平滑系数上限 | σ = 0 不报错（工具在 Smooth = 0 时不调用）；σ 过大报 #3022：101 点最大约 12.8、41 点约 5.1、11 点约 1.2（约为 (点数 − 1) / 8），3 点 σ = 1 即报错 |
+
+## 15. 第四批（MS-06 + MS-05）评审处理与验收记录
+
+**评审意见处理**（[MATCH-MEASURE-TOOLS-PLAN-REVIEW.md](MATCH-MEASURE-TOOLS-PLAN-REVIEW.md) 第四批评审意见）
+
+| 条目 | 处理 |
+|---|---|
+| B4-1-1 参数与输出同名 | 示教参数改名 `TeachLine1Row1` 等，输出保持 `Line1Row1` 等；第二批守卫测试与专门用例保持通过 |
+| B4-1-2 拆分 `ApplyMetrology` | `RunMetrology` + `ReadMetrologyObject(index, …)`；4 个 metrology 工具经对象 0 调用，全部输出与拆分前逐项一致（用例）；找角执行一次、按对象 0 / 1 读取，不另起执行路径 |
+| B4-1-3 多实例固定 | 每条边取第一个实例，实例数不开放（`ExposesNumInstances = false`），MS-06 条目已补充 |
+| B4-1-4 投影结果类型 | 新增 `OneDProjectionResult` |
+| B4-2-1 找角退化 | 平行（< 0.5°）、空交点、单边未找到、得分低于 `MinScore` 均按未找到，交点与角度为 NaN（用例覆盖平行与单边未找到，各含 `FailWhenNotFound` 两种取值） |
+| B4-2-2 角度约定 | `Angle` 为 `angle_ll` 原值（实测范围已注释），`AngleDeg` 用 `AngleMath.ToDegrees` |
+| B4-2-3 投影方向与平滑 | 见第 14 节；`Smooth = 0` 跳过平滑；`MinPosition` / `MaxPosition` 为长轴采样序号 |
+| B4-2-4 多矩阵 | 每个矩阵一条曲线，出界的矩阵按该项未找到，单值取最后一次成功 |
+| B4-2-5 编辑窗口 | 两个工具都沿用 `WpfFollowMeasureToolEditWindow`：灰度投影加曲线区（仅该工具显示、随参数刷新）；找角支持两条边的示教，未新建专用窗口（理由见 MS-06 实现说明） |
+| B4-2-6 新工具登记 | `BuiltinToolIdentities`（`corner-find`、`gray-projection`）、`ToolboxRegistry`（`05 几何测量 / 找角`、`灰度投影`）、`WpfToolEditorRouter`（两者都属于 `FollowMeasureToolBase`，由现有分支路由到跟随测量窗口，已加注释）、README、手绘图标 |
+| B4-2-7 回归门禁 | metrology 拆分对照用例 + 既有 4 个 metrology / 2 个卡尺兼容用例全部通过 |
+| B4-3 文档 | 头部状态、MS-05 / MS-06 实现说明、第 14 节探测结论、README |
+
+**验收结果**
+
+- 单元/集成测试：新增 `MatchMeasureBatch4Tests` 12 个用例（找角交点 / 夹角精度含旋转 10° 的矩形角、跟随与多矩阵、平行与单边未找到、实例数固定与基类输出、metrology 拆分回归、投影曲线与导数及反向、平滑与平坦曲线与平滑过大、多矩阵与出界、保存加载校验显隐、命名守卫、新工具登记），全量 `dotnet test`（`Category!=Soak`）853 个通过。找角实测：轴向矩形角交点误差 < 0.2 像素、夹角误差 < 0.1°；旋转 10° 的矩形角同样满足。
+- 界面验收：脚本经 Windows UI Automation 驱动真实的 `VisionFlow.WpfApp.exe`，31 项检查全部通过：工具箱 `05 几何测量` 新建找角、灰度投影；侧栏显隐（找角隐藏实例数，投影隐藏卡尺边缘参数）；找角窗口“高级参数”不含实例数，“绘制/重绘两条边基准”用真实鼠标点击放置两条边，并拖动边 2 的两个端点到左边缘上，执行测试结果表交点 (99.5, 99.5)、夹角 -90°；灰度投影窗口隐藏卡尺参数、显示曲线区，画好测量矩形后曲线即时显示（161 点，最小 30 在序号 80、最大 210 在序号 0），平滑改为 2 后曲线与摘要刷新；两个摘要与无界面对同一矩形的计算逐字一致，运行输出 `Profile` 与无界面计算逐项相同，编辑窗口结果表与无界面结果逐字一致；界面运行 25 个单值、7 个数组长度与无界面运行保存的文件逐字一致；找角交点误差 < 0.2 像素、夹角误差 < 0.1°；两种显示轮廓叠加在图像上；文件含两个固定 ID、`TeachLine*` 与平滑系数；重新加载后再运行逐字一致，两条边与平滑曲线回显一致。
+- 验证中发现并修复的应用问题：跟随测量窗口与模板匹配窗口的“示教图像”下拉选中上游图像（如 `图像1.Image`）时，`SelectionChanged` 读到的还是下拉框更新前的文字，示教图像不切换（既有问题，挡住了从上游图像示教两个新工具）。改为等选择生效后再取图（与第三批通用形状匹配窗口的写法一致）。

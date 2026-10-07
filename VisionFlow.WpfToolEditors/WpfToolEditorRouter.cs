@@ -36,7 +36,8 @@ namespace VisionFlow.WpfToolEditors
             {
                 return new WpfLoadImageToolEditWindow(loadImageTool);
             }
-            // 椭圆测量也派生自 FollowMeasureToolBase，须先于通用跟随测量窗口路由到专用窗口
+            // 椭圆测量也派生自 FollowMeasureToolBase，须先于通用跟随测量窗口路由到专用窗口；
+            // 找角（两条边）与灰度投影（测量矩形 + 曲线显示）走通用跟随测量窗口
             if (tool is EllipseFollowMeasureTool ellipseMeasureTool)
             {
                 return new WpfEllipseMeasureToolEditWindow(ellipseMeasureTool, context);

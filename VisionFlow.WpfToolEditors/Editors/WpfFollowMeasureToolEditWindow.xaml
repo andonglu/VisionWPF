@@ -55,20 +55,34 @@
                                     <ComboBox x:Name="InitRegionPathCombo" IsEditable="True" />
                                     <TextBlock Text="结果序号" Style="{StaticResource EditorFieldLabelStyle}" />
                                     <ComboBox x:Name="IndexPathCombo" IsEditable="True" />
-                                    <TextBlock Text="卡尺长度1" Style="{StaticResource EditorFieldLabelStyle}" />
+                                    <TextBlock x:Name="MeasureLength1Label" Text="卡尺长度1" Style="{StaticResource EditorFieldLabelStyle}" />
                                     <controls:NumericInputControl x:Name="MeasureLength1Text" Minimum="0.1" Maximum="500" Increment="1" DecimalPlaces="2" ValueChanged="MeasureParameter_ValueChanged" />
-                                    <TextBlock Text="卡尺长度2" Style="{StaticResource EditorFieldLabelStyle}" />
+                                    <TextBlock x:Name="MeasureLength2Label" Text="卡尺长度2" Style="{StaticResource EditorFieldLabelStyle}" />
                                     <controls:NumericInputControl x:Name="MeasureLength2Text" Minimum="0.1" Maximum="500" Increment="1" DecimalPlaces="2" ValueChanged="MeasureParameter_ValueChanged" />
-                                    <TextBlock Text="平滑 Sigma" Style="{StaticResource EditorFieldLabelStyle}" />
+                                    <TextBlock x:Name="MeasureSigmaLabel" Text="平滑 Sigma" Style="{StaticResource EditorFieldLabelStyle}" />
                                     <controls:NumericInputControl x:Name="MeasureSigmaText" Minimum="0" Maximum="100" Increment="0.1" DecimalPlaces="2" />
-                                    <TextBlock Text="边缘阈值" Style="{StaticResource EditorFieldLabelStyle}" />
+                                    <TextBlock x:Name="MeasureThresholdLabel" Text="边缘阈值" Style="{StaticResource EditorFieldLabelStyle}" />
                                     <controls:NumericInputControl x:Name="MeasureThresholdText" Minimum="0" Maximum="255" Increment="1" DecimalPlaces="2" />
                                     <TextBlock x:Name="EdgeModeLabel" Text="边缘模式" Style="{StaticResource EditorFieldLabelStyle}" />
                                     <ComboBox x:Name="EdgeModeCombo" SelectionChanged="EdgeModeCombo_SelectionChanged" />
-                                    <TextBlock Text="边缘极性" Style="{StaticResource EditorFieldLabelStyle}" />
+                                    <TextBlock x:Name="TransitionLabel" Text="边缘极性" Style="{StaticResource EditorFieldLabelStyle}" />
                                     <ComboBox x:Name="TransitionCombo" IsEditable="True" />
-                                    <TextBlock Text="边缘选择" Style="{StaticResource EditorFieldLabelStyle}" />
+                                    <TextBlock x:Name="SelectLabel" Text="边缘选择" Style="{StaticResource EditorFieldLabelStyle}" />
                                     <ComboBox x:Name="SelectCombo" IsEditable="True" />
+                                    <StackPanel x:Name="ProjectionPanel" Visibility="Collapsed">
+                                        <TextBlock Text="曲线平滑（0 = 不平滑）" Style="{StaticResource EditorFieldLabelStyle}" />
+                                        <controls:NumericInputControl x:Name="SmoothText" Minimum="0" Maximum="100" Increment="0.5" DecimalPlaces="2" ValueChanged="MeasureParameter_ValueChanged" />
+                                        <TextBlock Text="灰度曲线（沿测量矩形长轴，左 → 右为采样序号 0 → N−1；纵轴 0 ~ 255）" TextWrapping="Wrap" Style="{StaticResource EditorFieldLabelStyle}" />
+                                        <Border x:Name="ProfileChart" Height="150" BorderThickness="1" CornerRadius="4"
+                                                BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}" Background="{DynamicResource LayerFillColorDefaultBrush}">
+                                            <Canvas ClipToBounds="True">
+                                                <Polyline x:Name="DerivativeLine" Stroke="{DynamicResource TextFillColorSecondaryBrush}" StrokeThickness="1" StrokeDashArray="3 2" />
+                                                <Polyline x:Name="ProfileLine" Stroke="{DynamicResource AccentFillColorDefaultBrush}" StrokeThickness="1.6" />
+                                            </Canvas>
+                                        </Border>
+                                        <TextBlock x:Name="ProfileSummaryText" Margin="0,6,0,0" TextWrapping="Wrap"
+                                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                                    </StackPanel>
                                     <ContentControl x:Name="AdvancedHost" />
                                     <StackPanel x:Name="ArcSettingsPanel" />
                                     <CheckBox x:Name="FailWhenNotFoundCheck" Margin="0,12,0,0"

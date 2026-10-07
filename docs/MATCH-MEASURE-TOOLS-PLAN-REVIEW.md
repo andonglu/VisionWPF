@@ -137,3 +137,39 @@
 ## B3-4. 开工顺序确认
 
 第三批：MT-02 + MT-03。第四批候选：MS-06（找角）+ MS-05（灰度投影）；之后 MT-06（差分检测）；MT-05 / MT-04 / MS-03 / MS-04 与标定批（CB-01~07 + MS-07 Calibration）按现场需求排。
+
+---
+
+# 第四批评审意见（MS-06 + MS-05）
+
+评审日期：2026-10-07
+评审对象：计划 MS-06（找角新工具）、MS-05（灰度投影新工具）。
+评审方式：与第三批实现后的代码核对（`MetrologyMeasureTools.cs` 基类、`MeasureTools.cs` 跟随测量基类、第二批的输出可见性守卫测试）。
+评审结论：**可以开工，第四批 = MS-06 + MS-05，两个新工具。改动比第三批小，但 MS-06 有一个硬性命名冲突和一个基类重构点，必须先处理。**
+
+## B4-1. P1：动工前确认
+
+1. **MS-06 参数与输出同名冲突（硬性，守卫测试会红灯）**：计划的示教参数 `Line1Row1` 等 8 个与输出 `Line1Row1` 等 8 个**完全同名**，必然触发第二批"输出名不与参数名相同"守卫测试。**示教参数改名 `TeachLine1Row1` 等**（输出保持 `Line1Row1` 等，下游引用面更自然，与 VisionPro 命名习惯一致）。
+2. **MS-06 需要把 `ApplyMetrology` 拆开**：基类现有 `ApplyMetrology` 硬编码只读对象 0 的结果（`GetMetrologyObjectResult(metrology, 0, …)`，`MetrologyMeasureTools.cs:126`），找角要在同一个模型里放两条直线、各读各的结果。**重构为"执行一次 + 按对象序号读取"两个受保护方法**（`RunMetrology` 执行 `apply_metrology_model`，`ReadMetrologyObject(index, …)` 读指定对象并累积实例/得分/边缘点），现有 4 个工具经对象 0 调用，行为逐项不变（回归门禁）；找角调 `RunMetrology` 一次、`ReadMetrologyObject(0/1)` 各一次。**禁止**让找角自己绕开基类另起 metrology 执行路径（会丢掉 MeasurePoints / 实例机制 / 种子对齐）。
+3. **MS-06 多实例语义本批固定**：两条边各只取**第一个实例**做交点（`num_instances` 对找角固定 1，界面与侧栏不暴露该参数），`Scores` 仍输出两条边各自得分；多实例 × 多交点组合留待有现场需求再立项。计划条目需补这句话。
+4. **MS-05 的 `Results` 需要新结果类型**：曲线不是边缘点，不能复用 `OneDCaliperMeasureResult`；新增 `OneDProjectionResult`（Profile 数组、Index、Followed、长轴采样方向说明），`Results` 输出元素类型用它。
+
+## B4-2. P2：开发中落实
+
+1. **找角退化处理**：两边平行（`angle_ll` 绝对值 < 0.5°）或任一边未找到时按"未找到"处理（`Found=false`，`CornerRow` / `CornerColumn` / `Angle` / `AngleDeg` 写 NaN），与 `FailWhenNotFound` 策略一致；任一边得分低于 `MinScore` 同样按未找到。
+2. **角度约定复用 `AngleMath`**：`Angle` 输出弧度（`angle_ll` 返回值范围需在 HALCON 实测并注释），`AngleDeg` 用 `AngleMath.ToDegrees`，不要新写换算。
+3. **MS-05 曲线方向与坐标约定先探测**：`measure_projection` 的采样方向沿矩形长轴还是短轴、采样点数与 `Length1` / `Length2` 的关系、`Smooth` 为 0 时是否跳过 `smooth_funct_1d_gauss`（不要对全零/平坦曲线产生 NaN），结论写进计划新一节（沿用第 12 节模式）。`MinPosition` / `MaxPosition` 为沿长轴的采样序号（0 起）。
+4. **MS-05 多定位矩阵语义**：每个定位矩阵各出一条曲线，单值（`MinGray` 等）取最后一次成功测量（与基类约定一致）；某矩阵投影失败（区域出界等）按该矩阵未找到处理，不拖垮全部。
+5. **编辑窗口**：MS-05 在 `WpfFollowMeasureToolEditWindow` 加曲线显示区（WPF `Polyline`，仅灰度投影工具显示，随参数刷新）；MS-06 两条线的示教若塞不进现有直线测量窗口的布局，新建专用窗口（参照第三批 `WpfGenericShapeMatchEditWindow` 的先例），窗口选择写进汇报。
+6. **新工具登记四件套**：`BuiltinToolIdentities` / `ToolboxRegistry`（`05 几何测量` 分组）/ `WpfToolEditorRouter` / README 工具表；`Results` / `Found` 等输出声明与 `INotFoundPolicy` 约定沿用现有工具模式。
+7. **回归门禁**：4 个 metrology 测量工具与 2 个卡尺工具行为逐项不变（`ApplyMetrology` 拆分不得改变任何现有输出）；第二批守卫测试保持绿。
+
+## B4-3. P3：文档维护
+
+1. 计划头部状态、MS-05 / MS-06 条目补实现说明（含 P1-3 的多实例固定结论与探测记录）。
+2. README 工具表"几何测量"行补找角（交点、夹角）与灰度投影（灰度曲线、导数）。
+3. HALCON 探测结论（`intersection_lines` 平行返回值与 `angle_ll` 范围、`measure_projection` 方向与点数）记入计划。
+
+## B4-4. 开工顺序确认
+
+第四批：MS-06 + MS-05。第五批候选：MT-06（差分检测）；之后 MT-05 / MT-04 / MS-03 / MS-04 与标定批（CB-01~07 + MS-07 Calibration）按现场需求排。

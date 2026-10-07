@@ -750,6 +750,24 @@
         </Canvas>
     </Viewbox>
 
+    <!-- 手工追加：找角（两条边相交于一点，交点为强调色圆点） -->
+    <Viewbox x:Key="ToolIcon.corner-find" x:Shared="False" Width="24" Height="24" Stretch="Uniform">
+        <Canvas Width="24" Height="24">
+            <Path Data="M5,20 L5,6" Stroke="{DynamicResource TextFillColorPrimaryBrush}" StrokeThickness="1.8" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Fill="{x:Null}" />
+            <Path Data="M5,20 L20,20" Stroke="{DynamicResource TextFillColorPrimaryBrush}" StrokeThickness="1.8" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Fill="{x:Null}" />
+            <Path Data="M5,14 A6,6 0 0 0 11,20" Stroke="{DynamicResource TextFillColorPrimaryBrush}" StrokeThickness="1.2" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Fill="{x:Null}" />
+            <Ellipse Canvas.Left="3.2" Canvas.Top="18.2" Width="3.6" Height="3.6" Fill="{DynamicResource AccentFillColorDefaultBrush}" />
+        </Canvas>
+    </Viewbox>
+
+    <!-- 手工追加：灰度投影（测量矩形 + 上方的灰度曲线） -->
+    <Viewbox x:Key="ToolIcon.gray-projection" x:Shared="False" Width="24" Height="24" Stretch="Uniform">
+        <Canvas Width="24" Height="24">
+            <Rectangle Canvas.Left="3" Canvas.Top="16" Width="18" Height="5" RadiusX="1" RadiusY="1" Stroke="{DynamicResource TextFillColorPrimaryBrush}" StrokeThickness="1.8" Fill="{x:Null}" />
+            <Path Data="M3,12 L7,12 L9,5 L12,5 L14,10 L17,10 L19,6 L21,6" Stroke="{DynamicResource AccentFillColorDefaultBrush}" StrokeThickness="1.8" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Fill="{x:Null}" />
+        </Canvas>
+    </Viewbox>
+
     <Viewbox x:Key="ToolIcon._default" x:Shared="False" Width="24" Height="24" Stretch="Uniform">
         <Canvas Width="24" Height="24">
             <Rectangle Canvas.Left="4" Canvas.Top="4" Width="16" Height="16" RadiusX="2" RadiusY="2" Stroke="{DynamicResource TextFillColorPrimaryBrush}" StrokeThickness="1.8" Fill="{x:Null}" />

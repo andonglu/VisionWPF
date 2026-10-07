@@ -1343,7 +1343,8 @@ namespace VisionFlow.WpfToolEditors.Editors
 
         private void ImagePathCombo_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
         {
-            TryShowSelectedImage();
+            // SelectionChanged 时可编辑下拉框的 Text 尚未更新为新选项，等选择生效后再取图
+            Dispatcher.BeginInvoke(new Action(TryShowSelectedImage));
         }
 
         private void Ok_Click(object sender, RoutedEventArgs e)
