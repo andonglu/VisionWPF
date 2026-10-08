@@ -161,6 +161,22 @@ namespace VisionFlow.Tools.Calibration
             ["line_scan_polynomial"] = new[] { "focus", "k1", "k2", "k3", "p1", "p2", "sx", "sy", "cx", "cy", "image_width", "image_height", "vx", "vy", "vz" }
         };
 
+        /// <summary>相机类型的参数名（不含第 0 项类型名）；不认识的类型返回 false。</summary>
+        public static bool TryGetParameterNames(string cameraType, out string[] names)
+        {
+            return ParameterNames.TryGetValue(cameraType ?? string.Empty, out names);
+        }
+
+        /// <summary>按名称取参数值（数值）；没有该参数返回 NaN。</summary>
+        public double GetValue(string name)
+        {
+            CameraParameter parameter = CamParam?.FirstOrDefault(p => p.Name == name);
+            return parameter == null || parameter.Value is string ? double.NaN : Convert.ToDouble(parameter.Value, CultureInfo.InvariantCulture);
+        }
+
+        /// <summary>相机类型（CamParam 第 0 项）。</summary>
+        public string CameraType => CamParam?.FirstOrDefault()?.Value as string;
+
         /// <summary>由 HALCON 相机参数与位姿创建（参数按类型对应的名称保存）。</summary>
         public static CameraCalibration FromHalcon(HTuple camParam, HTuple pose)
         {
@@ -177,7 +193,8 @@ namespace VisionFlow.Tools.Calibration
             {
                 throw new ArgumentException($"{cameraType} 相机参数应为 {names.Length + 1} 个值（当前 {camParam.Length} 个）", nameof(camParam));
             }
-            var result = new CameraCalibration { Pose = pose.ToDArr() };
+            // HALCON 位姿是混合元组（前 6 个实数 + 整数位姿类型），须先转成实数再取数组
+            var result = new CameraCalibration { Pose = pose.TupleReal().ToDArr() };
             result.CamParam.Add(new CameraParameter { Name = "camera_type", Value = cameraType });
             for (int i = 0; i < names.Length; i++)
             {
@@ -621,7 +638,29 @@ namespace VisionFlow.Tools.Calibration
                 Unit = affine != null ? existing.Unit : (string.IsNullOrWhiteSpace(unit) ? null : unit.Trim()),
                 Description = string.IsNullOrWhiteSpace(description) ? existing?.Description : description.Trim(),
                 Affine2D = affine,
-                RotationCenter = copy
+                RotationCenter = copy,
+                // 已有的相机标定段（CB-04）一并保留
+                Camera = existing?.Camera
+            };
+        }
+
+        /// <summary>
+        /// 把相机标定结果并入标定内容（CB-04，沿用 CB-03 的共存规则）：已有 Affine2D / RotationCenter 段时保留它们并替换 Camera 段，
+        /// 已有 Affine2D 时 Kind 仍为 Affine2D、否则为 Camera；单位沿用已有标定的单位（同一文件只有一个单位），没有时用 unit。
+        /// </summary>
+        public static CalibrationResult MergeCamera(CalibrationResult existing, CameraCalibration camera, string unit, string description)
+        {
+            bool keepExisting = existing != null && !existing.IsLegacyTuple && (existing.Affine2D != null || existing.RotationCenter != null);
+            Affine2DCalibration affine = existing?.Affine2D;
+            return new CalibrationResult
+            {
+                Kind = affine != null ? CalibrationFileKind.Affine2D : CalibrationFileKind.Camera,
+                CreatedAt = DateTimeOffset.Now,
+                Unit = keepExisting && !string.IsNullOrWhiteSpace(existing.Unit) ? existing.Unit : (string.IsNullOrWhiteSpace(unit) ? null : unit.Trim()),
+                Description = string.IsNullOrWhiteSpace(description) ? existing?.Description : description.Trim(),
+                Affine2D = affine,
+                RotationCenter = keepExisting ? existing.RotationCenter : null,
+                Camera = camera
             };
         }
 

@@ -74,6 +74,10 @@ namespace VisionFlow.WpfToolEditors
             {
                 return new WpfAlignmentOffsetToolEditWindow(alignmentTool, context);
             }
+            if (tool is ImageRectifyTool rectifyTool)
+            {
+                return new WpfImageRectifyToolEditWindow(rectifyTool, context);
+            }
             return IsVisualPreviewTool(tool)
                 ? (Window)new WpfVisualToolEditWindow(tool, context)
                 : new WpfGenericToolEditWindow(tool, context);

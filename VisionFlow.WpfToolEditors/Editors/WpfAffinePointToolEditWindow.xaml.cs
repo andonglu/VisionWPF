@@ -120,6 +120,8 @@ namespace VisionFlow.WpfToolEditors.Editors
                 EmbedButton.ToolTip = "单独打开的标定助手没有关联工具，只能保存为标定文件";
                 RotEmbedButton.IsEnabled = false;
                 RotEmbedButton.ToolTip = EmbedButton.ToolTip;
+                CamEmbedButton.IsEnabled = false;
+                CamEmbedButton.ToolTip = EmbedButton.ToolTip;
                 OkButton.Visibility = Visibility.Collapsed;
                 CancelButton.Content = "关闭";
                 MainTabs.SelectedItem = AssistantTab;
@@ -128,7 +130,13 @@ namespace VisionFlow.WpfToolEditors.Editors
             {
                 CalibImageView.PointPicked -= OnImagePointPicked;
                 RotImageView.PointPicked -= OnRotImagePointPicked;
+                foreach (CamImageRow row in _camImages)
+                {
+                    row.Image?.Dispose();
+                }
+                _camImages.Clear();
             };
+            ShowExistingCamera();
         }
 
         /// <summary>打开后直接显示 N 点标定页（主窗口“标定助手”按钮对选中的坐标转换节点使用）。</summary>
@@ -166,8 +174,11 @@ namespace VisionFlow.WpfToolEditors.Editors
             {
                 CalibImageCombo.Items.Add("Input.Image");
                 RotImageCombo.Items.Add("Input.Image");
+                CamCurrentImageCombo.Items.Add("Input.Image");
             }
             RotAngleVarCombo.Items.Add(string.Empty);
+            CamModelCombo.ItemsSource = CameraCalibrator.SupportedCameraTypes;
+            CamModelCombo.SelectedIndex = 0;
             if (_context.LastRunContext != null)
             {
                 foreach (Variable variable in _context.LastRunContext.GetAllVariables())
@@ -179,6 +190,7 @@ namespace VisionFlow.WpfToolEditors.Editors
                         {
                             CalibImageCombo.Items.Add(path);
                             RotImageCombo.Items.Add(path);
+                            CamCurrentImageCombo.Items.Add(path);
                         }
                     }
                     else if (IsNumeric(variable.Value) || (variable.Kind == VariableKind.Array && variable.Value is IEnumerable && !(variable.Value is string)
@@ -199,6 +211,10 @@ namespace VisionFlow.WpfToolEditors.Editors
             if (RotImageCombo.Items.Count > 0)
             {
                 RotImageCombo.SelectedIndex = 0;
+            }
+            if (CamCurrentImageCombo.Items.Count > 0)
+            {
+                CamCurrentImageCombo.SelectedIndex = 0;
             }
         }
 
@@ -728,9 +744,14 @@ namespace VisionFlow.WpfToolEditors.Editors
                 return null;
             }
             CalibrationResult result = CalibrationService.FromAffine(_solved, UnitText.Text, DescriptionText.Text);
-            // 当前标定已带旋转中心（CB-03 合并保存）时保留它，并按新矩阵重新换算圆心物理坐标，避免重新做 N 点标定时丢失
-            RotationCenterCalibration existingCenter = TryLoadPendingCalibration(out _)?.RotationCenter;
-            return existingCenter == null ? result : CalibrationService.MergeRotationCenter(result, existingCenter, null, null);
+            // 当前标定已带旋转中心（CB-03 合并保存）时保留它，并按新矩阵重新换算圆心物理坐标；已带相机标定段（CB-04）时同样保留
+            CalibrationResult existing = TryLoadPendingCalibration(out _);
+            if (existing?.RotationCenter != null)
+            {
+                result = CalibrationService.MergeRotationCenter(result, existing.RotationCenter, null, null);
+            }
+            result.Camera = existing?.Camera;
+            return result;
         }
 
         private void SaveCalibrationFile_Click(object sender, RoutedEventArgs e)
@@ -1141,6 +1162,309 @@ namespace VisionFlow.WpfToolEditors.Editors
             }
             RotImageView.SetOverlay(overlay);
             overlay.Dispose();
+        }
+
+        // ======================= 相机标定页（CB-04） =======================
+
+        private static readonly string[] CameraImageExtensions = { ".png", ".bmp", ".jpg", ".jpeg", ".tif", ".tiff" };
+
+        private sealed class CamImageRow
+        {
+            public int Index { get; set; }
+            public string Name { get; set; }
+            public HObject Image { get; set; }
+            public bool? Found { get; set; }
+            public double? Error { get; set; }
+            public string Message { get; set; }
+            public bool IsReference { get; set; }
+            public string State => Found == null ? "未标定" : Found.Value ? "找到标定板" : "未找到：" + Message;
+            public string ErrorText => Error.HasValue ? Error.Value.ToString("F4", CultureInfo.CurrentCulture) : string.Empty;
+            public string ReferenceText => IsReference ? "参考" : string.Empty;
+        }
+
+        private readonly List<CamImageRow> _camImages = new List<CamImageRow>();
+        private CameraCalibrationRun _camRun;
+
+        private void CamAddFolder_Click(object sender, RoutedEventArgs e)
+        {
+            var dialog = new OpenFolderDialog { Title = "选择标定板图像文件夹" };
+            if (dialog.ShowDialog(this) != true)
+            {
+                return;
+            }
+            int added = 0;
+            var failed = new List<string>();
+            foreach (string file in Directory.EnumerateFiles(dialog.FolderName).Where(f => CameraImageExtensions.Contains(Path.GetExtension(f).ToLowerInvariant()))
+                .OrderBy(f => f, StringComparer.OrdinalIgnoreCase))
+            {
+                try
+                {
+                    HOperatorSet.ReadImage(out HObject image, file);
+                    AddCameraImage(Path.GetFileName(file), image);
+                    added++;
+                }
+                catch (HalconException ex)
+                {
+                    failed.Add(Path.GetFileName(file) + "（" + ex.Message + "）");
+                }
+            }
+            CamImagesChanged();
+            string message = $"已从文件夹加入 {added} 张标定图像（共 {_camImages.Count} 张）";
+            if (failed.Count > 0)
+            {
+                ShowError(message + $"；读取失败 {failed.Count} 个，已跳过：" + string.Join("、", failed));
+            }
+            else
+            {
+                SetStatus(message + "。");
+            }
+        }
+
+        private void CamAddCurrent_Click(object sender, RoutedEventArgs e)
+        {
+            HObject image = ResolveImage(CamCurrentImageCombo.Text);
+            if (image == null)
+            {
+                ShowError("没有可用的当前图像：请先加载图像或运行一次流程。");
+                return;
+            }
+            AddCameraImage((CamCurrentImageCombo.Text ?? string.Empty).Trim(), image.CopyObj(1, -1));
+            CamImagesChanged();
+            SetStatus($"已加入当前图像（共 {_camImages.Count} 张）。");
+        }
+
+        /// <summary>加入图像；第一张时用它的尺寸填图像宽高，主点设为图像中心。</summary>
+        private void AddCameraImage(string name, HObject image)
+        {
+            if (_camImages.Count == 0)
+            {
+                HOperatorSet.GetImageSize(image, out HTuple width, out HTuple height);
+                CamWidthText.Text = width.I.ToString(CultureInfo.InvariantCulture);
+                CamHeightText.Text = height.I.ToString(CultureInfo.InvariantCulture);
+                CamCxText.Text = (width.I / 2.0).ToString("R", CultureInfo.InvariantCulture);
+                CamCyText.Text = (height.I / 2.0).ToString("R", CultureInfo.InvariantCulture);
+            }
+            _camImages.Add(new CamImageRow { Name = name, Image = image, IsReference = _camImages.Count == 0 });
+        }
+
+        private void CamRemoveSelected_Click(object sender, RoutedEventArgs e)
+        {
+            if (!(CamImageGrid.SelectedItem is CamImageRow row))
+            {
+                SetStatus("请先在列表中选中要移除的图像。");
+                return;
+            }
+            RemoveCameraImages(new[] { row });
+            SetStatus("已移除选中图像，请重新标定。");
+        }
+
+        private void CamRemoveNotFound_Click(object sender, RoutedEventArgs e)
+        {
+            List<CamImageRow> notFound = _camImages.Where(r => r.Found == false).ToList();
+            RemoveCameraImages(notFound);
+            SetStatus(notFound.Count == 0 ? "没有未找到标定板的图像。" : $"已移除 {notFound.Count} 张未找到标定板的图像，请重新标定。");
+        }
+
+        private void RemoveCameraImages(IEnumerable<CamImageRow> rows)
+        {
+            foreach (CamImageRow row in rows.ToList())
+            {
+                row.Image?.Dispose();
+                _camImages.Remove(row);
+            }
+            if (_camImages.Count > 0 && !_camImages.Any(r => r.IsReference))
+            {
+                _camImages[0].IsReference = true;
+            }
+            CamImagesChanged();
+        }
+
+        private void CamSetReference_Click(object sender, RoutedEventArgs e)
+        {
+            if (!(CamImageGrid.SelectedItem is CamImageRow row))
+            {
+                SetStatus("请先在列表中选中放在测量平面上的那张图像。");
+                return;
+            }
+            _camImages.ForEach(r => r.IsReference = ReferenceEquals(r, row));
+            CamImagesChanged();
+            SetStatus($"已把“{row.Name}”设为参考图像（测量平面），请重新标定。");
+        }
+
+        /// <summary>图像或参考变化：作废上次标定结果（须重新标定才能保存 / 内嵌）。</summary>
+        private void CamImagesChanged()
+        {
+            _camRun = null;
+            foreach (CamImageRow row in _camImages)
+            {
+                row.Found = null;
+                row.Error = null;
+                row.Message = null;
+            }
+            CamResultText.Text = _camImages.Count == 0 ? string.Empty : $"共 {_camImages.Count} 张图像，请标定。";
+            CamParamsText.Text = string.Empty;
+            RefreshCameraImages();
+        }
+
+        private void RefreshCameraImages()
+        {
+            for (int i = 0; i < _camImages.Count; i++)
+            {
+                _camImages[i].Index = i;
+            }
+            CamImageGrid.ItemsSource = null;
+            CamImageGrid.ItemsSource = _camImages;
+        }
+
+        private void CamImageGrid_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (CamImageGrid.SelectedItem is CamImageRow row && row.Image != null)
+            {
+                CamImageView.ShowImage(row.Image);
+            }
+        }
+
+        private void CamBrowsePlate_Click(object sender, RoutedEventArgs e)
+        {
+            var dialog = new OpenFileDialog
+            {
+                Title = "选择标定板描述文件",
+                Filter = "标定板描述文件 (*.cpd;*.descr)|*.cpd;*.descr|所有文件 (*.*)|*.*",
+                InitialDirectory = CameraCalibrator.DefaultPlateDirectory() ?? string.Empty
+            };
+            if (dialog.ShowDialog(this) == true)
+            {
+                CamPlateText.Text = dialog.FileName;
+                SetStatus("已选择标定板描述文件：" + dialog.FileName);
+            }
+        }
+
+        private void CamCalibrate_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                HTuple start = CameraCalibrator.BuildStartParameters(CamModelCombo.SelectedItem as string,
+                    ParseDouble(CamFocusText.Text, "焦距") / 1000, ParseDouble(CamCellWidthText.Text, "像元宽") / 1e6, ParseDouble(CamCellHeightText.Text, "像元高") / 1e6,
+                    ParseDouble(CamCxText.Text, "主点列"), ParseDouble(CamCyText.Text, "主点行"),
+                    (int)ParseDouble(CamWidthText.Text, "图像宽"), (int)ParseDouble(CamHeightText.Text, "图像高"));
+                int reference = Math.Max(0, _camImages.FindIndex(r => r.IsReference));
+                CameraCalibrationRun run = CameraCalibrator.Calibrate(_camImages.Select(r => r.Image).ToList(), _camImages.Select(r => r.Name).ToList(),
+                    (CamPlateText.Text ?? string.Empty).Trim(), start, reference, ParseDouble(CamThicknessText.Text, "标定板厚度") / 1000);
+                for (int i = 0; i < _camImages.Count; i++)
+                {
+                    _camImages[i].Found = run.Images[i].Found;
+                    _camImages[i].Error = run.Images[i].Error;
+                    _camImages[i].Message = run.Images[i].Message;
+                }
+                RefreshCameraImages();
+                _camRun = run;
+                int notFound = run.Images.Count(i => !i.Found);
+                CamResultText.Text = string.Format(CultureInfo.CurrentCulture, "标定完成：{0} 张找到标定板{1}，反投影误差 {2:F4} 像素（全部标记点 RMS {3:F4}）",
+                    run.Camera.ImageCount, notFound > 0 ? $"、{notFound} 张未找到（可移除后重算）" : string.Empty, run.Error, run.PointRmsError);
+                CameraCalibration camera = run.Camera;
+                CamParamsText.Text = string.Join("，", camera.CamParam.Select(p => p.Name + " " + Convert.ToString(p.Value, CultureInfo.InvariantCulture)))
+                    + "；测量平面位姿 " + string.Join(", ", camera.Pose.Select(v => v.ToString("G6", CultureInfo.InvariantCulture)));
+                SetStatus(CamResultText.Text + "。");
+            }
+            catch (Exception ex) when (ex is InvalidOperationException || ex is NotSupportedException || ex is ArgumentException || ex is FormatException || ex is FileNotFoundException || ex is HalconException)
+            {
+                _camRun = null;
+                CamResultText.Text = "无法标定：" + ex.Message;
+                ShowError("无法标定：" + ex.Message);
+            }
+        }
+
+        /// <summary>按共存规则生成要保存 / 内嵌的标定：保留当前标定的 Affine2D / 旋转中心段，替换 Camera 段。</summary>
+        private CalibrationResult BuildCameraResult()
+        {
+            if (_camRun == null)
+            {
+                ShowError(_camImages.Count == 0 ? "还没有标定图像。" : "请先标定（图像或参考图像修改后需要重新标定）。");
+                return null;
+            }
+            return CalibrationService.MergeCamera(TryLoadPendingCalibration(out _), _camRun.Camera, UnitText.Text, null);
+        }
+
+        private void CamSaveCalibrationFile_Click(object sender, RoutedEventArgs e)
+        {
+            CalibrationResult result = BuildCameraResult();
+            if (result == null)
+            {
+                return;
+            }
+            var dialog = new SaveFileDialog
+            {
+                Title = "保存标定文件",
+                Filter = "标定文件 (*.vfcal.json)|*.vfcal.json|所有文件 (*.*)|*.*",
+                FileName = (_standalone ? "相机标定" : (ModuleNameText.Text ?? "坐标转换").Trim()) + ".vfcal.json"
+            };
+            if (dialog.ShowDialog(this) != true)
+            {
+                return;
+            }
+            try
+            {
+                CalibrationService.Save(dialog.FileName, result);
+            }
+            catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException)
+            {
+                ShowError("保存失败：" + ex.Message);
+                return;
+            }
+            string merged = result.Affine2D != null || result.RotationCenter != null ? "（与已有标定共存：" + result.SectionsText() + "）" : "（只含相机标定）";
+            if (_standalone)
+            {
+                SetStatus("已保存标定文件" + merged + "：" + dialog.FileName);
+                return;
+            }
+            SwitchKindForCamera(result);
+            SetFileSource(dialog.FileName);
+            SetStatus("已保存标定文件" + merged + "，当前工具改用该文件（内嵌数据已清空）：" + dialog.FileName);
+        }
+
+        private void CamEmbedCalibration_Click(object sender, RoutedEventArgs e)
+        {
+            CalibrationResult result = BuildCameraResult();
+            if (result == null)
+            {
+                return;
+            }
+            SwitchKindForCamera(result);
+            _loading = true;
+            SourceCombo.SelectedItem = SourceChoices.First(c => c.Value == CalibrationSource.Embedded);
+            _loading = false;
+            _calibrationState.UseEmbeddedCalibration(CalibrationService.ToJson(result));
+            CalibrationFileText.Text = string.Empty;
+            UpdateSourcePanels();
+            UpdateCalibrationInfo();
+            SetStatus("已把相机标定内嵌到当前工具（" + result.SectionsText() + "，标定文件路径已清空），确定后生效。");
+        }
+
+        /// <summary>结果没有 Affine2D 时坐标转换只能用 Camera 方式：随之切换标定方式。</summary>
+        private void SwitchKindForCamera(CalibrationResult result)
+        {
+            if (result.Affine2D != null)
+            {
+                return;
+            }
+            _loading = true;
+            KindCombo.SelectedItem = KindChoices.First(c => c.Value == CalibrationKind.Camera);
+            _loading = false;
+            _calibrationState.CalibrationKind = CalibrationKind.Camera;
+            UpdateSourcePanels();
+        }
+
+        /// <summary>打开时若当前标定已带相机标定，显示其摘要（图像不随标定保存，需要重新加入才能重新标定）。</summary>
+        private void ShowExistingCamera()
+        {
+            CameraCalibration camera = TryLoadPendingCalibration(out _)?.Camera;
+            if (camera == null)
+            {
+                return;
+            }
+            CamResultText.Text = string.Format(CultureInfo.CurrentCulture, "当前标定已含相机标定：{0}，{1} 张，反投影误差 {2:F4} 像素，标定板 {3}",
+                camera.CameraType, camera.ImageCount, camera.RmsError ?? double.NaN, camera.PlateDescription);
+            CamParamsText.Text = string.Join("，", camera.CamParam.Select(p => p.Name + " " + Convert.ToString(p.Value, CultureInfo.InvariantCulture)));
         }
 
         // ======================= 图像 =======================

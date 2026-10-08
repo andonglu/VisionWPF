@@ -222,6 +222,8 @@ namespace VisionFlow.Editing
                 new ToolNode(new AffinePointTool(NextModuleName("坐标转换")))));
             Register(new ToolboxItem("alignment-offset", "09 标定", "纠偏计算", () =>
                 new ToolNode(new AlignmentOffsetTool(NextModuleName("纠偏计算")))));
+            Register(new ToolboxItem("image-rectify", "09 标定", "畸变校正", () =>
+                new ToolNode(new ImageRectifyTool(NextModuleName("畸变校正")))));
             Register(new ToolboxItem("ifelse", "逻辑控制", "IfElse 分支", () =>
                 new IfElseNode("条件分支")));
             Register(new ToolboxItem("forcount", "逻辑控制", "For 循环(次数)", () =>

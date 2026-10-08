@@ -1,7 +1,7 @@
 # 标定补充开发计划
 
 编写日期：2026-10-06
-状态：第一批 CB-01 / CB-02 / CB-05 已实现（分支 `feature/calibration-batch1`，见第 11、12 节）；评审 P1-1 / P1-2 / P1-3 已在计划中处理（CB-06 输出改名、CB-07 符号约定、CB-04 示例图像探测，见第 13 节）；第二批 CB-03 / CB-07 已实现（分支 `feature/calibration-batch2`，见第 14 节）；CB-04 / CB-06（第三批）待开发，动工前做一次小评审。
+状态：第一批 CB-01 / CB-02 / CB-05 已实现（分支 `feature/calibration-batch1`，见第 11、12 节）；评审 P1-1 / P1-2 / P1-3 已在计划中处理（CB-06 输出改名、CB-07 符号约定、CB-04 示例图像探测，见第 13 节）；第二批 CB-03 / CB-07 已实现（分支 `feature/calibration-batch2`，见第 14 节）；第三批 CB-04 / CB-06 已实现（分支 `feature/calibration-batch3`，算子探测见第 15 节，验收见第 16 节）。计划条目全部完成；MS-07 `ScaleSource=Calibration` 的接入另行立项。
 范围：图像坐标与物理坐标之间的标定、换算和纠偏，涉及 `VisionFlow.Tools\Tools\GeometryTools.cs`（`AffinePointTool`）、编辑器标定界面，以及供上层调用的标定接口。
 HALCON 版本基线：22.11 及以上（与仓库现行基线一致，见 MATCH-MEASURE 计划第 12 节；原文写 20.11）。
 关联文档：
@@ -137,6 +137,13 @@ HALCON 版本基线：22.11 及以上（与仓库现行基线一致，见 MATCH-
 - 建议 10~20 张、覆盖视野不同位置和倾斜角度，界面给出提示。
 - 开工前置结论（评审 P1-3，22.11 实测，详见第 13 节）：HALCON 自带的单相机示例是 `%HALCONIMAGES%\calib\calib_single_camera_01.png` ~ `_07.png`（7 张，1292×964）配 `%HALCONROOT%\calib\calplate_80mm.cpd`（不是 160 mm），初始参数 `area_scan_division`、焦距 8 mm、像元 3.7 µm、主点 (646, 482)；实跑 7 张全部找到标定板，反投影误差 0.0775 像素。验收用这组数据，误差上限取 0.1 像素；路径由环境变量 `HALCONROOT` / `HALCONIMAGES` 解析，缺任一文件时用例明确失败、不计通过。`gen_cam_par_area_scan_division` 等是 HDevelop 过程，.NET 中直接拼参数元组（类型名在前）。
 
+**实现说明（第三批已完成）**
+
+- 服务：`VisionFlow.Tools\Calibration\CameraCalibrator`（静态类，与界面无关）。`BuildStartParameters(相机模型, 焦距 m, 像元宽 m, 像元高 m, 主点列, 主点行, 图像宽, 高)` 按 `CameraCalibration` 的参数名表手拼初始参数元组（类型名在前，畸变系数取 0）；只支持 `area_scan_division` / `area_scan_polynomial`，其他模型报“暂不支持的相机模型”。`Calibrate(图像, 名称, 描述文件, 初始参数, 参考图像序号, 厚度 m)` 按上述算子流程执行：逐张 `find_calib_object`，失败的图像记录原因（#8397 → “未找到标定板（标记分割失败）”，尺寸不符 → “图像尺寸 W×H 与初始参数 W×H 不一致”）、不占位姿序号；没有任何图像找到标定板、参考图像没找到标定板、描述文件不存在时明确报错。返回 `CameraCalibrationRun`：每张图像的识别结果与反投影 RMS（用标定后的位姿把标记点投影后与观测点比较，第 15 节）、`calibrate_cameras` 误差、全部标记点 RMS，以及 `CameraCalibration`（`FromHalcon` 组装，带 `PlaneThickness`、`RmsError`、`PlateDescription` 文件名、`ImageCount`）。测量平面 = 参考图像的标定后位姿 `set_origin_pose(…, 0, 0, +厚度)`。
+- 合并保存：`CalibrationService.MergeCamera(当前标定, 相机标定, 单位, 说明)` 保留当前标定的 `Affine2D` / `RotationCenter` 段、替换 `Camera` 段；带 `Affine2D` 时 `Kind` 仍为 `Affine2D`，否则为 `Camera`。保留其他段时沿用当前标定的单位。`MergeRotationCenter` 与 N 点标定的保存同样保留已有 `Camera` 段，三段可以在同一个文件里共存、互不覆盖。
+- 界面：`WpfAffinePointToolEditWindow` 新增“相机标定”页（单独打开的标定助手同样可用，只能保存为文件）：从文件夹加入图像（按扩展名过滤，读不了的文件报错后跳过）/ 加入当前图像，图像列表显示序号、名称、识别结果、逐张误差与参考标记，可移除选中 / 移除未找到 / 设为参考图像；标定板描述文件默认从 `%HALCONROOT%\calib` 选取；相机模型、焦距（mm）、像元（µm）、主点与图像尺寸（加入第一张图像时按其尺寸自动填写）、标定板厚度（mm）；标定后显示两种误差与相机参数。图像或参考有任何改动即作废上次结果。“保存为标定文件”按合并规则写 `.vfcal.json`，非单独打开时当前工具改用该文件；“内嵌到当前工具”写入 `CalibrationData`。结果没有 `Affine2D` 段时，坐标转换的标定方式随之切到 `Camera`。打开窗口时若当前标定已带相机标定，显示其摘要（标定图像不随文件保存，重新标定需要重新加入图像）。
+- 缺陷修复：第一批 `CameraCalibration.FromHalcon` 用 `ToDArr()` 读位姿，但 HALCON 位姿元组最后一项是整数（位姿类型），混合元组会抛异常；改为 `TupleReal().ToDArr()`。第一批用例的位姿是手写的纯实数元组，所以没有暴露。
+
 ## 6. 运行工具
 
 ### CB-05 图像坐标转世界坐标增强
@@ -171,6 +178,15 @@ HALCON 版本基线：22.11 及以上（与仓库现行基线一致，见 MATCH-
 - 算子：`gen_image_to_world_plane_map`（只在参数或标定变化时生成，结果缓存，参与预热）+ `map_image`。
 - 输出：`Image`；`ActualPixelSize`（实际比例；参数 `PixelSize` 为 0 时由原图中心比例算出）；`Matrix`（校正图像素坐标 → 测量平面坐标的仿射矩阵，供“图像坐标转世界坐标”和单位换算使用）。
 - 命名（评审 P1-1）：输出原写 `PixelSize`，与同名参数冲突，会使第二批“输出名不与参数名相同”的守卫测试失败，改名 `ActualPixelSize`；参数 `PixelSize` 保持不变（与 MS-07 单位换算的 `PixelSize` 含义一致）。
+
+**实现说明（第三批已完成）**
+
+- 类：`VisionFlow.Tools\Tools\ImageRectifyTools.cs` 的 `ImageRectifyTool : ToolBase, IToolResourceLifecycle, IToolConfigurationCheck, IToolParameterVisibility`，`BuiltinToolIdentities` 登记 `image-rectify`，工具箱 `09 标定 / 畸变校正`（默认模块名“畸变校正”），图标 `ToolIcon.image-rectify`。
+- 参数：图像输入 `ImagePath`（默认 `Input.Image`）；`CalibrationSource`（`File` 默认 / `Embedded`）/ `CalibrationFile` / `CalibrationData`，互斥与缓存沿用 `CalibrationSourceCache`；`PixelSize`（标定单位 / 像素，0 = 自动，不能为负）；输出区域 `RegionX` / `RegionY` / `RegionWidth` / `RegionHeight`（测量平面坐标、标定单位；宽或高 ≤ 0 表示自动覆盖整个视野，只填一个时报错）；`Interpolation`（`bilinear` 默认 / `nearest_neighbor`，按数字保存）。
+- 类型校验：标定内容须带 `Camera` 段，缺段时流程校验、运行、预热都报“来源（文件名或内嵌标定数据）+ 实际类型（含哪些段）+ 需要 Camera 数据”，旧版矩阵文件单独说明；标定单位只支持 m / cm / mm / um。文件缺失与批一约定一致：校验不报，预热与运行报。
+- 映射缓存：缓存键 = 相机参数 + 测量平面位姿 + 单位 + `PixelSize` + 输出区域 + 插值方式（预评审 P2-3），任一变化重新生成；生成时写日志“[畸变校正] 生成校正映射 …”。`Prepare()` 预热生成映射，`ReleaseResources()` 释放。自动当量与自动区域按第 15 节；校正图宽或高超出 1 ~ 16384 时报错（提示调整像素当量或输出区域）。
+- 运行：先取标定与映射（配置错误不依赖输入图像），再检查输入图像尺寸等于相机参数的图像尺寸，最后 `map_image`。输出 `Image`、`ActualPixelSize`（标定单位 / 像素）、`Matrix` = [0, s, x0, s, 0, y0]（校正图 (行, 列) → 平面 (X, Y) = (WorldRow, WorldColumn)，行列式为负，第 15 节），可直接作为坐标转换的变换矩阵引用。
+- 编辑器：新建最小专用窗口 `WpfImageRectifyToolEditWindow`（通用窗口的执行测试不经 `ToolTestRun`，所以没有采用）：预览原图 / 校正结果、标定来源与文件选择、“把标定文件内嵌到工具”、标定摘要（类型、单位、相机模型、尺寸、误差与校验问题），以及当量、区域、插值；“执行测试”经 `ToolTestRun`，显示校正图尺寸、`ActualPixelSize` 与左上角。侧栏按 `IToolParameterVisibility` 隐藏 `CalibrationData`，来源为内嵌时隐藏 `CalibrationFile`。
 
 ### CB-07 纠偏计算（新工具）
 
@@ -243,7 +259,7 @@ HALCON 版本基线：22.11 及以上（与仓库现行基线一致，见 MATCH-
 - CB-03：对已知圆心旋转生成的点（加噪声），圆心误差小于 0.2 像素。
 - CB-04：使用 HALCON 安装目录自带的标定板示例图像完成标定（`calib_single_camera_01~07` + `calplate_80mm.cpd`，见 CB-04 前置结论），重投影误差不超过 0.1 像素（22.11 实测 0.0775）；缺少示例图像或描述文件时用例明确失败，不计为通过（与现有 HALCON 用例约定一致）。
 - CB-05：数组输入与逐个单值输入结果一致；含镜像的矩阵下角度换算正确；`Camera` 方式与直接调用 `image_points_to_world_plane` 一致。
-- CB-06：校正后的标定板图像中，相邻标记点间距与真实间距误差小于 0.5%；输出名 `ActualPixelSize` 与参数 `PixelSize` 不冲突（守卫测试保持通过）。
+- CB-06：校正后的标定板图像中，相邻标记点间距（每个标记到最近邻，灰度加权重心）的平均值与真实间距误差小于 0.5%（第 15 节实测 0.07%，单对最大偏差作为信息记录）；输出名 `ActualPixelSize` 与参数 `PixelSize` 不冲突（守卫测试保持通过）。
 - CB-07：按 CB-07“符号约定”反推真值构造前后位姿（含镜像标定一例），输出的 `DeltaX` / `DeltaY` / `DeltaAngle` / `AngleDifference` 与真值一致；`Fixed` 下 `TranslationOnly` 与 `RotateAroundCenter` 各一例，`OnAxis` 的 `TranslationOnly` 与 `Fixed` 互为相反数，`OnAxis` + `RotateAroundCenter` 校验报错；输入 NaN 时 `Valid = false`。
 - 全部回归测试和 `examples\*.vflow.json` 通过。
 
@@ -343,3 +359,48 @@ HALCON 版本基线：22.11 及以上（与仓库现行基线一致，见 MATCH-
   1. 纠偏计算在 dθ = 0 时 `DeltaAngle` 为 −0，结果表显示“-0”（界面验收设计时发现）；角度输出把 −0 按 0 输出。
   2. 既有行为（不属于本批）：同一流程有两幅图像时，结果显示下拉中直接选第二幅图像上的区域（如 `阈值2.Region`），叠加画在第一幅图像上——叠加修复的底图回退取“上下文中第一个图像变量”（`REVIEW-FIX-PROGRESS.md` 已注明多图像时取最先写入者），在多图像流程中会选错底图。建议后续单独立项（如按区域来源工具的图像输入回退）。
 - 脚本问题（已修脚本）：4 次运行中有 1 次双击流程树节点后编辑窗口未打开（之后 3 次未复现，判断为双击未被识别）；栅格化小圆的区域中心按像素取整，与亚像素真值每轴差到 0.5 像素，对照前提改为距离 < 0.75 像素；只覆盖 60° 的圆拟合对点击误差很敏感，改为与服务对同一组表格数据的无界面求解比对。
+
+## 15. 第三批算子探测结论（CB-04 / CB-06）
+
+**探测环境**：HALCON 22.11 Steady（路径同第 13 节）；部署到其他版本前需复核。探测在写 CB-06 代码之前完成，数据为第 13 节的 7 张示例图像与 `calplate_80mm.cpd`（`calibrate_cameras` 误差 0.0775 像素，以下“例”均指第 1 张的标定板位姿）。
+
+| 问题 | 结论 |
+|---|---|
+| .NET 中的暴露形态 | `SetOriginPose`、`GenImageToWorldPlaneMap`、`MapImage`、`ImageToWorldPlane`、`ImagePointsToWorldPlane`、`Project3dPoint`、`PoseToHomMat3d`、`AffineTransPoint3d`、`GetCalibDataObservPoints` 都是 `HOperatorSet` 的方法；`gen_cam_par_area_scan_division`、`get_cam_par_names` 是 HDevelop 过程，没有对应方法 |
+| `set_origin_pose` 与厚度方向 | 标定板坐标系的 z 轴背离相机（例：z 轴在相机系中为 (0.007, −0.006, 1.000)）；`set_origin_pose(位姿, 0, 0, +0.002)` 后位姿 z 由 0.138875 变为 0.140874（离相机更远）。因此测量平面 = 参考标定板位姿 `set_origin_pose(…, 0, 0, +厚度)`，厚度以米计 |
+| `gen_image_to_world_plane_map` 的 `Scale` | 数值时为校正图每像素对应的世界长度（米）；`'mm'` 与 `0.001` 生成的映射逐位相同；默认 `'m'`（与第 11 节 `image_points_to_world_plane` 的 `Scale` 一致：字符串即单位） |
+| 输出区域与像素对应 | `WorldPose` 是校正图左上角所在的平面位姿：用 `set_origin_pose(平面位姿, x0, y0, 0)` 把原点移到输出区域左上角（米）。校正图 (行, 列) 对应平面 (X, Y) = (x0 + 列·s, y0 + 行·s)，没有半像素偏移：世界点 (−0.01, 0.005) 投影到原图画小圆、校正后重心在 (行 350.174, 列 300.007)，按上式应在 (350, 300)（行方向 0.17 像素来自小圆投影到原图后的变形，`nearest_neighbor` 为 0.14）。校正图**列方向是平面 X、行方向是平面 Y**，所以“校正图像素 → 平面坐标”的矩阵（行, 列 → WorldRow = X, WorldColumn = Y）是 [0, s, x0, s, 0, y0]，行列式为负；CB-05 的角度换算按方向向量变换，对此自然正确 |
+| `MapType` | `get_param_info` 取值列表为 `nearest_neighbor` / `bilinear` / `coord_map_sub_pix`；`bilinear` 映射图为 int4 5 通道，`nearest_neighbor` 为 int4 1 通道，`coord_map_sub_pix` 为 `vector_field_absolute`；`cubic` / `bicubic` 报 #3147。CB-06 的 `Interpolation` 提供 `bilinear`（默认）与 `nearest_neighbor`（`coord_map_sub_pix` 是坐标映射，不用于 `map_image` 取图） |
+| `map_image` 输出 | 尺寸 = 映射图尺寸（WidthMapped × HeightMapped），byte 输入得到 byte 输出；映射按 `WidthIn` × `HeightIn` 生成，工具在运行时检查输入图像尺寸等于相机参数的 `image_width` × `image_height` |
+| 自动像素当量 | 原图中心像素与右、下相邻像素经 `image_points_to_world_plane` 投影到平面：例中列方向 0.061590 mm、行方向 0.061591 mm；`PixelSize = 0` 时取两者平均 |
+| 自动输出区域 | 原图边界点投影到平面取外接矩形：例中 X [−0.0399, 0.0409]、Y [−0.0299, 0.0305] m，按 0.06159 mm / 像素得 1312 × 981 |
+| CB-04 逐张反投影误差 | `get_calib_data_observ_points` 返回的位姿是初始估计，与标定后位姿不同，须用 `get_calib_data(…, 'calib_obj_pose', [0, 序号], 'pose')` 的标定后位姿把标记点经 `pose_to_hom_mat3d` + `affine_trans_point_3d` + `project_3d_point` 投影后与观测点比较。例中 7 张逐张 RMS 0.0599 ~ 0.0884 像素，全部点 RMS 0.0779，`calibrate_cameras` 返回 0.0775（定义略有不同，界面同时显示两者） |
+| CB-04 找不到标定板 | 空白图 `find_calib_object` 报 #8397（标记分割失败）；尺寸与相机参数不符报 #8428；位姿序号可以有空位（只用 0 / 2 / 4 / 6 号也能标定，误差 0.0783）。工具按找到的顺序连续编号，失败的图像不占序号 |
+| CB-06 验收可行性 | `calplate_80mm.cpd` 为暗底亮标记（`_dark_on_light` 是另一版本）。把第 1 张按自身标定板平面（厚度 0）、自动当量与视野校正后，`binary_threshold`（`max_separability`、`light`，阈值 104）找到全部 837 个标记；按灰度加权重心计算每个标记到最近邻的距离，均值 2.5788 mm，真实间距 2.5806 mm，**相对误差 0.07%**；单个标记对的最大偏差 0.95%（约 0.4 像素，边缘局部残差）。使用方确认验收按平均间距误差 < 0.5%，最大单对偏差作为信息记录 |
+
+## 16. 第三批（CB-04 + CB-06）实现与验收记录
+
+**开工依据**：基线 `origin/main` 含批一、批二（`d83b328`）；CB-04 的示例数据与参考误差按第 13 节；CB-06 的算子行为先探测（第 15 节）后实现。范围红线：多图像叠加底图问题（`REVIEW-FIX-PROGRESS.md` 单独立项）与 MS-07 `ScaleSource=Calibration` 本批不动。
+
+**与任务说明不一致处（如实记录）**
+
+| 项 | 处理 |
+|---|---|
+| CB-06 验收“相邻标记点间距误差 < 0.5%” | 逐对计算时，视野边缘个别标记对偏差到 0.95%（约 0.4 像素，局部残差），平均值只有 0.07%。经使用方确认验收按“每个标记到最近邻距离的平均值”与真实间距的误差 < 0.5%，最大单对偏差作为信息记录（第 9 节已改） |
+| “本机无 HALCON，非 HALCON 通过数 ≥ 671” | 本机装有 HALCON 22.11，全部用例（含 HALCON 门禁）都实际运行并通过。新增用例以 `[Trait("Requires", "HALCON")]` 标注门禁；既有 HALCON 用例只在运行时检查环境、没有统一 Trait，无法精确筛出“非 HALCON 用例数” |
+| 批一 `CameraCalibration.FromHalcon` | 真实标定得到的位姿是混合元组（末项为整数），原实现 `ToDArr()` 抛异常；本批修复（CB-04 实现说明） |
+| 相机标定的保存范围 | 任务写“按批二合并规则共存”。除新增 `MergeCamera` 外，`MergeRotationCenter` 与 N 点标定的保存原先会丢掉已有的 `Camera` 段，一并改为保留，三段可以在同一个文件里共存、互不覆盖 |
+| CB-06 编辑器 | 任务允许“专用窗口或通用窗口 + 参数可见性”。通用窗口的执行测试不经 `ToolTestRun`，所以新建最小专用窗口，同时实现 `IToolParameterVisibility` 供侧栏使用 |
+
+**验收结果**
+
+- 单元/集成测试：新增 `CalibrationBatch3Tests` 11 个用例，其中 7 个为 HALCON 门禁（`Requires=HALCON`），示例图像与描述文件由 `HALCONIMAGES` / `HALCONROOT` 拼绝对路径，缺任一文件明确失败：
+  - CB-04：7 张示例标定，`calibrate_cameras` 误差 0.0775 像素（≤ 0.1）、全部点 RMS 0.0779、逐张 0.0884 / 0.0823 / 0.0751 / 0.0801 / 0.0843 / 0.0599 / 0.0625；厚度 2 mm 使测量平面位姿 z 增加约 0.002 m；空白图“未找到”、尺寸不符、参考图像未找到、描述文件缺失的中文提示；初始参数元组（division / polynomial，其他模型“暂不支持”）；与 `Affine2D` + `RotationCenter` 共存的文件三段可读，坐标转换 `Camera` 方式可直接使用。
+  - CB-06：第 1 张示例按自身标定板平面校正，837 个标记的平均最近邻间距与真实间距误差 0.071%（< 0.5%，单对最大 0.947% 作为信息记录），`Matrix` 换算的标记物理坐标与真值最大偏差 0.0647 mm；显式当量与区域；缓存键各项变化时重新生成映射、不变时复用；预热；输入尺寸不符；输出尺寸超限。
+  - 非 HALCON：合并规则（`MergeCamera` / `MergeRotationCenter` / 旧版矩阵文件）；缺 `Camera` 段在校验 / 运行 / 预热中措辞一致；文件 / 内嵌互斥、文件缺失（校验不报、运行与预热报）、参数范围；保存加载、默认值、命名守卫（`ActualPixelSize` 与参数 `PixelSize` 不冲突）、工具箱 `09 标定` 与 `"ToolId": "image-rectify"`。
+  - 全量 `dotnet test`（`Category!=Soak`）960 个通过（批二 949 + 本批 11，含 `examples\*.vflow.json` 加载用例）。
+- 界面验收：脚本经 Windows UI Automation 驱动真实的 `VisionFlow.WpfApp.exe`，22 项检查全部通过（连续两次）：
+  - 工具栏单独打开标定助手的“相机标定”页：经系统文件夹对话框加入 7 张示例 + 1 张空白图（图像尺寸与主点自动填入），经系统对话框选择 `calplate_80mm.cpd`；参考图像为空白图时明确报错；改参考后标定，空白图标出“未找到”、其余照常标定；移除未找到后重算，结果文字与逐张误差与无界面 `CameraCalibrator` 逐字一致（0.0775 / 0.0779）；保存的 `.vfcal.json` 为 `Kind = Camera`、单位 mm、7 张、标定板名，相机参数与位姿与无界面结果一致。
+  - 工具箱 `09 标定` 新建畸变校正：选择该标定文件后摘要正确；执行测试结果（校正图 1312×981、`ActualPixelSize` 0.06159042336175906 mm、左上角）与无界面同参数运行逐字一致，预览切到校正结果；主窗口显示校正图。
+  - 界面运行的 `ActualPixelSize` / `Matrix` 与图像个数与无界面运行保存的文件逐字一致；文件含 `"ToolId": "image-rectify"`；重新加载（预热生成映射、无警告）后再运行一致，窗口回显标定文件、当量与摘要。
+- 脚本问题（已修脚本）：打开文件对话框的“打开”按钮在本机不支持 Invoke，改为在文件名框按回车；相机标定图像列表在面板内滚动且行虚拟化，选择行前先滚动查找。

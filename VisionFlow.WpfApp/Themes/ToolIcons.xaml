@@ -787,6 +787,15 @@
         </Canvas>
     </Viewbox>
 
+    <!-- 手工追加：畸变校正（左侧桶形畸变的网格，经箭头变为右侧方正的网格） -->
+    <Viewbox x:Key="ToolIcon.image-rectify" x:Shared="False" Width="24" Height="24" Stretch="Uniform">
+        <Canvas Width="24" Height="24">
+            <Path Data="M3,5 Q5.5,3.5 8,5 Q9.5,12 8,19 Q5.5,20.5 3,19 Q1.5,12 3,5 Z M5.5,4.3 L5.5,19.7 M2.2,12 L8.8,12" Stroke="{DynamicResource TextFillColorPrimaryBrush}" StrokeThickness="1.4" StrokeLineJoin="Round" Fill="{x:Null}" />
+            <Path Data="M10,12 L13.5,12 M12,10.5 L13.5,12 L12,13.5" Stroke="{DynamicResource TextFillColorPrimaryBrush}" StrokeThickness="1.4" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Fill="{x:Null}" />
+            <Path Data="M15,5 L21,5 L21,19 L15,19 Z M18,5 L18,19 M15,12 L21,12" Stroke="{DynamicResource AccentFillColorDefaultBrush}" StrokeThickness="1.6" StrokeLineJoin="Round" Fill="{x:Null}" />
+        </Canvas>
+    </Viewbox>
+
     <Viewbox x:Key="ToolIcon._default" x:Shared="False" Width="24" Height="24" Stretch="Uniform">
         <Canvas Width="24" Height="24">
             <Rectangle Canvas.Left="4" Canvas.Top="4" Width="16" Height="16" RadiusX="2" RadiusY="2" Stroke="{DynamicResource TextFillColorPrimaryBrush}" StrokeThickness="1.8" Fill="{x:Null}" />

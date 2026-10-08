@@ -423,6 +423,130 @@
                     </ScrollViewer>
                 </Grid>
             </TabItem>
+
+            <TabItem x:Name="CameraTab" Header="相机标定">
+                <Grid Margin="0,16,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="540" />
+                    </Grid.ColumnDefinitions>
+
+                    <Border Grid.Column="0" Style="{StaticResource PanelBorderStyle}" Margin="0,0,24,0">
+                        <DockPanel>
+                            <TextBlock DockPanel.Dock="Top" Text="标定板图像（选中列表中的一张查看）" Style="{StaticResource EditorSectionTitleStyle}" />
+                            <TextBlock DockPanel.Dock="Bottom" Margin="0,8,0,0" TextWrapping="Wrap"
+                                       Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                       Text="建议 10~20 张，标定板覆盖视野的不同位置并有不同倾斜角度；其中一张放在测量平面上作为参考图像（填写标定板厚度）。" />
+                            <wfi:WindowsFormsHost>
+                                <vfc:HalconImageView x:Name="CamImageView" />
+                            </wfi:WindowsFormsHost>
+                        </DockPanel>
+                    </Border>
+
+                    <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto">
+                        <StackPanel>
+                            <Border Style="{StaticResource EditorCardStyle}">
+                                <StackPanel>
+                                    <TextBlock Text="标定图像" Style="{StaticResource EditorSectionTitleStyle}" />
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="96" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="当前图像" Style="{StaticResource EditorFieldLabelStyle}" />
+                                        <ComboBox x:Name="CamCurrentImageCombo" Grid.Column="1" IsEditable="True" />
+                                    </Grid>
+                                    <WrapPanel Margin="0,8,0,0">
+                                        <Button Content="从文件夹加入…" Margin="0,0,8,8" Click="CamAddFolder_Click" />
+                                        <Button Content="加入当前图像" Margin="0,0,8,8" Click="CamAddCurrent_Click" />
+                                        <Button Content="移除选中" Margin="0,0,8,8" Click="CamRemoveSelected_Click" />
+                                        <Button Content="移除未找到" Margin="0,0,8,8" Click="CamRemoveNotFound_Click" />
+                                        <Button Content="设为参考图像" Margin="0,0,0,8" Click="CamSetReference_Click" />
+                                    </WrapPanel>
+                                    <DataGrid x:Name="CamImageGrid" Height="220" AutoGenerateColumns="False" IsReadOnly="True" CanUserSortColumns="False"
+                                              SelectionMode="Single" SelectionChanged="CamImageGrid_SelectionChanged">
+                                        <DataGrid.Columns>
+                                            <DataGridTextColumn Header="序号" Binding="{Binding Index}" Width="56" />
+                                            <DataGridTextColumn Header="图像" Binding="{Binding Name}" Width="*" />
+                                            <DataGridTextColumn Header="结果" Binding="{Binding State}" Width="*" />
+                                            <DataGridTextColumn Header="误差" Binding="{Binding ErrorText}" Width="72" />
+                                            <DataGridTextColumn Header="参考" Binding="{Binding ReferenceText}" Width="56" />
+                                        </DataGrid.Columns>
+                                    </DataGrid>
+                                </StackPanel>
+                            </Border>
+
+                            <Border Style="{StaticResource EditorCardStyle}">
+                                <StackPanel>
+                                    <TextBlock Text="标定板与相机" Style="{StaticResource EditorSectionTitleStyle}" />
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="130" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                        </Grid.RowDefinitions>
+                                        <TextBlock Grid.Row="0" Grid.Column="0" Text="标定板描述文件" Style="{StaticResource EditorFieldLabelStyle}" />
+                                        <Grid Grid.Row="0" Grid.Column="1">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="36" />
+                                            </Grid.ColumnDefinitions>
+                                            <TextBox x:Name="CamPlateText" Grid.Column="0" />
+                                            <Button Grid.Column="1" Content="..." MinWidth="32" Width="32" Padding="0" Click="CamBrowsePlate_Click" />
+                                        </Grid>
+                                        <TextBlock Grid.Row="1" Grid.Column="0" Text="相机模型" Style="{StaticResource EditorFieldLabelStyle}" />
+                                        <ComboBox x:Name="CamModelCombo" Grid.Row="1" Grid.Column="1" />
+                                        <TextBlock Grid.Row="2" Grid.Column="0" Text="焦距（mm）" Style="{StaticResource EditorFieldLabelStyle}" />
+                                        <TextBox x:Name="CamFocusText" Grid.Row="2" Grid.Column="1" Text="8" />
+                                        <TextBlock Grid.Row="3" Grid.Column="0" Text="像元宽（µm）" Style="{StaticResource EditorFieldLabelStyle}" />
+                                        <TextBox x:Name="CamCellWidthText" Grid.Row="3" Grid.Column="1" Text="3.7" />
+                                        <TextBlock Grid.Row="4" Grid.Column="0" Text="像元高（µm）" Style="{StaticResource EditorFieldLabelStyle}" />
+                                        <TextBox x:Name="CamCellHeightText" Grid.Row="4" Grid.Column="1" Text="3.7" />
+                                        <TextBlock Grid.Row="5" Grid.Column="0" Text="主点列 cx" Style="{StaticResource EditorFieldLabelStyle}" />
+                                        <TextBox x:Name="CamCxText" Grid.Row="5" Grid.Column="1" />
+                                        <TextBlock Grid.Row="6" Grid.Column="0" Text="主点行 cy" Style="{StaticResource EditorFieldLabelStyle}" />
+                                        <TextBox x:Name="CamCyText" Grid.Row="6" Grid.Column="1" />
+                                        <TextBlock Grid.Row="7" Grid.Column="0" Text="图像宽" Style="{StaticResource EditorFieldLabelStyle}" />
+                                        <TextBox x:Name="CamWidthText" Grid.Row="7" Grid.Column="1" />
+                                        <TextBlock Grid.Row="8" Grid.Column="0" Text="图像高" Style="{StaticResource EditorFieldLabelStyle}" />
+                                        <TextBox x:Name="CamHeightText" Grid.Row="8" Grid.Column="1" />
+                                        <TextBlock Grid.Row="9" Grid.Column="0" Text="标定板厚度（mm）" Style="{StaticResource EditorFieldLabelStyle}" />
+                                        <TextBox x:Name="CamThicknessText" Grid.Row="9" Grid.Column="1" Text="0" />
+                                    </Grid>
+                                    <TextBlock Margin="0,4,0,0" TextWrapping="Wrap" Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                               Text="加入第一张图像时自动填入图像宽高并把主点设为图像中心。厚度用于把参考图像的标定板位姿修正到它所放置的测量平面。" />
+                                </StackPanel>
+                            </Border>
+
+                            <Border Style="{StaticResource EditorCardStyle}">
+                                <StackPanel>
+                                    <TextBlock Text="标定与保存" Style="{StaticResource EditorSectionTitleStyle}" />
+                                    <Button Content="标定" HorizontalAlignment="Right" Style="{StaticResource AccentButtonStyle}" Click="CamCalibrate_Click" />
+                                    <TextBlock x:Name="CamResultText" Margin="0,8,0,0" TextWrapping="Wrap" FontWeight="SemiBold" />
+                                    <TextBlock x:Name="CamParamsText" Margin="0,4,0,0" TextWrapping="Wrap" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                                    <TextBlock Margin="0,8,0,0" TextWrapping="Wrap" Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                               Text="保存 / 内嵌时与当前标定已有的 Affine2D、旋转中心段共存；只有相机标定时，坐标转换改为 Camera 方式。单位沿用 N 点标定页的“物理单位”。" />
+                                    <WrapPanel Margin="0,12,0,0" HorizontalAlignment="Right">
+                                        <Button Content="保存为标定文件…" Margin="0,0,8,0" Click="CamSaveCalibrationFile_Click" />
+                                        <Button x:Name="CamEmbedButton" Content="内嵌到当前工具" Click="CamEmbedCalibration_Click" />
+                                    </WrapPanel>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+                    </ScrollViewer>
+                </Grid>
+            </TabItem>
         </TabControl>
 
         <DockPanel Grid.Row="1" LastChildFill="False" Margin="0,24,0,0">
