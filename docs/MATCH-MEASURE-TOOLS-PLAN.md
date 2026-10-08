@@ -1,7 +1,7 @@
 # 定位匹配与几何测量补充开发计划
 
 编写日期：2026-10-06
-状态：第一批 MT-01 / MS-01 已实现（分支 `feature/match-measure-batch1`，见第 10 节）；第二批 MS-02 / MS-07（Fixed）已实现并修复第一批“执行测试”回归（分支 `feature/match-measure-batch2`，见第 11 节）；第三批 MT-02 / MT-03 已实现（分支 `feature/match-measure-batch3`，见第 12、13 节）；第四批 MS-06（找角）/ MS-05（灰度投影）已实现（分支 `feature/match-measure-batch4`，见第 14、15 节）；第五批 MT-06（差分检测）已实现（分支 `feature/match-measure-batch5`，见第 16、17 节），至此本线主体完成；其余各项（MT-04、MT-05、MS-03、MS-04）按现场需求排期，动工前各做一次小评审。
+状态：第一批 MT-01 / MS-01 已实现（分支 `feature/match-measure-batch1`，见第 10 节）；第二批 MS-02 / MS-07（Fixed）已实现并修复第一批“执行测试”回归（分支 `feature/match-measure-batch2`，见第 11 节）；第三批 MT-02 / MT-03 已实现（分支 `feature/match-measure-batch3`，见第 12、13 节）；第四批 MS-06（找角）/ MS-05（灰度投影）已实现（分支 `feature/match-measure-batch4`，见第 14、15 节）；第五批 MT-06（差分检测）已实现（分支 `feature/match-measure-batch5`，见第 16、17 节），至此本线主体完成；MS-07 预留的 `Calibration` 当量来源在标定线（CB-01 ~ CB-07）完成后补齐（分支 `feature/ms07-calibration-scale`，见第 18 节）；其余各项（MT-04、MT-05、MS-03、MS-04）按现场需求排期，动工前各做一次小评审。
 范围：工具箱“01 定位匹配”和“05 几何测量”中的模板匹配类、测量类工具（`HalconTools.cs`、`DescriptorMatchTools.cs`、`MeasureTools.cs`、`FollowMeasureTools.cs`、`AngleTools.cs`），以及新增的差分检测。
 HALCON 版本基线：**22.11 及以上**（第三批起）。原文写“通用形状模型是 20.11 引入的算子”有误：`create_generic_shape_model` 等算子不在 20.11 中，仓库原先引用的 `halcondotnet.dll` 20.11.1 没有这些方法；第三批经使用方确认把编译引用换成 22.11.1（`HALCON-22.11-Steady\bin\dotnet35\halcondotnet.dll`），整个应用的最低 HALCON 版本随之提高到 22.11（见第 12 节）。
 关联文档：
@@ -466,7 +466,7 @@ HALCON 版本基线：**22.11 及以上**（第三批起）。原文写“通用
 - 新增 `ConvertKind` 枚举：`Angle`（默认，现有逻辑）/ `Length`。
 - `Length` 模式把像素长度换算为物理长度，换算系数来源 `ScaleSource`：
   - `Fixed`：直接填写像素当量 `PixelSize`（毫米/像素）。
-  - `Calibration`：读取标定结果（[标定补充开发计划](CALIBRATION-TOOLS-PLAN.md) CB-01 的 `.vfcal.json`，兼容旧的矩阵文件），或引用标定矩阵（新增可选输入 `[InputRef("标定矩阵", typeof(HomMat2D), Optional = true)]`，可接“图像坐标转世界坐标”或“畸变校正”输出的 `Matrix`），用 `hom_mat2d_to_affine_par` 取行、列方向缩放系数；两者不同时取平均值并在日志中给出两者差异。
+  - `Calibration`：读取标定结果（[标定补充开发计划](CALIBRATION-TOOLS-PLAN.md) CB-01 的 `.vfcal.json`，兼容旧的矩阵文件），或引用标定矩阵（新增可选输入 `[InputRef("标定矩阵", typeof(HomMat2D), Optional = true)]`，可接“图像坐标转世界坐标”或“畸变校正”输出的 `Matrix`）；行、列方向缩放系数按矩阵两列的范数计算（矩阵 [a, b, c; d, e, f] 把图像 (行, 列) 映到物理 (X, Y)，行方向 √(a² + d²)、列方向 √(b² + e²)，与 `hom_mat2d_to_affine_par` 的缩放等价、镜像时取正；原计划写“用 `hom_mat2d_to_affine_par`”，改用纯数学范数以免依赖 HALCON 算子、本机可全量验证），取两者平均值，两者相差超过 1% 时在日志中给出警告与两个方向的值。
 - 新增 `LengthUnit`（`mm` / `um`）。
 
 **开发方法**
@@ -483,6 +483,16 @@ HALCON 版本基线：**22.11 及以上**（第三批起）。原文写“通用
 - 校验：`Length` 模式 `PixelSize` 必须大于 0（流程校验与运行时）；`Angle` 模式不新增任何校验，自定义范围仍只在运行时检查（与旧版相同）。
 - 参数显隐：`Angle` 模式只显示角度参数，`Length` 模式只显示 `ScaleSource` / `PixelSize` / `LengthUnit` / `IsArea`；输入引用的显示名由“角度”改为“输入值”。
 - 工具箱显示名改为“单位换算”，ID `angle-convert`、类型名 `AngleConvertTool` 与新建节点的默认模块名（“角度换算N”）不变；无专用编辑窗口，经侧栏配置。
+
+**实现说明（Calibration 当量来源，标定线完成后收尾，分支 `feature/ms07-calibration-scale`）**
+
+- 枚举：`ScaleSource` 追加 `Calibration`（数字 1，在 `Fixed` 之后）；`Fixed` 仍为默认，历史文件缺省时为 `Fixed`，行为不变。新增参数 `CalibrationFile`（`.vfcal.json` 或旧版 write_tuple 矩阵文件）与可选输入 `MatrixPath`（“标定矩阵”，`HomMat2D`）。
+- 来源优先级：引用了标定矩阵时直接用引用矩阵（与坐标转换工具一致），标定文件不参与，日志注明；未引用时读取 `CalibrationFile`。
+- 当量：矩阵两列范数 √(a² + d²)、√(b² + e²) 取平均（纯计算，`AngleConvertTool.GetAxisScales`）；相对差 = |行 − 列| / 平均，超过 1% 时日志为警告（给出两个方向的值、相差百分比与平均值），不超过时为信息日志，两种情况都取平均（使用方确认：任务原文“超过 1% 取平均、不超过直接用”在两者不等时没有指明用哪个方向，统一取平均，只区分日志级别）。缩放为 0 / 非有限值时运行失败。
+- 单位：当量统一折成毫米/像素再参与现有换算（`LengthUnit` / `IsArea` 语义不变）。标定文件的 `Unit`：m ×1000、cm ×10、mm ×1、um（含 μm）÷1000；旧版 write_tuple 文件、未注明单位的 `.vfcal.json` 与引用的裸矩阵都不带单位信息，按 mm 处理；其他单位在流程校验与运行中报“单位不受支持”。
+- 读取与校验：复用 `CalibrationSourceCache`（文件按“完整路径 + 修改时间 + 大小”缓存）；标定内容须带 `Affine2D` 段（旧版矩阵文件视为 Affine2D），缺段时报“来源 + 实际类型（含哪些段）+ 需要 Affine2D 数据”，流程校验与运行措辞一致；文件缺失不在校验阶段报（沿用标定线约定），由运行报告；`Calibration` 来源下既没引用矩阵也没配置文件时，校验与运行都报“请配置标定文件或引用标定矩阵”。`Calibration` 来源不检查 `PixelSize`。
+- 参数显隐：`Angle` 模式隐藏全部长度参数（含新参数）；`Length` + `Fixed` 隐藏 `CalibrationFile` 与标定矩阵输入；`Length` + `Calibration` 隐藏 `PixelSize`。
+- 公共方法 `Convert(value)` 仍按 `PixelSize` 换算（`Calibration` 来源的当量在运行时才确定）；新增 `Convert(value, millimetersPerPixel)` 供按指定当量换算。
 
 ## 6. 兼容性要求
 
@@ -513,7 +523,7 @@ HALCON 版本基线：**22.11 及以上**（第三批起）。原文写“通用
 - MS-04：在含干扰边缘的图像中，开启模糊测量后只保留符合宽度的边缘对。
 - MS-05：对已知灰度渐变的合成图像，`Profile` 与真值一致。
 - MS-06：对合成矩形角，交点误差在 0.2 像素内，夹角误差在 0.1° 内。
-- MS-07：`Angle` 模式结果与旧版一致；`Length` 模式下固定当量方式结果正确（标定文件方式随 CB-01 标定批验收）。
+- MS-07：`Angle` 模式结果与旧版一致；`Length` 模式下固定当量方式结果正确；标定当量方式：已知缩放与旋转角的仿射标定文件当量与真值一致，m / cm / um 单位折算为 mm、旧版矩阵文件按 mm，引用矩阵优先于文件，行列缩放不同时取平均并在日志给出两个方向的值（已完成，见 MS-07 实现说明与第 18 节）。
 - 全部回归测试和 `examples\*.vflow.json` 通过。
 
 ## 8. 开发顺序
@@ -731,3 +741,23 @@ HALCON 版本基线：**22.11 及以上**（第三批起）。原文写“通用
   2. 偏差图原先用 `scale_image_max` 拉伸显示：偏差几乎处处相同（合成样本两处标准差都约 1.58）时，浮点误差被拉伸成黑白对比，误导判断。改为按 0 ~ 最大值线性显示。
   3. 阈值说明原写“允许偏差 = 绝对阈值 + 相对阈值 × 偏差图”，补测后按实测改为取二者较大者，并加用例固定。
 - 脚本问题（已修脚本）：系统保存对话框不认 UI Automation 写入的文件名（按默认名存到对话框记住的目录），直接按键又会被中文输入法转换，改为经剪贴板粘贴并在确认前核对输入框内容；探索过程中两次误存到对话框记住的其他目录的导出文件，已核对创建时间后删除。
+
+## 18. MS-07 Calibration 当量来源（标定线收尾）实现与验收记录
+
+**开工依据**：基线 `origin/main` 含标定线 CB-01 ~ CB-07 与叠加底图溯源（`99e7e36`）；`.vfcal.json` 服务、多段共存与 `CalibrationSourceCache` 已就绪。当量按矩阵列范数纯计算，不依赖 HALCON 算子行为，无需探测。
+
+**与任务说明不一致处（如实记录）**
+
+| 项 | 处理 |
+|---|---|
+| “现有测试一字不改仍全绿” | 第二批用例 `长度模式校验_像素当量必须大于0_参数按模式显隐` 末行断言 `ScaleSource` 只有 `Fixed`（注释“当量来源本批只有固定当量”），与追加 `Calibration` 直接冲突，无法不改。只改这一行：断言成员与数字顺序为 `[Fixed, Calibration]`，其余现有用例一字未改 |
+| “不超过 1% 则直接用” | 行列缩放不等时“直接用”没有指明用哪个方向；经使用方确认统一取平均，超过 1% 时日志为警告、否则为信息 |
+| 未注明单位的 `.vfcal.json` | 任务只列了 m / cm / mm / um 与旧版文件；按“不带单位信息按 mm”的同一惯例处理并在日志注明；其他单位报“单位不受支持”（校验与运行一致） |
+| “新测试全部非 HALCON” | 旧版 write_tuple 文件只能经 HALCON 的 `write_tuple` / `read_tuple` 生成与读取（标定服务的既有读取路径），该用例标注 `Requires=HALCON`；另加一个门禁用例把列范数与 `hom_mat2d_to_affine_par` 的缩放对照（含斜切与镜像矩阵），佐证计划中的等价说法。其余用例不调用 HALCON 算子 |
+| “本机非 HALCON 通过数 = 693 + 新增数” | 本机装有 HALCON 22.11，全部用例都实际运行；既有 HALCON 用例没有统一 Trait，无法在本机复现 693 这一口径，见验收结果中的对账 |
+
+**验收结果**
+
+- 单元/集成测试：新增 `Ms07CalibrationScaleTests` 21 个用例（16 个 Fact + 1 个 5 组数据的 Theory），其中 2 个为 HALCON 门禁（旧版矩阵文件、与 `hom_mat2d_to_affine_par` 对照）：已知缩放与旋转角的标定文件当量与真值一致（含数组、`um`、面积）；m / cm / mm / um / μm 折算为 mm；未注明单位按 mm、不支持的单位校验与运行措辞一致；引用非均匀缩放矩阵取平均并给出警告与两个方向的值；相差不超过 1% 时信息日志、仍取平均；镜像矩阵当量取正；引用矩阵优先于文件（文件正常、缺 `Affine2D` 段、缺失三种情况都不参与，日志注明）；缺 `Affine2D` 段校验与运行措辞一致；未配置任何来源校验与运行都报错；文件缺失校验不报、运行报告；文件替换后重新读取；矩阵引用无效 / 缩放为 0 时运行失败；`Fixed` 与 `Angle` 模式不受新参数影响；参数显隐；按数字保存、历史文件默认 `Fixed`、输入元数据。
+- 全量 `dotnet test`（`Category!=Soak`）999 个通过（基线 978 + 新增 21，含 `examples\*.vflow.json` 加载用例）；排除带 `Requires=HALCON` 标注的用例后 990 个通过。构建 0 错误，唯一警告为既有的 `MatchMeasureBatch4Tests.cs(143)` xUnit2000。
+- 界面验收：脚本经 Windows UI Automation 驱动真实的 `VisionFlow.WpfApp.exe`，19 项检查全部通过（连续两次）：流程为图像加载 → 阈值分割 → 区域排序 → 单位换算（输入 `排序1.Rows`），标定文件为 cm 单位、行列缩放相差 4.9% 的仿射标定；侧栏 `Fixed` 时显示 `PixelSize`、隐藏 `CalibrationFile` 与“标定矩阵”，当量来源下拉为 `Fixed / Calibration`；切到 `Calibration` 后显隐互换；未配置来源时“校验流程”报“当量来源为标定，请配置标定文件或引用标定矩阵”；侧栏填写标定文件后校验通过，运行结果（`Value` / `Count` / `Values`）与无界面运行逐字一致（平均当量 0.0205 mm/像素）；保存后文件为 `"ScaleSource": 1`、ID 仍为 `angle-convert`，重新加载再运行一致，侧栏回显；切回 `Fixed` 后结果与无界面固定当量运行一致。

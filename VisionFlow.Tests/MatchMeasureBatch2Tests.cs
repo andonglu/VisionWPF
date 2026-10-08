@@ -660,8 +660,8 @@ public class MatchMeasureBatch2Tests
         {
             Assert.False(tool.IsParameterVisible(name), name);
         }
-        // 当量来源本批只有固定当量
-        Assert.Equal(new[] { ScaleSource.Fixed }, Enum.GetValues<ScaleSource>());
+        // 当量来源：固定当量（默认，0）在前，标定（1）追加在末尾
+        Assert.Equal(new[] { ScaleSource.Fixed, ScaleSource.Calibration }, Enum.GetValues<ScaleSource>());
     }
 
     [Fact]
