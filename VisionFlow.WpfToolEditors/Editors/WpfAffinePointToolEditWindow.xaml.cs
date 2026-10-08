@@ -109,18 +109,26 @@ namespace VisionFlow.WpfToolEditors.Editors
             UpdateSourcePanels();
             UpdateCalibrationInfo();
             LoadPointsFromCalibration();
+            LoadRotationFromCalibration();
             ShowCalibrationImage();
             CalibImageView.PointPicked += OnImagePointPicked;
+            RotImageView.PointPicked += OnRotImagePointPicked;
             if (standalone)
             {
                 RunTab.Visibility = Visibility.Collapsed;
                 EmbedButton.IsEnabled = false;
                 EmbedButton.ToolTip = "单独打开的标定助手没有关联工具，只能保存为标定文件";
+                RotEmbedButton.IsEnabled = false;
+                RotEmbedButton.ToolTip = EmbedButton.ToolTip;
                 OkButton.Visibility = Visibility.Collapsed;
                 CancelButton.Content = "关闭";
                 MainTabs.SelectedItem = AssistantTab;
             }
-            Closed += (s, e) => CalibImageView.PointPicked -= OnImagePointPicked;
+            Closed += (s, e) =>
+            {
+                CalibImageView.PointPicked -= OnImagePointPicked;
+                RotImageView.PointPicked -= OnRotImagePointPicked;
+            };
         }
 
         /// <summary>打开后直接显示 N 点标定页（主窗口“标定助手”按钮对选中的坐标转换节点使用）。</summary>
@@ -157,7 +165,9 @@ namespace VisionFlow.WpfToolEditors.Editors
             if (_context.InputImage != null && _context.InputImage.IsInitialized())
             {
                 CalibImageCombo.Items.Add("Input.Image");
+                RotImageCombo.Items.Add("Input.Image");
             }
+            RotAngleVarCombo.Items.Add(string.Empty);
             if (_context.LastRunContext != null)
             {
                 foreach (Variable variable in _context.LastRunContext.GetAllVariables())
@@ -168,6 +178,7 @@ namespace VisionFlow.WpfToolEditors.Editors
                         if (!CalibImageCombo.Items.Contains(path))
                         {
                             CalibImageCombo.Items.Add(path);
+                            RotImageCombo.Items.Add(path);
                         }
                     }
                     else if (IsNumeric(variable.Value) || (variable.Kind == VariableKind.Array && variable.Value is IEnumerable && !(variable.Value is string)
@@ -175,12 +186,19 @@ namespace VisionFlow.WpfToolEditors.Editors
                     {
                         PickRowVarCombo.Items.Add(path);
                         PickColumnVarCombo.Items.Add(path);
+                        RotRowVarCombo.Items.Add(path);
+                        RotColumnVarCombo.Items.Add(path);
+                        RotAngleVarCombo.Items.Add(path);
                     }
                 }
             }
             if (CalibImageCombo.Items.Count > 0)
             {
                 CalibImageCombo.SelectedIndex = 0;
+            }
+            if (RotImageCombo.Items.Count > 0)
+            {
+                RotImageCombo.SelectedIndex = 0;
             }
         }
 
@@ -709,7 +727,10 @@ namespace VisionFlow.WpfToolEditors.Editors
                 ShowError(_points.Count == 0 ? "还没有点对。" : "请先计算（点对修改后需要重新计算）。");
                 return null;
             }
-            return CalibrationService.FromAffine(_solved, UnitText.Text, DescriptionText.Text);
+            CalibrationResult result = CalibrationService.FromAffine(_solved, UnitText.Text, DescriptionText.Text);
+            // 当前标定已带旋转中心（CB-03 合并保存）时保留它，并按新矩阵重新换算圆心物理坐标，避免重新做 N 点标定时丢失
+            RotationCenterCalibration existingCenter = TryLoadPendingCalibration(out _)?.RotationCenter;
+            return existingCenter == null ? result : CalibrationService.MergeRotationCenter(result, existingCenter, null, null);
         }
 
         private void SaveCalibrationFile_Click(object sender, RoutedEventArgs e)
@@ -793,6 +814,335 @@ namespace VisionFlow.WpfToolEditors.Editors
             ApplySolved(affine, threshold);
         }
 
+        // ======================= 旋转中心页（CB-03） =======================
+
+        private sealed class RotRow
+        {
+            public int Index { get; set; }
+            public double Row { get; set; }
+            public double Column { get; set; }
+            /// <summary>角度（度，界面显示与输入）；文件中保存弧度。</summary>
+            public double? AngleDegrees { get; set; }
+            public double? Residual { get; set; }
+            public string AngleText => AngleDegrees.HasValue ? AngleDegrees.Value.ToString("F3", CultureInfo.CurrentCulture) : string.Empty;
+            public string ResidualText => Residual.HasValue ? Residual.Value.ToString("F4", CultureInfo.CurrentCulture) : string.Empty;
+        }
+
+        private readonly List<RotRow> _rotPoints = new List<RotRow>();
+        private RotationCenterSolution _rotSolved;
+        private RotRow _rotPickingRow;
+        private bool _rotPickActive;
+
+        private void RotTakeCurrentValue_Click(object sender, RoutedEventArgs e)
+        {
+            if (_context.LastRunContext == null)
+            {
+                ShowError("还没有运行结果：请先运行一次流程，再取当前值。");
+                return;
+            }
+            try
+            {
+                double row = ReadSingleValue(RotRowVarCombo.Text, "行变量");
+                double column = ReadSingleValue(RotColumnVarCombo.Text, "列变量");
+                double? angle = string.IsNullOrWhiteSpace(RotAngleVarCombo.Text) ? (double?)null : AngleMath.ToDegrees(ReadSingleValue(RotAngleVarCombo.Text, "角度变量"));
+                AddRotPoint(row, column, angle);
+                SetStatus($"已取当前值：图像 ({Format(row)}, {Format(column)})" + (angle.HasValue ? $"，角度 {angle.Value.ToString("F3", CultureInfo.CurrentCulture)}°" : "（无角度）") + "。");
+            }
+            catch (InvalidOperationException ex)
+            {
+                ShowError(ex.Message);
+            }
+        }
+
+        private void RotPickOnImage_Click(object sender, RoutedEventArgs e)
+        {
+            if (!ShowRotationImage())
+            {
+                ShowError("没有可显示的图像：请先加载图像或运行一次流程。");
+                return;
+            }
+            _rotPickActive = true;
+            _rotPickingRow = null;
+            RotImageView.BeginPickPoint();
+            SetStatus("请在图像上点击旋转后的特征点（按住拖动可微调），角度可在下方手动补填。");
+        }
+
+        private void OnRotImagePointPicked(object sender, ImagePointEventArgs e)
+        {
+            if (!_rotPickActive)
+            {
+                return;
+            }
+            if (_rotPickingRow == null)
+            {
+                _rotPickingRow = AddRotPoint(e.Row, e.Column, null);
+            }
+            else
+            {
+                _rotPickingRow.Row = e.Row;
+                _rotPickingRow.Column = e.Column;
+                RotPointsChanged();
+            }
+            SetStatus($"已在图像上取点：({Format(e.Row)}, {Format(e.Column)})。");
+        }
+
+        private void RotAddManualPoint_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                double row = ParseDouble(RotManualRowText.Text, "图像行");
+                double column = ParseDouble(RotManualColumnText.Text, "图像列");
+                double? angle = string.IsNullOrWhiteSpace(RotManualAngleText.Text) ? (double?)null : ParseDouble(RotManualAngleText.Text, "角度");
+                AddRotPoint(row, column, angle);
+                SetStatus($"已手动添加第 {_rotPoints.Count} 个旋转点。");
+            }
+            catch (FormatException ex)
+            {
+                ShowError(ex.Message);
+            }
+        }
+
+        private RotRow AddRotPoint(double row, double column, double? angleDegrees)
+        {
+            var point = new RotRow { Row = row, Column = column, AngleDegrees = angleDegrees };
+            _rotPoints.Add(point);
+            RotPointsChanged();
+            return point;
+        }
+
+        private void RotDeletePoint_Click(object sender, RoutedEventArgs e)
+        {
+            if (!(RotPointGrid.SelectedItem is RotRow point))
+            {
+                SetStatus("请先在表格中选中要删除的点。");
+                return;
+            }
+            _rotPoints.Remove(point);
+            RotPointsChanged();
+            SetStatus("已删除选中点，请重新求解。");
+        }
+
+        private void RotClearPoints_Click(object sender, RoutedEventArgs e)
+        {
+            _rotPoints.Clear();
+            RotPointsChanged();
+            SetStatus("已清空旋转点。");
+        }
+
+        /// <summary>旋转点有变化：作废上次求解结果（须重新求解才能保存 / 内嵌），刷新表格与图像。</summary>
+        private void RotPointsChanged()
+        {
+            _rotSolved = null;
+            foreach (RotRow point in _rotPoints)
+            {
+                point.Residual = null;
+            }
+            RotResultText.Text = _rotPoints.Count == 0 ? string.Empty : "旋转点已修改，请重新求解。";
+            RotPhysicalText.Text = string.Empty;
+            RotWarningText.Visibility = Visibility.Collapsed;
+            RefreshRotPoints();
+        }
+
+        private void RefreshRotPoints()
+        {
+            for (int i = 0; i < _rotPoints.Count; i++)
+            {
+                _rotPoints[i].Index = i;
+            }
+            RotPointGrid.ItemsSource = null;
+            RotPointGrid.ItemsSource = _rotPoints;
+            ShowRotationOverlay();
+        }
+
+        private void RotSolve_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                List<RotationCenterPoint> points = _rotPoints.Select(p => new RotationCenterPoint
+                {
+                    Row = p.Row,
+                    Column = p.Column,
+                    Angle = p.AngleDegrees.HasValue ? AngleMath.ToRadians(p.AngleDegrees.Value) : (double?)null
+                }).ToList();
+                ApplyRotSolved(CalibrationService.SolveRotationCenter(points));
+                SetStatus("求解完成：" + RotResultText.Text + (RotWarningText.Visibility == Visibility.Visible ? "；" + RotWarningText.Text : "。"));
+            }
+            catch (InvalidOperationException ex)
+            {
+                _rotSolved = null;
+                RotResultText.Text = "无法求解：" + ex.Message;
+                RotPhysicalText.Text = string.Empty;
+                RotWarningText.Visibility = Visibility.Collapsed;
+                ShowError("无法求解：" + ex.Message);
+            }
+        }
+
+        private void ApplyRotSolved(RotationCenterSolution solution)
+        {
+            RotationCenterCalibration center = solution.Calibration;
+            for (int i = 0; i < _rotPoints.Count; i++)
+            {
+                _rotPoints[i].Residual = center.Points[i].Residual;
+            }
+            _rotSolved = solution;
+            RefreshRotPoints();
+            RotResultText.Text = string.Format(CultureInfo.CurrentCulture, "{0}：圆心 ({1:F3}, {2:F3})，半径 {3:F3}，RMS {4}，最大 {5}（像素）",
+                solution.UsedAngles ? "按角度求解" : "圆拟合", center.Row, center.Column, center.Radius, FormatError(center.RmsError), FormatError(center.MaxError));
+            Affine2DCalibration affine = TryLoadPendingCalibration(out _)?.Affine2D;
+            if (affine != null)
+            {
+                CalibrationService.TransformPoint(affine.HomMat2D, center.Row, center.Column, out double x, out double y);
+                RotPhysicalText.Text = string.Format(CultureInfo.CurrentCulture, "圆心物理坐标 X {0:F4}，Y {1:F4}（经当前 Affine2D 标定换算）", x, y);
+            }
+            else
+            {
+                RotPhysicalText.Text = "当前没有 Affine2D 标定，只给出图像坐标；保存时只写旋转中心。";
+            }
+            RotWarningText.Text = string.Join("；", solution.Warnings);
+            RotWarningText.Visibility = solution.Warnings.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        /// <summary>按合并规则生成要保存 / 内嵌的标定：当前标定带 Affine2D 时合并（Kind 仍为 Affine2D），否则只写 RotationCenter。</summary>
+        private CalibrationResult BuildRotationResult()
+        {
+            if (_rotSolved == null)
+            {
+                ShowError(_rotPoints.Count == 0 ? "还没有旋转点。" : "请先求解（旋转点修改后需要重新求解）。");
+                return null;
+            }
+            return CalibrationService.MergeRotationCenter(TryLoadPendingCalibration(out _), _rotSolved.Calibration, UnitText.Text, null);
+        }
+
+        private void RotSaveCalibrationFile_Click(object sender, RoutedEventArgs e)
+        {
+            CalibrationResult result = BuildRotationResult();
+            if (result == null)
+            {
+                return;
+            }
+            var dialog = new SaveFileDialog
+            {
+                Title = "保存标定文件",
+                Filter = "标定文件 (*.vfcal.json)|*.vfcal.json|所有文件 (*.*)|*.*",
+                FileName = (_standalone ? "旋转中心" : (ModuleNameText.Text ?? "坐标转换").Trim()) + ".vfcal.json"
+            };
+            if (dialog.ShowDialog(this) != true)
+            {
+                return;
+            }
+            try
+            {
+                CalibrationService.Save(dialog.FileName, result);
+            }
+            catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException)
+            {
+                ShowError("保存失败：" + ex.Message);
+                return;
+            }
+            string merged = result.Affine2D != null ? "（与 Affine2D 合并）" : "（只含旋转中心）";
+            if (_standalone || result.Affine2D == null)
+            {
+                // 只含旋转中心的标定不能供坐标转换使用，不改当前工具的来源
+                SetStatus("已保存标定文件" + merged + "：" + dialog.FileName);
+                return;
+            }
+            SetFileSource(dialog.FileName);
+            SetStatus("已保存标定文件" + merged + "，当前工具改用该文件（内嵌数据已清空）：" + dialog.FileName);
+        }
+
+        private void RotEmbedCalibration_Click(object sender, RoutedEventArgs e)
+        {
+            CalibrationResult result = BuildRotationResult();
+            if (result == null)
+            {
+                return;
+            }
+            if (result.Affine2D == null)
+            {
+                ShowError("当前没有 Affine2D 标定：只含旋转中心的标定不能内嵌到坐标转换（坐标转换需要 Affine2D）。请先完成 N 点标定，或把旋转中心保存为标定文件。");
+                return;
+            }
+            _loading = true;
+            SourceCombo.SelectedItem = SourceChoices.First(c => c.Value == CalibrationSource.Embedded);
+            _loading = false;
+            _calibrationState.UseEmbeddedCalibration(CalibrationService.ToJson(result));
+            CalibrationFileText.Text = string.Empty;
+            UpdateSourcePanels();
+            UpdateCalibrationInfo();
+            SetStatus("已把旋转中心与 Affine2D 合并内嵌到当前工具（标定文件路径已清空），确定后生效。");
+        }
+
+        /// <summary>打开时若当前标定带旋转中心，载入旋转点与结果便于继续调整。</summary>
+        private void LoadRotationFromCalibration()
+        {
+            RotationCenterCalibration center = TryLoadPendingCalibration(out _)?.RotationCenter;
+            if (center == null || center.Points.Count == 0)
+            {
+                return;
+            }
+            foreach (RotationCenterPoint point in center.Points)
+            {
+                _rotPoints.Add(new RotRow
+                {
+                    Row = point.Row,
+                    Column = point.Column,
+                    AngleDegrees = point.Angle.HasValue ? AngleMath.ToDegrees(point.Angle.Value) : (double?)null
+                });
+            }
+            try
+            {
+                ApplyRotSolved(CalibrationService.SolveRotationCenter(center.Points));
+            }
+            catch (InvalidOperationException)
+            {
+                RefreshRotPoints();
+            }
+        }
+
+        private void RotImageCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            Dispatcher.BeginInvoke(new Action(() => ShowRotationImage()));
+        }
+
+        private bool ShowRotationImage()
+        {
+            HObject image = ResolveImage(RotImageCombo.Text);
+            if (image == null)
+            {
+                return false;
+            }
+            RotImageView.ShowImage(image);
+            ShowRotationOverlay();
+            return true;
+        }
+
+        /// <summary>旋转点画十字；求解后再画拟合的圆。</summary>
+        private void ShowRotationOverlay()
+        {
+            if (_rotPoints.Count == 0)
+            {
+                RotImageView.ClearOverlay();
+                return;
+            }
+            HOperatorSet.GenCrossContourXld(out HObject overlay, new HTuple(_rotPoints.Select(p => p.Row).ToArray()),
+                new HTuple(_rotPoints.Select(p => p.Column).ToArray()), 16, 0.785398);
+            if (_rotSolved != null)
+            {
+                RotationCenterCalibration center = _rotSolved.Calibration;
+                HOperatorSet.GenCircleContourXld(out HObject circle, center.Row, center.Column, Math.Max(center.Radius, 0.5), 0, 2 * Math.PI, "positive", 1);
+                HOperatorSet.GenCrossContourXld(out HObject centerCross, center.Row, center.Column, 24, 0);
+                HOperatorSet.ConcatObj(overlay, circle, out HObject withCircle);
+                HOperatorSet.ConcatObj(withCircle, centerCross, out HObject all);
+                overlay.Dispose();
+                circle.Dispose();
+                centerCross.Dispose();
+                withCircle.Dispose();
+                overlay = all;
+            }
+            RotImageView.SetOverlay(overlay);
+            overlay.Dispose();
+        }
+
         // ======================= 图像 =======================
 
         private void CalibImageCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -802,7 +1152,20 @@ namespace VisionFlow.WpfToolEditors.Editors
 
         private bool ShowCalibrationImage()
         {
-            string path = (CalibImageCombo.Text ?? string.Empty).Trim();
+            HObject image = ResolveImage(CalibImageCombo.Text);
+            if (image == null)
+            {
+                return false;
+            }
+            CalibImageView.ShowImage(image);
+            ShowPointCrosses();
+            return true;
+        }
+
+        /// <summary>按下拉中的路径取图：Input.Image 为主窗口当前图像，其他从上次运行结果解析。</summary>
+        private HObject ResolveImage(string pathText)
+        {
+            string path = (pathText ?? string.Empty).Trim();
             HObject image = null;
             if (path.Equals("Input.Image", StringComparison.OrdinalIgnoreCase))
             {
@@ -819,13 +1182,7 @@ namespace VisionFlow.WpfToolEditors.Editors
                     image = null;
                 }
             }
-            if (image == null || !image.IsInitialized())
-            {
-                return false;
-            }
-            CalibImageView.ShowImage(image);
-            ShowPointCrosses();
-            return true;
+            return image != null && image.IsInitialized() ? image : null;
         }
 
         private void ShowPointCrosses()

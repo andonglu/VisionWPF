@@ -58,16 +58,23 @@ namespace VisionFlow.Tools.Calibration
         public CalibrationTransformType TransformType { get; set; }
     }
 
-    /// <summary>旋转中心采集点（CB-03；本批只定义格式）。</summary>
+    /// <summary>旋转中心采集点（CB-03）：特征点的图像行列与（可选的）旋转角度。</summary>
     public sealed class RotationCenterPoint
     {
         public double Row { get; set; }
         public double Column { get; set; }
-        /// <summary>对应的旋转角度（弧度，可选）。</summary>
+        /// <summary>对应的旋转角度（弧度，可选；图像角度约定：与匹配 Angle 相同，屏幕上逆时针为正）。</summary>
         public double? Angle { get; set; }
+        /// <summary>求解后的残差（像素）：|点到圆心距离 − 半径|；未求解时为空。</summary>
+        public double? Residual { get; set; }
+
+        public RotationCenterPoint Clone()
+        {
+            return (RotationCenterPoint)MemberwiseClone();
+        }
     }
 
-    /// <summary>旋转中心标定结果（RotationCenter 载荷，CB-03；本批只定义格式，服务方法留到后续批）。</summary>
+    /// <summary>旋转中心标定结果（RotationCenter 载荷，CB-03）。</summary>
     public sealed class RotationCenterCalibration
     {
         public double Row { get; set; }
@@ -78,6 +85,18 @@ namespace VisionFlow.Tools.Calibration
         public double Radius { get; set; }
         public List<RotationCenterPoint> Points { get; set; } = new List<RotationCenterPoint>();
         public double? RmsError { get; set; }
+        public double? MaxError { get; set; }
+    }
+
+    /// <summary>旋转中心求解结果：标定内容 + 提示（不阻止求解的问题，如角度覆盖过小）。</summary>
+    public sealed class RotationCenterSolution
+    {
+        public RotationCenterCalibration Calibration { get; set; }
+        /// <summary>是否按角度路径求解（否则为无角度的圆拟合）。</summary>
+        public bool UsedAngles { get; set; }
+        /// <summary>角度覆盖范围（度）：有角度路径按角度，无角度路径按各点绕圆心的覆盖弧度。</summary>
+        public double CoverageDegrees { get; set; }
+        public List<string> Warnings { get; set; } = new List<string>();
     }
 
     /// <summary>相机参数的一项（按名称和值保存；值为字符串或数值）。</summary>
@@ -299,7 +318,7 @@ namespace VisionFlow.Tools.Calibration
         }
 
         /// <summary>不重复的点不少于 3 个，且不共线（垂直主方向的分布不到主方向的 0.1% 视为共线）。</summary>
-        private static void CheckSpread(List<(double A, double B)> points, string what)
+        private static void CheckSpread(List<(double A, double B)> points, string what, string collinearAdvice = "请让标定点分布在两个方向上（如 3×3 网格）")
         {
             double meanA = points.Average(p => p.A);
             double meanB = points.Average(p => p.B);
@@ -330,7 +349,7 @@ namespace VisionFlow.Tools.Calibration
             double minor = Math.Max(0, trace / 2 - root);
             if (major <= 0 || Math.Sqrt(minor / major) < 1e-3)
             {
-                throw new InvalidOperationException($"{what}共线（或几乎共线），无法求解；请让标定点分布在两个方向上（如 3×3 网格）");
+                throw new InvalidOperationException($"{what}共线（或几乎共线），无法求解；{collinearAdvice}");
             }
         }
 
@@ -339,6 +358,286 @@ namespace VisionFlow.Tools.Calibration
         {
             x = homMat2D[0] * row + homMat2D[1] * column + homMat2D[2];
             y = homMat2D[3] * row + homMat2D[4] * column + homMat2D[5];
+        }
+
+        /// <summary>
+        /// 变换一个位姿（纯计算，与坐标转换 CB-05 的换算路径相同）：点经矩阵变换；角度取“沿角度方向 1 个单位”的第二点
+        /// 一同变换后的方向，按图像角度约定 angle = atan2(−ΔX, ΔY)。镜像矩阵（行列式为负）时方向向量自然翻转。
+        /// </summary>
+        public static void TransformPose(double[] homMat2D, double row, double column, double phi, out double x, out double y, out double angle)
+        {
+            TransformPoint(homMat2D, row, column, out x, out y);
+            TransformPoint(homMat2D, row - Math.Sin(phi), column + Math.Cos(phi), out double x2, out double y2);
+            angle = Math.Atan2(-(x2 - x), y2 - y);
+        }
+
+        /// <summary>
+        /// 绕中心旋转（计划第 6 节 CB-07 与 CB-03 共用的公式）：R(α)·(a, b) = (a·cos α − b·sin α, a·sin α + b·cos α)，
+        /// 先平移到中心、旋转、再平移回去。物理系中正角为“从 +X 转向 +Y”；图像 (行, 列) 中与 hom_mat2d_rotate 相同（屏幕上逆时针）。
+        /// </summary>
+        public static void RotateAbout(double centerA, double centerB, double alpha, double a, double b, out double rotatedA, out double rotatedB)
+        {
+            double cos = Math.Cos(alpha), sin = Math.Sin(alpha);
+            double da = a - centerA, db = b - centerB;
+            rotatedA = centerA + da * cos - db * sin;
+            rotatedB = centerB + da * sin + db * cos;
+        }
+
+        /// <summary>角度折算到 (−π, π]。</summary>
+        public static double WrapAngle(double angle)
+        {
+            double wrapped = Math.Atan2(Math.Sin(angle), Math.Cos(angle));
+            return wrapped <= -Math.PI ? Math.PI : wrapped;
+        }
+
+        // ======================= 旋转中心（CB-03） =======================
+
+        /// <summary>
+        /// 由同一特征点在多次旋转后的图像位置求旋转中心（纯 C#，不调用 HALCON）。
+        /// 至少 2 个带角度的点时按角度路径：任意两点满足 (I − R(θi − θj))·c = p_i − R(θi − θj)·p_j，全部点对线性最小二乘；
+        /// 否则至少 3 个点做 Kåsa 代数圆拟合。残差 = |点到圆心距离 − 半径|。点数不足、数值无效、点全部重合 / 共线、角度全部相同时
+        /// 抛出带中文说明的 <see cref="InvalidOperationException"/>；角度覆盖小于 30° 等只在 Warnings 中提示。
+        /// </summary>
+        public static RotationCenterSolution SolveRotationCenter(IReadOnlyList<RotationCenterPoint> points)
+        {
+            int count = points?.Count ?? 0;
+            if (count == 0)
+            {
+                throw new InvalidOperationException("没有采集点：至少需要 3 个点，或至少 2 个带角度的点");
+            }
+            for (int i = 0; i < count; i++)
+            {
+                RotationCenterPoint p = points[i];
+                if (p == null || !IsFinite(p.Row) || !IsFinite(p.Column) || (p.Angle.HasValue && !IsFinite(p.Angle.Value)))
+                {
+                    throw new InvalidOperationException($"第 {i + 1} 个点含无效数值（空、NaN 或无穷大）");
+                }
+            }
+            var solution = new RotationCenterSolution();
+            List<RotationCenterPoint> withAngle = points.Where(p => p.Angle.HasValue).ToList();
+            double centerRow, centerColumn, circleRadius = double.NaN;
+            if (withAngle.Count >= 2)
+            {
+                if (DistinctCount(withAngle) < 2)
+                {
+                    throw new InvalidOperationException("带角度的点全部重合，无法确定旋转中心");
+                }
+                if (!TrySolveCenterFromAngles(withAngle, 1, out centerRow, out centerColumn, out double rotationRms))
+                {
+                    throw new InvalidOperationException("各点的角度全部相同（没有旋转），无法确定旋转中心");
+                }
+                solution.UsedAngles = true;
+                if (withAngle.Count < count)
+                {
+                    solution.Warnings.Add($"{count - withAngle.Count} 个点没有角度，未参与求圆心（只计算残差）");
+                }
+                // 角度方向与图像约定相反时（如机构角度方向相反），按相反方向拟合会明显更好：只提示，不改变结果
+                if (TrySolveCenterFromAngles(withAngle, -1, out _, out _, out double flippedRms) && rotationRms > 1e-6 && flippedRms < rotationRms * 0.25)
+                {
+                    solution.Warnings.Add("按相反的角度方向拟合残差明显更小：角度方向可能与图像约定（屏幕上逆时针为正）相反，请检查角度来源，必要时取反");
+                }
+                List<double> relative = withAngle.Select(p => WrapAngle(p.Angle.Value - withAngle[0].Angle.Value)).ToList();
+                solution.CoverageDegrees = (relative.Max() - relative.Min()) * 180 / Math.PI;
+            }
+            else
+            {
+                if (count < 3)
+                {
+                    throw new InvalidOperationException($"至少需要 3 个点（当前 {count} 个），或至少 2 个带角度的点");
+                }
+                if (withAngle.Count == 1)
+                {
+                    solution.Warnings.Add("只有 1 个点带角度，按无角度的圆拟合求解");
+                }
+                CheckSpread(points.Select(p => (p.Row, p.Column)).ToList(), "旋转点", "请让旋转角度覆盖更大的范围，或填写各点的旋转角度");
+                FitCircle(points, out centerRow, out centerColumn, out circleRadius);
+            }
+
+            List<double> distances = points.Select(p => Distance(p.Row, p.Column, centerRow, centerColumn)).ToList();
+            double radius;
+            if (solution.UsedAngles)
+            {
+                radius = distances.Average();
+            }
+            else
+            {
+                radius = circleRadius;
+                solution.CoverageDegrees = ArcCoverageDegrees(points, centerRow, centerColumn);
+            }
+            var calibration = new RotationCenterCalibration { Row = centerRow, Column = centerColumn, Radius = radius };
+            double sumSquares = 0, max = 0;
+            for (int i = 0; i < count; i++)
+            {
+                double residual = Math.Abs(distances[i] - radius);
+                RotationCenterPoint copy = points[i].Clone();
+                copy.Residual = residual;
+                calibration.Points.Add(copy);
+                sumSquares += residual * residual;
+                max = Math.Max(max, residual);
+            }
+            calibration.RmsError = Math.Sqrt(sumSquares / count);
+            calibration.MaxError = max;
+            if (solution.CoverageDegrees < 30)
+            {
+                solution.Warnings.Add($"角度覆盖只有 {solution.CoverageDegrees.ToString("F1", CultureInfo.InvariantCulture)}°，建议覆盖 30° 以上，否则圆心误差会偏大");
+            }
+            solution.Calibration = calibration;
+            return solution;
+        }
+
+        /// <summary>角度路径：对全部点对累加最小二乘。M = I − R(Δ) 满足 MᵀM = (2 − 2·cos Δ)·I，因此中心 = Σ Mᵀ·rhs / Σ (2 − 2·cos Δ)。</summary>
+        private static bool TrySolveCenterFromAngles(List<RotationCenterPoint> points, int sign, out double centerRow, out double centerColumn, out double rotationRms)
+        {
+            double weight = 0, sumA = 0, sumB = 0;
+            for (int i = 0; i < points.Count; i++)
+            {
+                for (int j = i + 1; j < points.Count; j++)
+                {
+                    double delta = sign * (points[i].Angle.Value - points[j].Angle.Value);
+                    double cos = Math.Cos(delta), sin = Math.Sin(delta);
+                    // rhs = p_i − R(Δ)·p_j
+                    double rhsA = points[i].Row - (points[j].Row * cos - points[j].Column * sin);
+                    double rhsB = points[i].Column - (points[j].Row * sin + points[j].Column * cos);
+                    // Mᵀ = [[1 − cos, −sin], [sin, 1 − cos]]
+                    sumA += (1 - cos) * rhsA - sin * rhsB;
+                    sumB += sin * rhsA + (1 - cos) * rhsB;
+                    weight += 2 - 2 * cos;
+                }
+            }
+            centerRow = centerColumn = rotationRms = double.NaN;
+            if (weight < 1e-12)
+            {
+                return false;
+            }
+            centerRow = sumA / weight;
+            centerColumn = sumB / weight;
+            // 旋转一致性残差：用 j 点绕中心转 Δ 预测 i 点
+            double sumSquares = 0;
+            int pairs = 0;
+            for (int i = 0; i < points.Count; i++)
+            {
+                for (int j = i + 1; j < points.Count; j++)
+                {
+                    double delta = sign * (points[i].Angle.Value - points[j].Angle.Value);
+                    RotateAbout(centerRow, centerColumn, delta, points[j].Row, points[j].Column, out double predictedRow, out double predictedColumn);
+                    double d = Distance(points[i].Row, points[i].Column, predictedRow, predictedColumn);
+                    sumSquares += d * d;
+                    pairs++;
+                }
+            }
+            rotationRms = Math.Sqrt(sumSquares / pairs);
+            return true;
+        }
+
+        /// <summary>Kåsa 代数圆拟合（去均值坐标）：x² + y² + D·x + E·y + F = 0，圆心 (−D/2, −E/2)，半径 √((D² + E²)/4 − F)。</summary>
+        private static void FitCircle(IReadOnlyList<RotationCenterPoint> points, out double centerRow, out double centerColumn, out double radius)
+        {
+            int n = points.Count;
+            double meanA = points.Average(p => p.Row);
+            double meanB = points.Average(p => p.Column);
+            double suu = 0, suv = 0, svv = 0, suz = 0, svz = 0, sz = 0;
+            foreach (RotationCenterPoint p in points)
+            {
+                double u = p.Row - meanA, v = p.Column - meanB, z = u * u + v * v;
+                suu += u * u;
+                suv += u * v;
+                svv += v * v;
+                suz += u * z;
+                svz += v * z;
+                sz += z;
+            }
+            // 去均值后 Σu = Σv = 0：F = −Σz / n，[Σuu Σuv; Σuv Σvv]·[D; E] = −[Σuz; Σvz]
+            double det = suu * svv - suv * suv;
+            if (Math.Abs(det) <= 1e-12 * Math.Max(1, suu * svv))
+            {
+                throw new InvalidOperationException("旋转点共线（或几乎共线），无法拟合圆；请让旋转角度覆盖更大的范围，或填写各点的旋转角度");
+            }
+            double d = (-suz * svv + svz * suv) / det;
+            double e = (-svz * suu + suz * suv) / det;
+            double f = -sz / n;
+            double radiusSquared = (d * d + e * e) / 4 - f;
+            if (!(radiusSquared > 0))
+            {
+                throw new InvalidOperationException("旋转点无法拟合成圆（半径无效）");
+            }
+            centerRow = meanA - d / 2;
+            centerColumn = meanB - e / 2;
+            radius = Math.Sqrt(radiusSquared);
+        }
+
+        /// <summary>各点绕圆心的覆盖弧度（度）= 360° − 相邻方向之间最大的空隙。</summary>
+        private static double ArcCoverageDegrees(IReadOnlyList<RotationCenterPoint> points, double centerRow, double centerColumn)
+        {
+            List<double> directions = points.Select(p => Math.Atan2(-(p.Row - centerRow), p.Column - centerColumn)).OrderBy(a => a).ToList();
+            double maxGap = 2 * Math.PI - (directions[directions.Count - 1] - directions[0]);
+            for (int i = 1; i < directions.Count; i++)
+            {
+                maxGap = Math.Max(maxGap, directions[i] - directions[i - 1]);
+            }
+            return (2 * Math.PI - maxGap) * 180 / Math.PI;
+        }
+
+        private static int DistinctCount(IReadOnlyList<RotationCenterPoint> points)
+        {
+            var distinct = new List<RotationCenterPoint>();
+            foreach (RotationCenterPoint p in points)
+            {
+                if (!distinct.Any(d => Math.Abs(d.Row - p.Row) <= 1e-9 && Math.Abs(d.Column - p.Column) <= 1e-9))
+                {
+                    distinct.Add(p);
+                }
+            }
+            return distinct.Count;
+        }
+
+        private static double Distance(double a1, double b1, double a2, double b2)
+        {
+            return Math.Sqrt((a1 - a2) * (a1 - a2) + (b1 - b2) * (b1 - b2));
+        }
+
+        /// <summary>
+        /// 把旋转中心结果并入标定内容（CB-03 保存 / 内嵌规则）：已有 Affine2D 时保留它并新增 RotationCenter 段（换算圆心物理坐标，Kind 仍为 Affine2D）；
+        /// 否则只写 RotationCenter 段（Kind = RotationCenter）。existing 为空或没有 Affine2D 段时视为没有 N 点标定。
+        /// </summary>
+        public static CalibrationResult MergeRotationCenter(CalibrationResult existing, RotationCenterCalibration center, string unit, string description)
+        {
+            RotationCenterCalibration copy = CloneCenter(center);
+            Affine2DCalibration affine = existing?.Affine2D;
+            if (affine != null)
+            {
+                TransformPoint(affine.HomMat2D, copy.Row, copy.Column, out double x, out double y);
+                copy.X = x;
+                copy.Y = y;
+            }
+            else
+            {
+                copy.X = null;
+                copy.Y = null;
+            }
+            return new CalibrationResult
+            {
+                Kind = affine != null ? CalibrationFileKind.Affine2D : CalibrationFileKind.RotationCenter,
+                CreatedAt = DateTimeOffset.Now,
+                Unit = affine != null ? existing.Unit : (string.IsNullOrWhiteSpace(unit) ? null : unit.Trim()),
+                Description = string.IsNullOrWhiteSpace(description) ? existing?.Description : description.Trim(),
+                Affine2D = affine,
+                RotationCenter = copy
+            };
+        }
+
+        private static RotationCenterCalibration CloneCenter(RotationCenterCalibration center)
+        {
+            return new RotationCenterCalibration
+            {
+                Row = center.Row,
+                Column = center.Column,
+                X = center.X,
+                Y = center.Y,
+                Radius = center.Radius,
+                Points = center.Points.Select(p => p.Clone()).ToList(),
+                RmsError = center.RmsError,
+                MaxError = center.MaxError
+            };
         }
 
         private static bool IsFinite(double value)
@@ -462,6 +761,34 @@ namespace VisionFlow.Tools.Calibration
                 if (m == null || m.Length != 6 || m.Any(v => !IsFinite(v)))
                 {
                     throw new InvalidDataException($"{sourceName} 的 Affine2D.HomMat2D 应为 6 个有限数值");
+                }
+            }
+            if (result.RotationCenter != null)
+            {
+                RotationCenterCalibration center = result.RotationCenter;
+                bool optionalFinite(double? v) => !v.HasValue || IsFinite(v.Value);
+                if (!IsFinite(center.Row) || !IsFinite(center.Column) || !optionalFinite(center.X) || !optionalFinite(center.Y))
+                {
+                    throw new InvalidDataException($"{sourceName} 的 RotationCenter 圆心坐标应为有限数值");
+                }
+                if (!IsFinite(center.Radius) || center.Radius < 0)
+                {
+                    throw new InvalidDataException($"{sourceName} 的 RotationCenter.Radius 应为不小于 0 的有限数值");
+                }
+                if (!optionalFinite(center.RmsError) || !optionalFinite(center.MaxError))
+                {
+                    throw new InvalidDataException($"{sourceName} 的 RotationCenter 误差应为有限数值");
+                }
+                if (center.Points != null)
+                {
+                    for (int i = 0; i < center.Points.Count; i++)
+                    {
+                        RotationCenterPoint p = center.Points[i];
+                        if (p == null || !IsFinite(p.Row) || !IsFinite(p.Column) || !optionalFinite(p.Angle) || !optionalFinite(p.Residual))
+                        {
+                            throw new InvalidDataException($"{sourceName} 的 RotationCenter.Points 第 {i + 1} 项含无效数值");
+                        }
+                    }
                 }
             }
             if (result.Camera != null)

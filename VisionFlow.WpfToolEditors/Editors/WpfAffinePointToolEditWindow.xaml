@@ -307,6 +307,122 @@
                     </ScrollViewer>
                 </Grid>
             </TabItem>
+
+            <TabItem x:Name="RotationTab" Header="旋转中心">
+                <Grid Margin="0,16,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="540" />
+                    </Grid.ColumnDefinitions>
+
+                    <Border Grid.Column="0" Style="{StaticResource PanelBorderStyle}" Margin="0,0,24,0">
+                        <DockPanel>
+                            <Grid DockPanel.Dock="Top" Margin="0,0,0,8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="260" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="旋转图像" Style="{StaticResource EditorSectionTitleStyle}" />
+                                <ComboBox x:Name="RotImageCombo" Grid.Column="1" IsEditable="True" SelectionChanged="RotImageCombo_SelectionChanged" />
+                            </Grid>
+                            <TextBlock DockPanel.Dock="Bottom" Margin="0,8,0,0" TextWrapping="Wrap"
+                                       Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                       Text="十字为各次旋转后特征点的位置，求解后圆为拟合的旋转轨迹。角度按图像角度约定（与匹配 Angle 相同，屏幕上逆时针为正）；机构角度方向相反时请取反。" />
+                            <wfi:WindowsFormsHost>
+                                <vfc:HalconImageView x:Name="RotImageView" />
+                            </wfi:WindowsFormsHost>
+                        </DockPanel>
+                    </Border>
+
+                    <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto">
+                        <StackPanel>
+                            <Border Style="{StaticResource EditorCardStyle}">
+                                <StackPanel>
+                                    <TextBlock Text="采集旋转点" Style="{StaticResource EditorSectionTitleStyle}" />
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="96" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                        </Grid.RowDefinitions>
+                                        <TextBlock Grid.Row="0" Grid.Column="0" Text="行变量" Style="{StaticResource EditorFieldLabelStyle}" />
+                                        <ComboBox x:Name="RotRowVarCombo" Grid.Row="0" Grid.Column="1" IsEditable="True" />
+                                        <TextBlock Grid.Row="1" Grid.Column="0" Text="列变量" Style="{StaticResource EditorFieldLabelStyle}" />
+                                        <ComboBox x:Name="RotColumnVarCombo" Grid.Row="1" Grid.Column="1" IsEditable="True" />
+                                        <TextBlock Grid.Row="2" Grid.Column="0" Text="角度变量" Style="{StaticResource EditorFieldLabelStyle}" />
+                                        <ComboBox x:Name="RotAngleVarCombo" Grid.Row="2" Grid.Column="1" IsEditable="True" />
+                                    </Grid>
+                                    <WrapPanel Margin="0,8,0,0">
+                                        <Button Content="取当前值" Margin="0,0,8,8" Click="RotTakeCurrentValue_Click" />
+                                        <Button Content="在图像上点击取点" Margin="0,0,8,8" Click="RotPickOnImage_Click" />
+                                    </WrapPanel>
+                                    <Grid Margin="0,4,0,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                        </Grid.RowDefinitions>
+                                        <TextBlock Grid.Row="0" Grid.Column="0" Text="图像行" Style="{StaticResource EditorFieldLabelStyle}" />
+                                        <TextBlock Grid.Row="0" Grid.Column="1" Text="图像列" Style="{StaticResource EditorFieldLabelStyle}" />
+                                        <TextBlock Grid.Row="0" Grid.Column="2" Text="角度（°，可空）" Style="{StaticResource EditorFieldLabelStyle}" />
+                                        <TextBox x:Name="RotManualRowText" Grid.Row="1" Grid.Column="0" Margin="0,0,4,0" />
+                                        <TextBox x:Name="RotManualColumnText" Grid.Row="1" Grid.Column="1" Margin="0,0,4,0" />
+                                        <TextBox x:Name="RotManualAngleText" Grid.Row="1" Grid.Column="2" />
+                                    </Grid>
+                                    <Button Content="手动添加点" Margin="0,8,0,0" HorizontalAlignment="Left" Click="RotAddManualPoint_Click" />
+                                    <TextBlock Margin="0,4,0,0" TextWrapping="Wrap" Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                               Text="至少 2 个带角度的点按角度求解（更准），否则至少 3 个点做圆拟合；建议覆盖 30° 以上。取当前值要求单值；角度变量按弧度读取（如匹配 Angle），可留空。" />
+                                </StackPanel>
+                            </Border>
+
+                            <Border Style="{StaticResource EditorCardStyle}">
+                                <StackPanel>
+                                    <TextBlock Text="旋转点" Style="{StaticResource EditorSectionTitleStyle}" />
+                                    <DataGrid x:Name="RotPointGrid" Height="220" AutoGenerateColumns="False" CanUserAddRows="False" CanUserDeleteRows="False"
+                                              CanUserSortColumns="False" SelectionMode="Single" IsReadOnly="True">
+                                        <DataGrid.Columns>
+                                            <DataGridTextColumn Header="序号" Binding="{Binding Index}" Width="56" />
+                                            <DataGridTextColumn Header="图像行" Binding="{Binding Row, StringFormat=F3}" Width="*" />
+                                            <DataGridTextColumn Header="图像列" Binding="{Binding Column, StringFormat=F3}" Width="*" />
+                                            <DataGridTextColumn Header="角度（°）" Binding="{Binding AngleText}" Width="*" />
+                                            <DataGridTextColumn Header="残差" Binding="{Binding ResidualText}" Width="*" />
+                                        </DataGrid.Columns>
+                                    </DataGrid>
+                                    <WrapPanel Margin="0,8,0,0">
+                                        <Button Content="删除选中点" Margin="0,0,8,8" Click="RotDeletePoint_Click" />
+                                        <Button Content="清空" Margin="0,0,0,8" Click="RotClearPoints_Click" />
+                                    </WrapPanel>
+                                </StackPanel>
+                            </Border>
+
+                            <Border Style="{StaticResource EditorCardStyle}">
+                                <StackPanel>
+                                    <TextBlock Text="求解与保存" Style="{StaticResource EditorSectionTitleStyle}" />
+                                    <Button Content="求解" HorizontalAlignment="Right" Style="{StaticResource AccentButtonStyle}" Click="RotSolve_Click" />
+                                    <TextBlock x:Name="RotResultText" Margin="0,8,0,0" TextWrapping="Wrap" FontWeight="SemiBold" />
+                                    <TextBlock x:Name="RotPhysicalText" Margin="0,4,0,0" TextWrapping="Wrap" />
+                                    <TextBlock x:Name="RotWarningText" Margin="0,4,0,0" TextWrapping="Wrap" Visibility="Collapsed"
+                                               Foreground="{DynamicResource SystemFillColorCautionBrush}" />
+                                    <TextBlock Margin="0,8,0,0" TextWrapping="Wrap" Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                               Text="当前标定带 Affine2D（N 点标定）时，结果与它合并成一个标定（同时供坐标转换与纠偏计算的 RotateAroundCenter 使用）；否则只保存旋转中心。" />
+                                    <WrapPanel Margin="0,12,0,0" HorizontalAlignment="Right">
+                                        <Button Content="保存为标定文件…" Margin="0,0,8,0" Click="RotSaveCalibrationFile_Click" />
+                                        <Button x:Name="RotEmbedButton" Content="内嵌到当前工具" Click="RotEmbedCalibration_Click" />
+                                    </WrapPanel>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+                    </ScrollViewer>
+                </Grid>
+            </TabItem>
         </TabControl>
 
         <DockPanel Grid.Row="1" LastChildFill="False" Margin="0,24,0,0">

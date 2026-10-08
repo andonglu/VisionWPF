@@ -1,7 +1,7 @@
 # 标定补充开发计划
 
 编写日期：2026-10-06
-状态：第一批 CB-01 / CB-02 / CB-05 已实现（分支 `feature/calibration-batch1`，见第 11、12 节）；评审 P1-1 / P1-2 / P1-3 已在计划中处理（CB-06 输出改名、CB-07 符号约定、CB-04 示例图像探测，见第 13 节）；CB-03 / CB-07（第二批）、CB-04 / CB-06（第三批）待开发，动工前各做一次小评审。
+状态：第一批 CB-01 / CB-02 / CB-05 已实现（分支 `feature/calibration-batch1`，见第 11、12 节）；评审 P1-1 / P1-2 / P1-3 已在计划中处理（CB-06 输出改名、CB-07 符号约定、CB-04 示例图像探测，见第 13 节）；第二批 CB-03 / CB-07 已实现（分支 `feature/calibration-batch2`，见第 14 节）；CB-04 / CB-06（第三批）待开发，动工前做一次小评审。
 范围：图像坐标与物理坐标之间的标定、换算和纠偏，涉及 `VisionFlow.Tools\Tools\GeometryTools.cs`（`AffinePointTool`）、编辑器标定界面，以及供上层调用的标定接口。
 HALCON 版本基线：22.11 及以上（与仓库现行基线一致，见 MATCH-MEASURE 计划第 12 节；原文写 20.11）。
 关联文档：
@@ -113,6 +113,21 @@ HALCON 版本基线：22.11 及以上（与仓库现行基线一致，见 MATCH-
 - 至少 3 个点，建议覆盖 30° 以上的角度范围；角度范围过小时提示误差会偏大。
 - 若当前已有 N 点标定结果，同时输出旋转中心的物理坐标。
 
+**约定（第二批，写代码前钉死）**
+
+- 拟合在图像坐标 (行, 列) 中进行，纯 C# 计算，不调用 HALCON 算子。角度沿用图像角度约定：与匹配 `Angle` 相同，屏幕上逆时针为正（第 13 节实测），单位弧度。旋转公式 R(α)·(行, 列) = (行·cos α − 列·sin α, 行·sin α + 列·cos α)，与 `hom_mat2d_rotate` 一致，形式与 CB-07 物理系中的 R(α) 相同；绕中心 c 旋转为 c + R(α)·(p − c)。
+- 有角度路径（至少 2 个带角度的点）：同一特征点绕中心旋转，任意两点满足 p_i = c + R(θ_i − θ_j)·(p_j − c)，即 (I − R(Δθ))·c = p_i − R(Δθ)·p_j；对全部点对做线性最小二乘求 c，半径取各点到 c 距离的平均。只有部分点带角度时，不带角度的点不参与求中心，结果给出提示。角度来源若是机构角度而方向与图像约定相反，需要取反；求解时若按相反方向拟合的残差明显更小，结果给出提示。
+- 无角度路径（不足 2 个带角度的点时，至少 3 个点）：代数圆拟合（Kåsa：x² + y² + D·x + E·y + F = 0 最小二乘），圆心 (−D/2, −E/2)，半径 √((D² + E²)/4 − F)；在去均值坐标中求解以保证数值稳定。
+- 残差 = |点到圆心距离 − 半径|（像素），输出每点残差、`RmsError`、`MaxError`。拒绝求解：点数不足、坐标或角度含 NaN / 无穷、点全部重合、无角度路径的点共线、有角度路径的角度全部相同；提示但照常求解：角度覆盖范围 < 30°（有角度路径按角度，无角度路径按各点绕圆心的覆盖弧度），以及上面两条角度提示。
+- 编辑界面的角度列以度显示与输入，文件中 `RotationCenterPoint.Angle` 为弧度；“取当前值”读取的角度变量按弧度（如匹配 `Angle`）。
+- 保存与内嵌（2026-10-08 与使用方确认）：当前工具的标定带 `Affine2D` 段时，结果与它合并写成一个 `.vfcal.json`（保留 `Affine2D` 段、新增 `RotationCenter` 段并换算圆心物理坐标 X / Y，`Kind` 仍为 `Affine2D`），供坐标转换与 CB-07 `RotateAroundCenter` 同时使用；没有 `Affine2D` 标定时只写 `RotationCenter` 段（`Kind = RotationCenter`）。“内嵌到当前工具”走 `UseEmbeddedCalibration`，互斥规则同 CB-02。
+
+**实现说明（第二批已完成）**
+
+- 服务：`CalibrationService.SolveRotationCenter(points)` 返回 `RotationCenterSolution`（`Calibration` 为 `RotationCenterCalibration`，另有 `UsedAngles`、`CoverageDegrees`、`Warnings`）。有角度路径利用 MᵀM = (2 − 2·cos Δθ)·I（M = I − R(Δθ)），中心 = Σ Mᵀ·rhs / Σ(2 − 2·cos Δθ)，无需通用矩阵求解；“角度方向相反”提示按旋转一致性残差（用 j 点绕中心转 Δθ 预测 i 点）比较两个方向，相反方向的残差不到四分之一时提示。新增纯计算的 `TransformPose`、`RotateAbout`、`WrapAngle`，供 CB-07 使用。
+- 格式：`RotationCenterPoint` 新增 `Residual`，`RotationCenterCalibration` 新增 `MaxError`（都是可选字段，没有值时不写）；`Validate` 补 `RotationCenter` 段检查（圆心有限、`Radius` ≥ 0 且有限、误差与各点有限）。合并规则由 `CalibrationService.MergeRotationCenter(existing, center, unit, description)` 实现。重新做 N 点标定后保存 / 内嵌时，若当前标定已带旋转中心，保留它并按新矩阵重新换算圆心物理坐标，避免丢失。
+- 界面：`WpfAffinePointToolEditWindow` 新增“旋转中心”页（单独打开的标定助手同样可用，只能保存为文件）：取点方式同 N 点标定（取当前值 / 图像点击 / 手动），角度列以度显示；求解后表格给出每点残差，图像上叠加旋转点十字、拟合圆与圆心；带 `Affine2D` 时显示圆心物理坐标；提示（覆盖不足 30°、部分点无角度、角度方向可能相反）以醒目颜色显示。只含旋转中心的标定不改当前工具的来源、也不能内嵌（坐标转换需要 `Affine2D`），会明确提示。界面叠加用到 `gen_circle_contour_xld`（只用于显示）。
+
 ### CB-04 相机标定（标定板）
 
 - 输入：多张标定板图像（从文件夹加入，或把当前输入图像加入），标定板描述文件（HALCON 标准标定板，如 `calplate_160mm.cpd`），相机模型（`area_scan_division` / `area_scan_polynomial`），初始参数（焦距、像元宽高、图像宽高）。
@@ -200,6 +215,14 @@ HALCON 版本基线：22.11 及以上（与仓库现行基线一致，见 MATCH-
 `OnAxis` + `RotateAroundCenter` 的限制：相机随轴旋转后，后续平移所对应的相对位移取决于机构叠放方式（θ 轴装在 XY 上，还是 XY 装在 θ 轴上），没有实际机构信息前无法给出唯一公式。第二批对该组合在流程校验与运行中都给出中文说明（建议改用 `TranslationOnly`，或由上层按机构计算），待有现场机构时单独立项。
 
 验收用例按约定反推真值（用例即约定的可执行文档）：给定标定矩阵（含一例镜像矩阵）、旋转中心 C、基准 B / θb 与期望补偿 (Δ, −dθ)，由 P = R(C, dθ)·(B − Δ)、θ = θb + dθ 反算当前物理位姿，再经标定逆变换得到当前图像位姿作为输入；输出须与 Δ、−dθ 一致。`OnAxis` 用例验证 P − B 与 `Fixed` 结果互为相反数，`OnAxis` + `RotateAroundCenter` 验证校验报错。
+
+**实现说明（第二批已完成）**
+
+- 类型：`AlignmentOffsetTool : ToolBase, IToolConfigurationCheck, IToolParameterVisibility, IToolResourceLifecycle`（`VisionFlow.Tools\Tools\AlignmentOffsetTools.cs`），ID `alignment-offset`，工具箱 `09 标定 / 纠偏计算`，图标 `ToolIcon.alignment-offset`。新枚举 `AlignmentMode`（`TranslationOnly` / `RotateAroundCenter`，默认后者）、`CameraMounting`（`Fixed` 默认 / `OnAxis`），`AngleUnit` 复用单位换算的枚举（弧度默认 / 度），均按数字保存。持久化 ID 须在 `BuiltinToolIdentities` 登记（`ToolboxRegistry` 只负责工具箱条目，不决定流程文件中的 `ToolId`），与其他内置工具一致。
+- 计算逐字按上方“符号约定”：P / θ 与 B / θb 用 `CalibrationService.TransformPose`（纯计算，与 CB-05 的换算路径相同，用例与坐标转换的 `WorldRow` / `WorldColumn` / `WorldAngle` 对照一致），dθ = `WrapAngle(θ − θb)`；旋转中心取 `RotationCenter.X / Y`，没有时用同一矩阵换算 `Row / Column`；`DeltaAngle` 与 `AngleDifference` 按 `AngleUnit` 输出，−0 按 0 输出。
+- 输入：`Row` / `Column` 必填、角度可选，均为单值（数组明确拒绝，多个目标放在 For 循环中逐个计算）。`RotateAroundCenter` 必须有角度输入（校验与运行都报错）；`TranslationOnly` 没有角度输入时 `AngleDifference` 为 NaN、`DeltaAngle` 为 0、`Valid` 仍为 true。引用无法解析按运行失败；解析成功但含 NaN 时全部输出 NaN、`Valid = false`、写警告日志，节点不失败。
+- 校验（与运行、预热措辞相同）：标定内容须带 `Affine2D` 段，`RotateAroundCenter` 还须带 `RotationCenter` 段，缺段时报“来源（文件名或内嵌标定数据）+ 实际类型（含哪些段）+ 期望段”；旧版 `write_tuple` 矩阵文件可用于 `TranslationOnly`，用于 `RotateAroundCenter` 时单独说明。`OnAxis` + `RotateAroundCenter` 按计划原文拒绝。文件 / 内嵌互斥与缓存沿用批一（抽出共用的 `CalibrationSourceCache`，坐标转换改为调用它，行为与提示不变）；文件缺失不在校验阶段报，由预热与运行报告。
+- 编辑窗口：`WpfAlignmentOffsetToolEditWindow`：当前位姿引用、标定来源（选择文件 / 把标定文件内嵌到工具，切换来源清空另一侧）与内容摘要（含哪些段、旋转中心物理坐标，缺段时直接显示校验说明）、纠偏方式（选到 `OnAxis` + `RotateAroundCenter` 时即时提示不支持）、基准位姿与“用当前结果设为基准”（从上次运行结果读取当前位姿引用的值，数组与 NaN 明确拒绝），执行测试经 `ToolTestRun`，结果表按 R 格式列出全部 7 个输出。
 
 ## 7. 暂缓
 
@@ -292,3 +315,31 @@ HALCON 版本基线：22.11 及以上（与仓库现行基线一致，见 MATCH-
 | P1-3 示例图像 | `%HALCONIMAGES%\calib\` 共 153 个文件；HALCON 示例 `Calibration\Multi-View\calibrate_cameras_monocular.hdev` 用其中的 `calib_single_camera_01.png` ~ `_07.png`（7 张，1292×964）配 `calplate_80mm.cpd`，初始参数 `area_scan_division`、焦距 0.008 m、kappa 0、像元 3.7e-6 m、主点 (646, 482)。`calplate_160mm.cpd` 只在多相机质量检查与拼接示例中使用，不适合作单相机验收 |
 | P1-3 参考误差 | 按上述参数在 .NET 中实跑 `create_calib_data` → `set_calib_data_cam_param` / `set_calib_data_calib_object` → 逐张 `find_calib_object` → `calibrate_cameras`：7 张全部找到标定板，反投影误差 0.0775 像素；结果焦距 8.343 mm、kappa −1546.0、主点 (638.73, 470.68)，`sy` 保持 3.7e-6（默认不优化）。CB-04 验收上限取 0.1 像素 |
 | P1-3 实现注意 | `gen_cam_par_area_scan_division` 与 `get_cam_par_names` 一样是 HDevelop 过程，.NET 中没有，初始参数直接拼元组（类型名在前）；`read_image` 的相对路径按 `HALCONIMAGES` 解析。用例取 `HALCONROOT` / `HALCONIMAGES` 拼出绝对路径，缺任一文件时明确失败 |
+
+## 14. 第二批（CB-03 + CB-07）实现与验收记录
+
+**开工依据**：基线 `origin/main` 含批一与 P1 处理（`be6bb1c`）；CB-07 逐字按第 6 节“符号约定”实现（使用方要求以计划为准，不以任务草案为准）；CB-03 的约定在动工前补入第 5 节（角度约定、两条求解路径、拒绝与提示、合并保存规则）。本批不新增 HALCON 算子的计算路径（CB-03 / CB-07 都是纯 C#），界面叠加用到的 `gen_circle_contour_xld` 只用于显示，无需探测。
+
+**与任务说明不一致处（如实记录）**
+
+| 项 | 处理 |
+|---|---|
+| 旋转中心“只带 RotationCenter 段”保存 | 这样 CB-07 `RotateAroundCenter` 无法从界面得到同时带两段的标定，内嵌到坐标转换还会让其 `Affine2D` 方式缺段。经使用方确认改为：当前标定带 `Affine2D` 时合并保存（`Kind` 仍为 `Affine2D`），否则只写 `RotationCenter` |
+| “`BuiltinToolIdentities` 无需新增” | 流程文件中的 `ToolId` 只由 `FlowSerializer.RegisterToolType`（在 `BuiltinToolIdentities`）决定，`ToolboxRegistry` 不登记持久化身份；不登记则保存的 `ToolId` 不是 `alignment-offset`，守卫用例会失败。已按其他内置工具的做法登记 |
+| 草案中的旋转公式“顺时针为正” | 以计划第 6 节为准：R(α)·(x, y) = (x·cos α − y·sin α, x·sin α + y·cos α)，物理系正角为“从 +X 转向 +Y”；CB-03 在图像 (行, 列) 中使用同一形式，与 `hom_mat2d_rotate`（屏幕上逆时针为正）一致，用例用 HALCON 生成旋转点对照 |
+| `TranslationOnly` 的 `DeltaAngle` | 按计划第 6 节输出 0（草案写“仍输出 −dθ”），测得的角度差在 `AngleDifference` |
+
+**验收结果**
+
+- 单元/集成测试：新增 `CalibrationBatch2Tests` 26 个用例：
+  - CB-03：有角度路径（7 点覆盖 60°，±0.2 像素噪声，圆心误差 < 0.2 像素；无噪声 < 1e-9）、无角度路径（10 点覆盖 180°，同噪声，圆心误差 < 0.2 像素）、与 `hom_mat2d_rotate` 生成的旋转点对照（角度约定一致）、三类提示（覆盖不足 30°、部分点无角度、角度方向相反）与只有 1 个带角度点时退回圆拟合、7 种退化输入的中文提示、`RotationCenter` 段保存读取往返与非法载荷、合并保存后同一文件两段可读且坐标转换与纠偏计算都能使用。
+  - CB-07（按符号约定反推真值）：`Fixed` + `RotateAroundCenter`（一般仿射、镜像标定各一例）、镜像标定下图像角度差与物理角度差方向相反仍按物理系输出、`Fixed` + `TranslationOnly`（`DeltaAngle` = 0、`AngleDifference` = dθ）、`OnAxis` + `TranslationOnly` 与 `Fixed` 互为相反数、`OnAxis` + `RotateAroundCenter` 校验与运行拒绝（说明逐字为计划原文）、角度单位为度、物理角与坐标转换 `WorldAngle` 一致（含镜像）、`Row` 或角度为 NaN 时全部 NaN 且 `Valid = false`、节点不失败；缺段（只有 `RotationCenter`、`RotateAroundCenter` 缺 `RotationCenter`、旧版矩阵文件、内嵌数据）在校验 / 运行 / 预热中措辞一致，`TranslationOnly` 可用旧版矩阵文件；缺角度、互斥、文件缺失（校验不报、运行与预热报）、数组输入拒绝；保存加载、默认值、命名守卫、工具箱 `09 标定` 与 `"ToolId": "alignment-offset"`。
+  - 坐标转换改用共用的 `CalibrationSourceCache` 后，批一 32 个用例与预热用例全部保持通过。全量 `dotnet test`（`Category!=Soak`）949 个通过（含 `examples\*.vflow.json` 加载用例）。
+- 界面验收：脚本经 Windows UI Automation 驱动真实的 `VisionFlow.WpfApp.exe`，31 项检查全部通过（连续两次）：
+  - 坐标转换编辑窗口的“旋转中心”页：取当前值（角度变量留空）、真实鼠标在图像上点击取点、手动输入，圆拟合结果与服务对同一组表格数据的无界面求解一致，带 `Affine2D` 时显示圆心物理坐标；改为 4 个带角度的点按角度求解，圆心 (240.500, 320.250) 与真值一致，表格角度以度显示、每点残差；删除一点后结果作废、未重新求解不能保存；合并保存后坐标转换改用合并文件，文件 `Kind = Affine2D`、两段齐全、圆心物理坐标按矩阵换算、角度以弧度保存。
+  - 工具箱 `09 标定` 新建纠偏计算：经系统对话框选择合并文件，摘要显示两段与旋转中心物理坐标；“用当前结果设为基准”逐位写入上次运行值，当前 = 基准时补偿为 0；改基准后执行测试的 7 个输出与无界面同参数运行逐字一致（`AngleDifference` = −0.05）；选 `OnAxis` + `RotateAroundCenter` 时窗口即时提示且运行被拒绝。
+  - 界面运行 7 个单值与无界面运行保存的文件逐字一致；文件含 `"ToolId": "alignment-offset"`、`Mode` 1、基准位姿；重新加载后再运行一致，两个窗口回显正确（旋转中心页从合并文件载入 4 个点并给出同样结果）。
+- 验证中发现的问题：
+  1. 纠偏计算在 dθ = 0 时 `DeltaAngle` 为 −0，结果表显示“-0”（界面验收设计时发现）；角度输出把 −0 按 0 输出。
+  2. 既有行为（不属于本批）：同一流程有两幅图像时，结果显示下拉中直接选第二幅图像上的区域（如 `阈值2.Region`），叠加画在第一幅图像上——叠加修复的底图回退取“上下文中第一个图像变量”（`REVIEW-FIX-PROGRESS.md` 已注明多图像时取最先写入者），在多图像流程中会选错底图。建议后续单独立项（如按区域来源工具的图像输入回退）。
+- 脚本问题（已修脚本）：4 次运行中有 1 次双击流程树节点后编辑窗口未打开（之后 3 次未复现，判断为双击未被识别）；栅格化小圆的区域中心按像素取整，与亚像素真值每轴差到 0.5 像素，对照前提改为距离 < 0.75 像素；只覆盖 60° 的圆拟合对点击误差很敏感，改为与服务对同一组表格数据的无界面求解比对。

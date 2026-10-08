@@ -70,6 +70,10 @@ namespace VisionFlow.WpfToolEditors
             {
                 return new WpfAffinePointToolEditWindow(affinePointTool, context);
             }
+            if (tool is AlignmentOffsetTool alignmentTool)
+            {
+                return new WpfAlignmentOffsetToolEditWindow(alignmentTool, context);
+            }
             return IsVisualPreviewTool(tool)
                 ? (Window)new WpfVisualToolEditWindow(tool, context)
                 : new WpfGenericToolEditWindow(tool, context);

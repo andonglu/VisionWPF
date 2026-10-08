@@ -1,0 +1,155 @@
+<Window x:Class="VisionFlow.WpfToolEditors.Editors.WpfAlignmentOffsetToolEditWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="纠偏计算"
+        Width="1100"
+        Height="820"
+        MinWidth="980"
+        MinHeight="700"
+        WindowStartupLocation="CenterOwner">
+    <Grid Margin="24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="440" />
+        </Grid.ColumnDefinitions>
+
+        <Border Grid.Row="0" Grid.Column="0" Style="{StaticResource PanelBorderStyle}" Margin="0,0,24,0">
+            <DockPanel>
+                <TextBlock DockPanel.Dock="Top" Text="测试结果" Style="{StaticResource EditorSectionTitleStyle}" />
+                <TextBlock x:Name="ResultSummaryText" DockPanel.Dock="Top" Margin="0,0,0,8" TextWrapping="Wrap" FontWeight="SemiBold" />
+                <TextBlock DockPanel.Dock="Bottom" Margin="0,12,0,0" TextWrapping="Wrap" Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                           Text="输出为平台补偿量：把当前件移回基准位姿所需的运动，先绕旋转中心转 DeltaAngle，再平移 (DeltaX, DeltaY)。DeltaX 沿物理 X（= WorldRow），DeltaY 沿物理 Y（= WorldColumn）；角度正方向为物理系中从 +X 转向 +Y。AngleDifference 为测得的角度差 dθ（当前 − 基准），仅供参考与判定。" />
+                <DataGrid x:Name="ResultGrid" AutoGenerateColumns="False" IsReadOnly="True">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="输出" Binding="{Binding Name}" Width="160" />
+                        <DataGridTextColumn Header="值" Binding="{Binding Value}" Width="*" />
+                    </DataGrid.Columns>
+                </DataGrid>
+            </DockPanel>
+        </Border>
+
+        <ScrollViewer Grid.Row="0" Grid.Column="1" VerticalScrollBarVisibility="Auto">
+            <StackPanel>
+                <Border Style="{StaticResource EditorCardStyle}">
+                    <StackPanel>
+                        <TextBlock Text="当前位姿" Style="{StaticResource EditorSectionTitleStyle}" />
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="110" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="模块名" Style="{StaticResource EditorFieldLabelStyle}" />
+                            <TextBox x:Name="ModuleNameText" Grid.Row="0" Grid.Column="1" />
+                            <TextBlock Grid.Row="1" Grid.Column="0" Text="Row" Style="{StaticResource EditorFieldLabelStyle}" />
+                            <ComboBox x:Name="RowPathCombo" Grid.Row="1" Grid.Column="1" IsEditable="True" />
+                            <TextBlock Grid.Row="2" Grid.Column="0" Text="Column" Style="{StaticResource EditorFieldLabelStyle}" />
+                            <ComboBox x:Name="ColumnPathCombo" Grid.Row="2" Grid.Column="1" IsEditable="True" />
+                            <TextBlock Grid.Row="3" Grid.Column="0" Text="角度" Style="{StaticResource EditorFieldLabelStyle}" />
+                            <ComboBox x:Name="AnglePathCombo" Grid.Row="3" Grid.Column="1" IsEditable="True" />
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <Border Style="{StaticResource EditorCardStyle}">
+                    <StackPanel>
+                        <TextBlock Text="标定" Style="{StaticResource EditorSectionTitleStyle}" />
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="110" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="标定来源" Style="{StaticResource EditorFieldLabelStyle}" />
+                            <ComboBox x:Name="SourceCombo" Grid.Row="0" Grid.Column="1" SelectionChanged="SourceCombo_SelectionChanged" />
+                            <TextBlock x:Name="CalibrationFileLabel" Grid.Row="1" Grid.Column="0" Text="标定文件" Style="{StaticResource EditorFieldLabelStyle}" />
+                            <Grid x:Name="CalibrationFilePanel" Grid.Row="1" Grid.Column="1">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="36" />
+                                </Grid.ColumnDefinitions>
+                                <TextBox x:Name="CalibrationFileText" Grid.Column="0" LostFocus="CalibrationFileText_LostFocus" />
+                                <Button Grid.Column="1" Content="..." MinWidth="32" Width="32" Padding="0" Click="BrowseCalibrationFile_Click" />
+                            </Grid>
+                        </Grid>
+                        <Button x:Name="EmbedFileButton" Content="把标定文件内嵌到工具" Margin="0,8,0,0" HorizontalAlignment="Right" Click="EmbedFile_Click" />
+                        <TextBlock x:Name="CalibrationInfoText" Margin="0,8,0,0" TextWrapping="Wrap" />
+                        <TextBlock Margin="0,4,0,0" TextWrapping="Wrap" Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                   Text="需要带 Affine2D 段的 .vfcal.json（或旧版 write_tuple 矩阵文件）；RotateAroundCenter 还需要 RotationCenter 段（在“图像坐标转世界坐标”的旋转中心页求解，与 N 点标定合并保存）。文件与内嵌互斥。" />
+                    </StackPanel>
+                </Border>
+
+                <Border Style="{StaticResource EditorCardStyle}">
+                    <StackPanel>
+                        <TextBlock Text="纠偏方式" Style="{StaticResource EditorSectionTitleStyle}" />
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="110" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="方式" Style="{StaticResource EditorFieldLabelStyle}" />
+                            <ComboBox x:Name="ModeCombo" Grid.Row="0" Grid.Column="1" SelectionChanged="Option_SelectionChanged" />
+                            <TextBlock Grid.Row="1" Grid.Column="0" Text="相机安装" Style="{StaticResource EditorFieldLabelStyle}" />
+                            <ComboBox x:Name="MountingCombo" Grid.Row="1" Grid.Column="1" SelectionChanged="Option_SelectionChanged" />
+                            <TextBlock Grid.Row="2" Grid.Column="0" Text="角度单位" Style="{StaticResource EditorFieldLabelStyle}" />
+                            <ComboBox x:Name="AngleUnitCombo" Grid.Row="2" Grid.Column="1" />
+                        </Grid>
+                        <TextBlock x:Name="ModeHintText" Margin="0,8,0,0" TextWrapping="Wrap" Visibility="Collapsed"
+                                   Foreground="{DynamicResource SystemFillColorCautionBrush}" />
+                    </StackPanel>
+                </Border>
+
+                <Border Style="{StaticResource EditorCardStyle}">
+                    <StackPanel>
+                        <TextBlock Text="基准位姿（图像坐标）" Style="{StaticResource EditorSectionTitleStyle}" />
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="110" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="BaseRow" Style="{StaticResource EditorFieldLabelStyle}" />
+                            <TextBox x:Name="BaseRowText" Grid.Row="0" Grid.Column="1" />
+                            <TextBlock Grid.Row="1" Grid.Column="0" Text="BaseColumn" Style="{StaticResource EditorFieldLabelStyle}" />
+                            <TextBox x:Name="BaseColumnText" Grid.Row="1" Grid.Column="1" />
+                            <TextBlock Grid.Row="2" Grid.Column="0" Text="BaseAngle（弧度）" Style="{StaticResource EditorFieldLabelStyle}" />
+                            <TextBox x:Name="BaseAngleText" Grid.Row="2" Grid.Column="1" />
+                        </Grid>
+                        <WrapPanel Margin="0,12,0,0" HorizontalAlignment="Right">
+                            <Button Content="用当前结果设为基准" Margin="0,0,8,0" Click="SetBaseFromLastRun_Click" />
+                            <Button Content="执行测试" Click="TestRun_Click" />
+                        </WrapPanel>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+        </ScrollViewer>
+
+        <DockPanel Grid.Row="1" Grid.ColumnSpan="2" LastChildFill="False" Margin="0,24,0,0">
+            <TextBlock x:Name="StatusText" VerticalAlignment="Center" TextWrapping="Wrap" MaxWidth="760"
+                       Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+            <Button DockPanel.Dock="Right" Content="取消" MinWidth="96" Margin="8,0,0,0" Click="Cancel_Click" />
+            <Button DockPanel.Dock="Right" Content="确定" MinWidth="96" Style="{StaticResource AccentButtonStyle}" Click="Ok_Click" />
+        </DockPanel>
+    </Grid>
+</Window>

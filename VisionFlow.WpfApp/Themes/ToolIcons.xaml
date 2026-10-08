@@ -777,6 +777,16 @@
         </Canvas>
     </Viewbox>
 
+    <!-- 手工追加：纠偏计算（基准十字与当前十字，强调色箭头为平台补偿量，小弧表示角度补偿） -->
+    <Viewbox x:Key="ToolIcon.alignment-offset" x:Shared="False" Width="24" Height="24" Stretch="Uniform">
+        <Canvas Width="24" Height="24">
+            <Path Data="M4,7 L10,7 M7,4 L7,10" Stroke="{DynamicResource TextFillColorPrimaryBrush}" StrokeThickness="1.8" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Fill="{x:Null}" />
+            <Path Data="M14,17 L20,17 M17,14 L17,20" Stroke="{DynamicResource TextFillColorPrimaryBrush}" StrokeThickness="1.8" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Fill="{x:Null}" />
+            <Path Data="M15,15 L9.5,9.5 M9.5,9.5 L12.5,9.5 M9.5,9.5 L9.5,12.5" Stroke="{DynamicResource AccentFillColorDefaultBrush}" StrokeThickness="1.8" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Fill="{x:Null}" />
+            <Path Data="M14,4 A6,6 0 0 1 20,10" Stroke="{DynamicResource AccentFillColorDefaultBrush}" StrokeThickness="1.4" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Fill="{x:Null}" />
+        </Canvas>
+    </Viewbox>
+
     <Viewbox x:Key="ToolIcon._default" x:Shared="False" Width="24" Height="24" Stretch="Uniform">
         <Canvas Width="24" Height="24">
             <Rectangle Canvas.Left="4" Canvas.Top="4" Width="16" Height="16" RadiusX="2" RadiusY="2" Stroke="{DynamicResource TextFillColorPrimaryBrush}" StrokeThickness="1.8" Fill="{x:Null}" />

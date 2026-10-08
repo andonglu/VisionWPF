@@ -364,9 +364,7 @@ namespace VisionFlow.Tools
         public double OriginRow { get; set; }
         public double OriginColumn { get; set; }
 
-        private readonly object _calibrationSync = new object();
-        private object _cachedKey;
-        private CalibrationResult _cachedCalibration;
+        private readonly CalibrationSourceCache _calibrationCache = new CalibrationSourceCache();
 
         public AffinePointTool(string moduleName) : base(moduleName)
         {
@@ -444,20 +442,8 @@ namespace VisionFlow.Tools
             {
                 issues.Add(new ToolConfigurationIssue(nameof(MatrixPath), "Camera 方式使用标定结果中的相机参数，不使用变换矩阵引用，请清空“变换矩阵”"));
             }
-            if (CalibrationSource == CalibrationSource.File && !string.IsNullOrWhiteSpace(CalibrationData))
-            {
-                issues.Add(new ToolConfigurationIssue(nameof(CalibrationData),
-                    "标定来源为文件，但仍保留内嵌标定数据：二者互斥，请在编辑窗口中重新选择来源（会清空另一侧），或清空 CalibrationData"));
-            }
-            if (CalibrationSource == CalibrationSource.Embedded && !string.IsNullOrWhiteSpace(CalibrationFile))
-            {
-                issues.Add(new ToolConfigurationIssue(nameof(CalibrationFile),
-                    "标定来源为内嵌，但仍配置了标定文件：二者互斥，请在编辑窗口中重新选择来源（会清空另一侧），或清空 CalibrationFile"));
-            }
-            if (!UsesMatrixReference && CalibrationSource == CalibrationSource.Embedded && string.IsNullOrWhiteSpace(CalibrationData))
-            {
-                issues.Add(new ToolConfigurationIssue(nameof(CalibrationData), "标定来源为内嵌，但没有内嵌标定数据：请在编辑窗口的 N 点标定页计算后“内嵌到当前工具”"));
-            }
+            CalibrationSourceCache.AddExclusivityIssues(issues, CalibrationSource, CalibrationFile, CalibrationData,
+                UsesMatrixReference ? null : "请在编辑窗口的 N 点标定页计算后“内嵌到当前工具”");
             return issues;
         }
 
@@ -671,7 +657,7 @@ namespace VisionFlow.Tools
             return true;
         }
 
-        private string SourceName => CalibrationSource == CalibrationSource.Embedded ? "内嵌标定数据" : "标定文件 " + CalibrationFile;
+        private string SourceName => CalibrationSourceCache.SourceName(CalibrationSource, CalibrationFile);
 
         /// <summary>标定内容是否带当前方式需要的数据；不符时给出“来源 + 实际类型 + 期望类型”。</summary>
         private void CheckKind(CalibrationResult calibration, out string error)
@@ -683,39 +669,10 @@ namespace VisionFlow.Tools
                     : $"{SourceName} 的类型为 {calibration.Kind}（包含 {calibration.SectionsText()}），{CalibrationKind} 方式需要 {CalibrationKind} 数据";
         }
 
-        /// <summary>
-        /// 读取标定来源并缓存：文件按“完整路径 + 修改时间 + 大小”（TR-13，文件被替换后自动重新读取），内嵌数据按内容。
-        /// 文件缺失抛 FileNotFoundException（IOException），格式错误抛 InvalidDataException（不是 IOException，调用方须单独捕获）。
-        /// </summary>
+        /// <summary>读取标定来源（缓存规则见 <see cref="CalibrationSourceCache"/>）。</summary>
         private CalibrationResult LoadCalibration()
         {
-            object key;
-            if (CalibrationSource == CalibrationSource.Embedded)
-            {
-                key = CalibrationData ?? string.Empty;
-            }
-            else
-            {
-                var info = new System.IO.FileInfo(CalibrationFile);
-                if (!info.Exists)
-                {
-                    throw new System.IO.FileNotFoundException($"标定文件不存在：{CalibrationFile}", CalibrationFile);
-                }
-                key = (info.FullName, info.LastWriteTimeUtc, info.Length);
-            }
-            lock (_calibrationSync)
-            {
-                if (_cachedCalibration != null && Equals(_cachedKey, key))
-                {
-                    return _cachedCalibration;
-                }
-                CalibrationResult loaded = CalibrationSource == CalibrationSource.Embedded
-                    ? CalibrationService.Parse(CalibrationData, "内嵌标定数据")
-                    : CalibrationService.Load(CalibrationFile);
-                _cachedCalibration = loaded;
-                _cachedKey = key;
-                return loaded;
-            }
+            return _calibrationCache.Load(CalibrationSource, CalibrationFile, CalibrationData);
         }
 
         /// <summary>预热：使用标定文件或内嵌数据（未引用变换矩阵）时预先读取；文件缺失、格式错误、类型不符时抛出，便于投产前发现。</summary>
@@ -749,11 +706,7 @@ namespace VisionFlow.Tools
 
         public void ReleaseResources()
         {
-            lock (_calibrationSync)
-            {
-                _cachedCalibration = null;
-                _cachedKey = null;
-            }
+            _calibrationCache.Release();
         }
     }
 }

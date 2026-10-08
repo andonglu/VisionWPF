@@ -77,6 +77,7 @@ namespace VisionFlow.Tools
             FlowSerializer.RegisterToolType(typeof(ContourDistanceTool), "contour-distance");
             FlowSerializer.RegisterToolType(typeof(GeometryRelationTool), "geometry-relation");
             FlowSerializer.RegisterToolType(typeof(AffinePointTool), "affine-point");
+            FlowSerializer.RegisterToolType(typeof(AlignmentOffsetTool), "alignment-offset");
             FlowSerializer.RegisterToolType(typeof(Barcode1DTool), "barcode1d", "ldwelding.barcode1d");
         }
     }
