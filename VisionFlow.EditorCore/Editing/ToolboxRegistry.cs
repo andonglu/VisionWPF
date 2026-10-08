@@ -129,8 +129,8 @@ namespace VisionFlow.Editing
                 new ToolNode(new AffineTransformImageTool(NextModuleName("图像仿射")))));
             Register(new ToolboxItem("reduce-domain", "02 图像处理", "ReduceDomain 限定图像域", () =>
                 new ToolNode(new ReduceDomainTool(NextModuleName("限定图像域")))));
-            Register(new ToolboxItem("add-sub-image", "02 图像处理", "图像加减", () =>
-                new ToolNode(new AddSubImageTool(NextModuleName("图像加减")))));
+            Register(new ToolboxItem("add-sub-image", "02 图像处理", "图像运算", () =>
+                new ToolNode(new AddSubImageTool(NextModuleName("图像运算")))));
             Register(new ToolboxItem("decompose-channels", "02 图像处理", "通道分解", () =>
                 new ToolNode(new DecomposeChannelsTool(NextModuleName("通道分解")))));
             Register(new ToolboxItem("compose3", "02 图像处理", "三通道合成", () =>

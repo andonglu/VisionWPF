@@ -208,6 +208,10 @@ namespace VisionFlow.WpfToolEditors.Editors
 
         private void BuildToolActions()
         {
+            if (_tool is AddSubImageTool)
+            {
+                ScalarPanel.Children.Add(CreateInfo("说明：byte 图像运算的结果仍为 byte，超出 0 ~ 255 的部分被截断（Mult 常需把 Multi 设小，如 0.01）；需要完整范围时先用“灰度增强”的 ConvertType 转成 real 或 uint2。Div 中除数为 0 的像素结果为 0。两张图像的宽、高、通道数必须一致。"));
+            }
             if (_tool is RegionPoseTool)
             {
                 var button = new Button

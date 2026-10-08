@@ -78,6 +78,11 @@ namespace VisionFlow.WpfToolEditors
             {
                 return new WpfImageRectifyToolEditWindow(rectifyTool, context);
             }
+            // 阈值分割（含旧版独立阈值工具的兼容壳 AutoThresholdTool 等派生类）走专用窗口：颜色方式需要在图像上点击取色
+            if (tool is ThresholdTool thresholdTool)
+            {
+                return new WpfThresholdToolEditWindow(thresholdTool, context);
+            }
             return IsVisualPreviewTool(tool)
                 ? (Window)new WpfVisualToolEditWindow(tool, context)
                 : new WpfGenericToolEditWindow(tool, context);
@@ -93,7 +98,6 @@ namespace VisionFlow.WpfToolEditors
                 || tool is DecomposeChannelsTool
                 || tool is Compose3ImageTool
                 || tool is TransColorSpaceTool
-                || tool is ThresholdTool
                 || tool is RegionProcessTool
                 || tool is ManualRegionTool
                 || tool is RegionDifferenceTool

@@ -46,7 +46,11 @@ namespace VisionFlow.Tools
         CharThreshold,
         VarThreshold,
         /// <summary>动态阈值：与均值滤波后的参考图比较（mean_image + dyn_threshold）。</summary>
-        DynThreshold
+        DynThreshold,
+        /// <summary>颜色阈值（HSV）：byte 三通道图经 trans_from_rgb 转 HSV 后按三个通道范围求交；HueMin &gt; HueMax 表示色相跨 0。</summary>
+        ColorHsv,
+        /// <summary>颜色阈值（RGB）：byte 三通道图按 R / G / B 三个通道范围求交。</summary>
+        ColorRgb
     }
 
     /// <summary>
@@ -116,6 +120,49 @@ namespace VisionFlow.Tools
         public double Offset { get; set; } = 5;
         /// <summary>是否立即拆分连通域（connection）。</summary>
         public bool Connection { get; set; }
+        /// <summary>色相下限（ColorHsv，0 ~ 255，对应 0° ~ 360°）；大于 HueMax 表示跨 0。</summary>
+        public int HueMin { get; set; }
+        /// <summary>色相上限（ColorHsv，0 ~ 255）。</summary>
+        public int HueMax { get; set; } = 255;
+        /// <summary>饱和度下限（ColorHsv，0 ~ 255）。</summary>
+        public int SaturationMin { get; set; }
+        /// <summary>饱和度上限（ColorHsv，0 ~ 255）。</summary>
+        public int SaturationMax { get; set; } = 255;
+        /// <summary>明度下限（ColorHsv，0 ~ 255）。</summary>
+        public int ValueMin { get; set; }
+        /// <summary>明度上限（ColorHsv，0 ~ 255）。</summary>
+        public int ValueMax { get; set; } = 255;
+        /// <summary>红色下限（ColorRgb，0 ~ 255）。</summary>
+        public int RedMin { get; set; }
+        /// <summary>红色上限（ColorRgb，0 ~ 255）。</summary>
+        public int RedMax { get; set; } = 255;
+        /// <summary>绿色下限（ColorRgb，0 ~ 255）。</summary>
+        public int GreenMin { get; set; }
+        /// <summary>绿色上限（ColorRgb，0 ~ 255）。</summary>
+        public int GreenMax { get; set; } = 255;
+        /// <summary>蓝色下限（ColorRgb，0 ~ 255）。</summary>
+        public int BlueMin { get; set; }
+        /// <summary>蓝色上限（ColorRgb，0 ~ 255）。</summary>
+        public int BlueMax { get; set; } = 255;
+
+        /// <summary>各颜色通道参数：属性名、中文名、下限、上限、是否允许下限大于上限（色相跨 0）。</summary>
+        private IEnumerable<(string MinName, string MaxName, string Label, int Min, int Max, bool AllowWrap)> ColorChannels()
+        {
+            if (SegmentMethod == ThresholdSegmentMethod.ColorHsv)
+            {
+                yield return (nameof(HueMin), nameof(HueMax), "色相", HueMin, HueMax, true);
+                yield return (nameof(SaturationMin), nameof(SaturationMax), "饱和度", SaturationMin, SaturationMax, false);
+                yield return (nameof(ValueMin), nameof(ValueMax), "明度", ValueMin, ValueMax, false);
+            }
+            else if (SegmentMethod == ThresholdSegmentMethod.ColorRgb)
+            {
+                yield return (nameof(RedMin), nameof(RedMax), "红色", RedMin, RedMax, false);
+                yield return (nameof(GreenMin), nameof(GreenMax), "绿色", GreenMin, GreenMax, false);
+                yield return (nameof(BlueMin), nameof(BlueMax), "蓝色", BlueMin, BlueMax, false);
+            }
+        }
+
+        private bool IsColorMethod => SegmentMethod == ThresholdSegmentMethod.ColorHsv || SegmentMethod == ThresholdSegmentMethod.ColorRgb;
 
         public ThresholdTool(string moduleName) : base(moduleName)
         {
@@ -132,6 +179,21 @@ namespace VisionFlow.Tools
                 && (MaskWidth <= 0 || MaskHeight <= 0))
             {
                 yield return new ToolConfigurationIssue("MaskWidth / MaskHeight", "掩膜宽高必须大于 0");
+            }
+            foreach (var channel in ColorChannels())
+            {
+                if (channel.Min < 0 || channel.Min > 255)
+                {
+                    yield return new ToolConfigurationIssue(channel.MinName, $"{channel.Label}下限 {channel.MinName} 必须在 0 ~ 255 之间");
+                }
+                if (channel.Max < 0 || channel.Max > 255)
+                {
+                    yield return new ToolConfigurationIssue(channel.MaxName, $"{channel.Label}上限 {channel.MaxName} 必须在 0 ~ 255 之间");
+                }
+                if (!channel.AllowWrap && channel.Min > channel.Max)
+                {
+                    yield return new ToolConfigurationIssue($"{channel.MinName} / {channel.MaxName}", $"{channel.Label}下限不能大于上限");
+                }
             }
         }
 
@@ -161,6 +223,20 @@ namespace VisionFlow.Tools
                     return SegmentMethod == ThresholdSegmentMethod.VarThreshold;
                 case nameof(Offset):
                     return SegmentMethod == ThresholdSegmentMethod.DynThreshold;
+                case nameof(HueMin):
+                case nameof(HueMax):
+                case nameof(SaturationMin):
+                case nameof(SaturationMax):
+                case nameof(ValueMin):
+                case nameof(ValueMax):
+                    return SegmentMethod == ThresholdSegmentMethod.ColorHsv;
+                case nameof(RedMin):
+                case nameof(RedMax):
+                case nameof(GreenMin):
+                case nameof(GreenMax):
+                case nameof(BlueMin):
+                case nameof(BlueMax):
+                    return SegmentMethod == ThresholdSegmentMethod.ColorRgb;
                 case "Method":
                     // 旧版二值阈值工具的同义属性，与 BinaryMethod 重复，不再单独显示
                     return false;
@@ -231,6 +307,16 @@ namespace VisionFlow.Tools
                     label = "VarThreshold";
                     detail = $"Mask={MaskWidth}x{MaskHeight}, StdDevScale={StdDevScale}, AbsThreshold={AbsThreshold}, LightDark={LightDark}";
                     break;
+                case ThresholdSegmentMethod.ColorHsv:
+                case ThresholdSegmentMethod.ColorRgb:
+                    string colorError = ColorThreshold(image, out region, out detail);
+                    if (colorError != null)
+                    {
+                        return NodeResult.Fail($"{ModuleName} {colorError}");
+                    }
+                    usedThreshold = new HTuple(double.NaN);
+                    label = SegmentMethod == ThresholdSegmentMethod.ColorHsv ? "颜色阈值 HSV" : "颜色阈值 RGB";
+                    break;
                 default:
                     HOperatorSet.Threshold(image, out region, MinGray, MaxGray);
                     label = "二值化";
@@ -251,6 +337,90 @@ namespace VisionFlow.Tools
                 SetOutput(ctx, Variable.Single(ModuleName, "UsedThreshold", VariableType.Double, usedThreshold.D));
             }
             return result;
+        }
+
+        /// <summary>
+        /// 颜色阈值（IMAGE-TOOLS-PLAN 第 12 节）：只接受 byte 三通道图（HSV / RGB 的 0 ~ 255 范围只对 byte 成立）；
+        /// decompose3 →（HSV 时 trans_from_rgb）→ 各通道 threshold → intersection。色相下限大于上限时为
+        /// [HueMin, 255] ∪ [0, HueMax] 两段并集（threshold 不接受下限大于上限）。返回 null 表示成功。
+        /// </summary>
+        private string ColorThreshold(HObject image, out HObject region, out string detail)
+        {
+            region = null;
+            detail = null;
+            HOperatorSet.CountChannels(image, out HTuple channelCount);
+            int count = channelCount.Length > 0 ? channelCount[0].I : 0;
+            if (count != 3)
+            {
+                return $"颜色阈值需要三通道彩色图像（当前 {count} 通道）";
+            }
+            HOperatorSet.GetImageType(image, out HTuple imageType);
+            string type = imageType.Length > 0 ? imageType[0].S : string.Empty;
+            if (type != "byte")
+            {
+                return $"颜色阈值需要 byte 彩色图像（当前 {type}），可先接灰度增强的 ConvertType 转成 byte";
+            }
+
+            var channelImages = new List<HObject>();
+            try
+            {
+                HObject first, second, third;
+                try
+                {
+                    HOperatorSet.Decompose3(image, out first, out second, out third);
+                }
+                catch (HalconException ex) when (ex.GetErrorCode() == 3359)
+                {
+                    return "颜色阈值需要三通道彩色图像";
+                }
+                channelImages.AddRange(new[] { first, second, third });
+                if (SegmentMethod == ThresholdSegmentMethod.ColorHsv)
+                {
+                    HOperatorSet.TransFromRgb(first, second, third, out HObject hue, out HObject saturation, out HObject value, "hsv");
+                    channelImages.AddRange(new[] { hue, saturation, value });
+                }
+                int offset = SegmentMethod == ThresholdSegmentMethod.ColorHsv ? 3 : 0;
+                var channels = ColorChannels().ToList();
+                HObject current = null;
+                for (int i = 0; i < channels.Count; i++)
+                {
+                    HObject channelRegion = ThresholdChannel(channelImages[offset + i], channels[i].Min, channels[i].Max);
+                    if (current == null)
+                    {
+                        current = channelRegion;
+                        continue;
+                    }
+                    HOperatorSet.Intersection(current, channelRegion, out HObject intersected);
+                    current.Dispose();
+                    channelRegion.Dispose();
+                    current = intersected;
+                }
+                region = current;
+                detail = string.Join(", ", channels.Select(c => $"{c.Label} [{c.Min}, {c.Max}]{(c.AllowWrap && c.Min > c.Max ? "（跨 0）" : string.Empty)}"));
+                return null;
+            }
+            finally
+            {
+                foreach (HObject channelImage in channelImages)
+                {
+                    channelImage.Dispose();
+                }
+            }
+        }
+
+        private static HObject ThresholdChannel(HObject channel, int min, int max)
+        {
+            if (min <= max)
+            {
+                HOperatorSet.Threshold(channel, out HObject region, min, max);
+                return region;
+            }
+            HOperatorSet.Threshold(channel, out HObject high, min, 255);
+            HOperatorSet.Threshold(channel, out HObject low, 0, max);
+            HOperatorSet.Union2(high, low, out HObject wrapped);
+            high.Dispose();
+            low.Dispose();
+            return wrapped;
         }
     }
 

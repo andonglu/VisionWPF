@@ -7,10 +7,21 @@ using VisionFlow.Variables;
 
 namespace VisionFlow.Tools
 {
+    /// <summary>图像运算（按数字保存，新值追加在末尾；Add / Sub 为原“图像加减”）。</summary>
     public enum ImageArithmeticOperation
     {
         Add,
-        Sub
+        Sub,
+        /// <summary>mult_image：g1 × g2 × Multi + Add。</summary>
+        Mult,
+        /// <summary>div_image：g1 / g2 × Multi + Add（除数为 0 的像素为 0）。</summary>
+        Div,
+        /// <summary>abs_diff_image：|g1 − g2| × Multi。</summary>
+        AbsDiff,
+        /// <summary>max_image：逐像素取较大值。</summary>
+        Max,
+        /// <summary>min_image：逐像素取较小值。</summary>
+        Min
     }
 
     /// <summary>trans_from_rgb 的目标色彩空间（名称即 HALCON 参数值，追加时保持已有值不变以兼容已保存流程）。</summary>
@@ -494,8 +505,12 @@ namespace VisionFlow.Tools
         }
     }
 
+    /// <summary>
+    /// 图像运算（工具箱原名“图像加减”，ID add-sub-image 与类型名不变）。Add / Sub 的成功路径、输出与日志不变；
+    /// 七种运算都在调用算子前检查两图宽、高、通道数（IMAGE-TOOLS-PLAN 第 12 节）。byte 与 byte 运算的结果仍为 byte，出界饱和截断。
+    /// </summary>
     [ToolOutput("Image", VariableKind.Object, VariableType.Object, ElementClrType = typeof(HalconImage))]
-    public sealed class AddSubImageTool : ToolBase
+    public sealed class AddSubImageTool : ToolBase, IToolParameterVisibility
     {
         [InputRef("图像1", typeof(HalconImage))]
         public string ImagePath1 { get; set; } = "Input.Image";
@@ -504,30 +519,109 @@ namespace VisionFlow.Tools
         public string ImagePath2 { get; set; }
 
         public ImageArithmeticOperation Operation { get; set; } = ImageArithmeticOperation.Add;
+        /// <summary>乘数（Add / Sub / Mult / Div / AbsDiff）。</summary>
         public double Multi { get; set; } = 1;
+        /// <summary>加数（Add / Sub / Mult / Div；AbsDiff 没有加数）。</summary>
         public int Add { get; set; } = 128;
 
         public AddSubImageTool(string moduleName) : base(moduleName)
         {
         }
 
+        public bool IsParameterVisible(string propertyName)
+        {
+            switch (propertyName)
+            {
+                case nameof(Multi):
+                    return Operation != ImageArithmeticOperation.Max && Operation != ImageArithmeticOperation.Min;
+                case nameof(Add):
+                    return Operation != ImageArithmeticOperation.Max && Operation != ImageArithmeticOperation.Min
+                        && Operation != ImageArithmeticOperation.AbsDiff;
+                default:
+                    return true;
+            }
+        }
+
         public override NodeResult Run(FlowContext ctx)
         {
             HObject image1 = Input<HalconImage>(ctx, ImagePath1).Object;
             HObject image2 = Input<HalconImage>(ctx, ImagePath2).Object;
-            HObject output;
-            if (Operation == ImageArithmeticOperation.Sub)
+            string mismatch = DescribeMismatch(image1, image2);
+            if (mismatch != null)
             {
-                HOperatorSet.SubImage(image1, image2, out output, Multi, Add);
+                return NodeResult.Fail($"{ModuleName} {mismatch}");
             }
-            else
+            HObject output;
+            try
             {
-                HOperatorSet.AddImage(image1, image2, out output, Multi, Add);
+                switch (Operation)
+                {
+                    case ImageArithmeticOperation.Add:
+                        HOperatorSet.AddImage(image1, image2, out output, Multi, Add);
+                        break;
+                    case ImageArithmeticOperation.Sub:
+                        HOperatorSet.SubImage(image1, image2, out output, Multi, Add);
+                        break;
+                    case ImageArithmeticOperation.Mult:
+                        HOperatorSet.MultImage(image1, image2, out output, Multi, Add);
+                        break;
+                    case ImageArithmeticOperation.Div:
+                        HOperatorSet.DivImage(image1, image2, out output, Multi, Add);
+                        break;
+                    case ImageArithmeticOperation.AbsDiff:
+                        HOperatorSet.AbsDiffImage(image1, image2, out output, Multi);
+                        break;
+                    case ImageArithmeticOperation.Max:
+                        HOperatorSet.MaxImage(image1, image2, out output);
+                        break;
+                    case ImageArithmeticOperation.Min:
+                        HOperatorSet.MinImage(image1, image2, out output);
+                        break;
+                    default:
+                        return NodeResult.Fail($"{ModuleName} 未知的图像运算 {(int)Operation}");
+                }
+            }
+            catch (HalconException ex) when (ex.GetErrorCode() == 3117 || ex.GetErrorCode() == 3122 || ex.GetErrorCode() == 9001)
+            {
+                return NodeResult.Fail($"{ModuleName} {DescribeMismatch(image1, image2) ?? DescribeTypes(image1, image2)}");
             }
 
             SetOutput(ctx, Variable.Object(ModuleName, "Image", new HalconImage(output), 1));
-            ctx.AddLog(FlowLogLevel.Info, $"[图像加减] {Operation}, Multi={Multi}, Add={Add}");
+            if (Operation == ImageArithmeticOperation.Add || Operation == ImageArithmeticOperation.Sub)
+            {
+                ctx.AddLog(FlowLogLevel.Info, $"[图像加减] {Operation}, Multi={Multi}, Add={Add}");
+                return NodeResult.Ok;
+            }
+            string parameters = Operation == ImageArithmeticOperation.Max || Operation == ImageArithmeticOperation.Min ? string.Empty
+                : Operation == ImageArithmeticOperation.AbsDiff ? $", Multi={Multi}" : $", Multi={Multi}, Add={Add}";
+            HOperatorSet.GetImageType(output, out HTuple outputType);
+            string type = outputType.Length > 0 ? outputType[0].S : string.Empty;
+            string clipNote = type == "byte" && (Operation == ImageArithmeticOperation.Mult || Operation == ImageArithmeticOperation.Div || Operation == ImageArithmeticOperation.AbsDiff)
+                ? "；输出 byte，超出 0 ~ 255 的部分被截断，需要完整范围时配合 Multi / Add，或先接灰度增强的 ConvertType 转成 real"
+                : $"；输出 {type}";
+            ctx.AddLog(FlowLogLevel.Info, $"[图像运算] {Operation}{parameters}{clipNote}");
             return NodeResult.Ok;
+        }
+
+        /// <summary>两图宽、高、通道数不一致时返回“宽×高×通道”对照的中文说明，否则返回 null。</summary>
+        private static string DescribeMismatch(HObject image1, HObject image2)
+        {
+            string shape1 = Shape(image1), shape2 = Shape(image2);
+            return shape1 == shape2 ? null : $"两张图像的尺寸或通道数不一致：图像1 {shape1}，图像2 {shape2}（宽×高×通道）";
+        }
+
+        private static string Shape(HObject image)
+        {
+            HOperatorSet.GetImageSize(image, out HTuple width, out HTuple height);
+            HOperatorSet.CountChannels(image, out HTuple channels);
+            return width.Length > 0 && channels.Length > 0 ? $"{width[0].I}×{height[0].I}×{channels[0].I}" : "空图像";
+        }
+
+        private static string DescribeTypes(HObject image1, HObject image2)
+        {
+            HOperatorSet.GetImageType(image1, out HTuple type1);
+            HOperatorSet.GetImageType(image2, out HTuple type2);
+            return $"两张图像的像素类型不同或不受支持：图像1 {(type1.Length > 0 ? type1[0].S : "?")}，图像2 {(type2.Length > 0 ? type2[0].S : "?")}，可先接灰度增强的 ConvertType 统一类型";
         }
     }
 

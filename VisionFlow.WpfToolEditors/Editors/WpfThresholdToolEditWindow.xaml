@@ -1,0 +1,93 @@
+<Window x:Class="VisionFlow.WpfToolEditors.Editors.WpfThresholdToolEditWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:wfi="clr-namespace:System.Windows.Forms.Integration;assembly=WindowsFormsIntegration"
+        xmlns:vfc="clr-namespace:VisionFlow.Controls;assembly=VisionFlow.Controls"
+        Title="阈值分割"
+        Width="1240"
+        Height="860"
+        MinWidth="1080"
+        MinHeight="720"
+        WindowStartupLocation="CenterOwner">
+    <Grid Margin="24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="420" />
+        </Grid.ColumnDefinitions>
+
+        <Border Grid.Row="0" Grid.Column="0" Style="{StaticResource PanelBorderStyle}" Margin="0,0,24,0">
+            <DockPanel>
+                <Grid DockPanel.Dock="Top" Margin="0,0,0,8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="84" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Text="图像与提取结果" Style="{StaticResource EditorSectionTitleStyle}" />
+                    <TextBlock Grid.Column="1" Text="取色容差" VerticalAlignment="Center" Margin="0,0,8,0" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                    <TextBox x:Name="ToleranceText" Grid.Column="2" Text="20" />
+                    <Button x:Name="PickColorButton" Grid.Column="3" Content="在图像上取色" Margin="8,0,0,0" Click="PickColor_Click" />
+                    <Button Grid.Column="4" Content="执行测试" Margin="8,0,0,0" Click="TestRun_Click" />
+                </Grid>
+                <StackPanel DockPanel.Dock="Bottom" Margin="0,8,0,0">
+                    <TextBlock x:Name="PickInfoText" TextWrapping="Wrap" />
+                    <TextBlock x:Name="ResultSummaryText" TextWrapping="Wrap" FontWeight="SemiBold" Margin="0,4,0,0" />
+                </StackPanel>
+                <wfi:WindowsFormsHost>
+                    <vfc:HalconImageView x:Name="PreviewImageView" />
+                </wfi:WindowsFormsHost>
+            </DockPanel>
+        </Border>
+
+        <ScrollViewer Grid.Row="0" Grid.Column="1" VerticalScrollBarVisibility="Auto">
+            <StackPanel>
+                <Border Style="{StaticResource EditorCardStyle}">
+                    <StackPanel>
+                        <TextBlock Text="输入" Style="{StaticResource EditorSectionTitleStyle}" />
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="130" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="模块名" Style="{StaticResource EditorFieldLabelStyle}" />
+                            <TextBox x:Name="ModuleNameText" Grid.Row="0" Grid.Column="1" />
+                            <TextBlock Grid.Row="1" Grid.Column="0" Text="图像" Style="{StaticResource EditorFieldLabelStyle}" />
+                            <ComboBox x:Name="ImagePathCombo" Grid.Row="1" Grid.Column="1" IsEditable="True" SelectionChanged="ImagePathCombo_SelectionChanged" />
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <Border Style="{StaticResource EditorCardStyle}">
+                    <StackPanel>
+                        <TextBlock Text="分割参数" Style="{StaticResource EditorSectionTitleStyle}" />
+                        <Grid x:Name="ParameterGrid">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="130" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                        </Grid>
+                        <TextBlock x:Name="ColorHintText" Margin="0,8,0,0" TextWrapping="Wrap" Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                   Text="颜色方式只接受 byte 三通道彩色图像。HSV 的色相 0 ~ 255 对应 0° ~ 360°（红 0、黄 43、绿 85、青 128、蓝 170、品红 213），HueMin 大于 HueMax 表示跨 0（如红色 230 ~ 20）。点击“在图像上取色”后在图像上点一下，按容差自动填入当前方式的各通道范围并预览。" />
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+        </ScrollViewer>
+
+        <DockPanel Grid.Row="1" Grid.ColumnSpan="2" LastChildFill="False" Margin="0,24,0,0">
+            <TextBlock x:Name="StatusText" VerticalAlignment="Center" TextWrapping="Wrap" MaxWidth="900"
+                       Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+            <Button DockPanel.Dock="Right" Content="取消" MinWidth="96" Margin="8,0,0,0" Click="Cancel_Click" />
+            <Button DockPanel.Dock="Right" Content="确定" MinWidth="96" Style="{StaticResource AccentButtonStyle}" Click="Ok_Click" />
+        </DockPanel>
+    </Grid>
+</Window>

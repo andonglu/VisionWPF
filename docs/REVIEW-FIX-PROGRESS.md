@@ -538,3 +538,21 @@ WPF 中“图像加载”供图流程的叠加显示效果以界面手工冒烟�
 测试工程不引用 WPF 工程，无单元测试覆盖，以界面验收为准。
 
 状态：**已完成**。
+
+## 2026-10-08 已知边界（未修）：区域工具的空结果仍报 Found = true（未找到策略不生效）
+
+现象（IMAGE-TOOLS 第二批开发中发现，2026-10-08，Copilot 主动报告）：阈值分割在阈值范围内没有任何像素时（灰度方式与新增的颜色方式都一样），
+输出 `Count = 1`、`Found = true`，`Region` 为面积 0 的空区域；`FailWhenNotFound = true` 也不会失败。勾选 `Connection` 后同样如此。
+
+原因：HALCON 22.11 的系统参数 `store_empty_region` 默认为 `true`，`threshold`、`intersection` 等算子的空结果是**一个空区域对象**，
+`connection` 对空区域同样返回一个空区域对象（第二批探测实测：空 `threshold`、对它 `connection`、空 `intersection`、对它 `connection`，`count_obj` 都是 1）。`RegionTools.cs` 中共用的
+`RegionOutput.Set` 按对象数（`count_obj == 0`）判断“未找到”，因此对空结果判断不出来。
+
+影响范围：经 `RegionOutput.Set` 输出的 10 个工具——阈值分割（含旧版独立阈值工具兼容壳）、区域处理、Region 相减、Region 合并、Region 交集、
+Region 形状转换、Region Union1、形态学（`MorphologyTool`）、区域筛选、XLD 转 Region。下游按 `Found` / `Count` 判断有无目标的流程在空结果时会得到“找到 1 个”。
+
+处理决定（使用方确认）：**不并入 IMAGE-TOOLS 第二批**，单独立项。颜色方式沿用与灰度方式相同的语义，`ImageToolsBatch2Tests` 用例固定“颜色与灰度阈值的空结果语义相同”，
+修复时需同步修改该用例。建议修法：`RegionOutput.Set` 先去掉面积为 0 的区域对象（或按总面积判断），空结果输出 `Count = 0`、`Found = false` 并按
+`FailWhenNotFound` 处理；这会改变默认行为（`FailWhenNotFound` 默认 true，原来“空结果也通过”的流程会改为失败），须带回归用例并在评审中确认迁移说明。
+
+状态：**未开始**。
