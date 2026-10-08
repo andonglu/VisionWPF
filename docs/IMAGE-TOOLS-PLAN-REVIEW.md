@@ -116,3 +116,42 @@ public enum GaussFilterSize { Size3 = 3, Size5 = 5, Size7 = 7, Size9 = 9, Size11
 ### 遗留
 
 - 空结果 `Found = true` 单独立项（10 个区域工具），修复会改变默认行为，须带回归用例与迁移说明。
+
+---
+
+## 第三批（IP-04）评审
+
+评审日期：2026-10-08
+评审对象：`origin/feature/image-tools-batch3`（`fd437a0`，单提交，已推送）
+评审方式：提交结构核对 → `ImageGeometryTool` 全文件审查 → 本地构建与全量测试对账 → 合并 `main`（`074eed1..fd437a0`，已推送）
+
+评审结论：**通过，已合并进 main。**
+
+### 核对结果
+
+| 项 | 结果 |
+|---|---|
+| 提交结构 | `origin/main..HEAD` 仅 1 个提交，无 "Agent host session" 快照，diff 9 个文件 +968/−4，与工作声明一致 |
+| 构建 | 0 错误，无新增警告 |
+| 本机测试对账 | **823 通过 / 367 失败 / 总计 1190，与预测完全吻合**（基线 798/348 + 新增非门禁 25 / 门禁 19）；367 个失败全部带"找不到指定的模块"，全部是本机缺 HALCON 原生库的门禁用例，无真失败 |
+
+### 实现审查意见（通过点）
+
+- 三个枚举（`ImageGeometryMethod` / `GeometryInterpolation` / `ImageMirrorMode`）均按数字保存、成员名即 HALCON 取值；插值成员顺序与 `get_param_info` 的 `value_list` 一致；未改动已持久化的 `ImageInterpolationMode`（与三算子取值不同，另建枚举是对的）。
+- HomMat 坐标映射与第 14 节实测一致：缩放用像素中心约定且 s 取**实际输出尺寸比**（非参数值）；旋转绕 ((h−1)/2, (w−1)/2) 映射到输出中心；三种镜像与两种裁剪的平移矩阵均正确。
+- 校验分层正确：与图像无关的约束走 `CheckConfiguration`（流程校验与运行共用同一函数，措辞一致），随图像尺寸变化的约束（缩放后尺寸 1~32768、裁剪起点在图内）在运行时检查；NaN / Infinity 系数被 `!(x > 0)` 与 `IsInfinity` 兜住。
+- `CropRegion` 先 `union1` 合并多区域对象（避开 `reduce_domain` 只用第一个的坑），空交集明确报错而不是输出 1×1 空图；`crop_domain` 前先取定义域外接矩形作平移矩阵，与算子实际裁剪范围一致。
+- 矩阵输出沿用代码库既有 `HomMat2D` 变量机制（与区域位姿、畸变校正同法），未新造类型；`output` 所有权移交后置空，finally 只释放未移交的对象。
+
+### 偏差处理（5 条，均有依据）
+
+1. 另建 `GeometryInterpolation` 不改既有 `ImageInterpolationMode`——既有枚举已持久化且取值集合不同。
+2. 校验分流程 / 运行两处——缩放系数有效范围随图像尺寸变化，物理上无法在流程校验期定死。
+3. 两处 HALCON 行为由工具补齐（多区域合并、空交集报错），两处沿用算子原行为并写入实现说明（右下角超界不报错、旋转不用输入定义域）。
+4. `ReduceDomainTool` 多区域只用第一个的既有问题——按使用方决定不并入本批，已记入 `REVIEW-FIX-PROGRESS.md`（含 121/297 像素复现数据与建议修法）。
+5. 补 `ToolIcon.image-geometry` 图标——与前几批惯例一致。
+
+### 遗留
+
+- `ReduceDomainTool` 多区域对象只用第一个（单独立项；修复会改变多对象输入的现有输出，须先确认现场流程）。
+- 区域工具空结果 `Found = true`（批二遗留，未开始）。
