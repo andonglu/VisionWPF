@@ -480,17 +480,24 @@ namespace VisionFlow.Tools
     }
 
     /// <summary>
-    /// 区域类工具的统一输出（TR-06）：写 Region / Count / Found；区域个数为 0 时按“未找到”策略处理。
+    /// 区域类工具的统一输出（TR-06）：写 Region / Count / Found；有效区域个数为 0 时按“未找到”策略处理。
     /// 与 ToolBase.SetOutput 同一约定：输出归本次运行所有（VF-04）。
+    /// 空结果语义（2026-10-08 修正）：先去掉面积为 0 的区域对象再判断“未找到”，见 <see cref="DropEmptyObjects"/>。
     /// </summary>
     internal static class RegionOutput
     {
         public static NodeResult Set(FlowContext ctx, string moduleName, INotFoundPolicy policy, HObject region,
             string label, string detail)
         {
-            HOperatorSet.CountObj(region, out HTuple count);
-            Variable output = Variable.Object(moduleName, "Region", new HalconRegion(region), count.I);
+            HObject effective = DropEmptyObjects(region, out bool filtered);
+            HOperatorSet.CountObj(effective, out HTuple count);
+            Variable output = Variable.Object(moduleName, "Region", new HalconRegion(effective), count.I);
             HalconOwnership.Adopt(output);
+            if (filtered)
+            {
+                // 过滤出的是新对象；入参 region 由本方法接管，此处释放避免泄漏。
+                region.Dispose();
+            }
             ctx.SetVariable(output);
             ctx.SetVariable(Variable.Single(moduleName, "Count", VariableType.Int, count.I));
             ctx.SetVariable(Variable.Single(moduleName, "Found", VariableType.Bool, count.I > 0));
@@ -503,6 +510,46 @@ namespace VisionFlow.Tools
                 ? $"[{label}] 区域数 {count.I}"
                 : $"[{label}] {detail}，区域数 {count.I}");
             return NodeResult.Ok;
+        }
+
+        /// <summary>
+        /// 去掉面积为 0 的区域对象后再返回，用于“未找到”判定。
+        /// 背景：HALCON 22.11 的系统参数 <c>store_empty_region</c> 默认为 true，<c>threshold</c>、<c>intersection</c>、
+        /// <c>connection</c> 等算子的空结果是 1 个面积 0 的空区域对象（<c>count_obj</c> 仍为 1），
+        /// 按对象数判断“未找到”会漏判，导致空结果也报 Found=true、FailWhenNotFound 不生效。
+        /// 这里逐对象取面积，只保留面积大于 0 的对象；全部为 0 时返回 0 个对象。
+        /// 无空对象（常见非空结果）时原样返回入参，不产生新对象、不改变计数。
+        /// <paramref name="filtered"/> 为 true 时返回的是新对象，入参 <paramref name="region"/> 已不再被引用，由调用方释放。
+        /// </summary>
+        private static HObject DropEmptyObjects(HObject region, out bool filtered)
+        {
+            filtered = false;
+            HOperatorSet.CountObj(region, out HTuple count);
+            if (count.I == 0)
+            {
+                return region;
+            }
+            HOperatorSet.AreaCenter(region, out HTuple areas, out _, out _);
+            var keep = new List<int>();
+            for (int i = 0; i < count.I; i++)
+            {
+                if (areas[i].D > 0)
+                {
+                    keep.Add(i + 1); // select_obj 的下标从 1 开始
+                }
+            }
+            if (keep.Count == count.I)
+            {
+                return region;
+            }
+            filtered = true;
+            if (keep.Count == 0)
+            {
+                HOperatorSet.GenEmptyObj(out HObject empty);
+                return empty;
+            }
+            HOperatorSet.SelectObj(region, out HObject selected, new HTuple(keep.ToArray()));
+            return selected;
         }
     }
 

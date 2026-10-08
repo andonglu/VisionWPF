@@ -539,7 +539,7 @@ WPF 中“图像加载”供图流程的叠加显示效果以界面手工冒烟�
 
 状态：**已完成**。
 
-## 2026-10-08 已知边界（未修）：区域工具的空结果仍报 Found = true（未找到策略不生效）
+## 2026-10-08 已修复：区域工具的空结果仍报 Found = true（未找到策略不生效）
 
 现象（IMAGE-TOOLS 第二批开发中发现，2026-10-08，Copilot 主动报告）：阈值分割在阈值范围内没有任何像素时（灰度方式与新增的颜色方式都一样），
 输出 `Count = 1`、`Found = true`，`Region` 为面积 0 的空区域；`FailWhenNotFound = true` 也不会失败。勾选 `Connection` 后同样如此。
@@ -555,9 +555,38 @@ Region 形状转换、Region Union1、形态学（`MorphologyTool`）、区域�
 修复时需同步修改该用例。建议修法：`RegionOutput.Set` 先去掉面积为 0 的区域对象（或按总面积判断），空结果输出 `Count = 0`、`Found = false` 并按
 `FailWhenNotFound` 处理；这会改变默认行为（`FailWhenNotFound` 默认 true，原来“空结果也通过”的流程会改为失败），须带回归用例并在评审中确认迁移说明。
 
-状态：**未开始**。
+状态：**已修复**（2026-10-08，分支 `fix/region-behavior`）。
 
-## 2026-10-08 已知边界（未修）：ReduceDomain 限定图像域只用第一个区域对象
+### 依赖排查（修复前完成，2026-10-08）
+
+排查范围：`examples\*.vflow.json`（7 个）、`docs\`、`README.md` 中引用受影响区域工具的流程；逐引用点判断是否存在"依赖空结果也通过"的路径。
+
+受影响工具（固定 ID）：阈值分割 `threshold` 及旧版兼容壳 `auto-threshold` / `binary-threshold` / `fast-threshold` / `char-threshold` / `var-threshold`、区域处理 `regionprocess`、Region 相减 `region-difference`、Region 合并 `region-union2`、Region 交集 `region-intersection`、Region 形状转换 `region-shape-trans`、Region Union1 `region-union1`、形态学 `morphology`（兼容壳 `morphology-rect` / `morphology-circle`）、区域筛选 `selectregion`、XLD 转 Region `xld-to-region`。
+
+| 文件 | 引用点（工具） | 是否依赖空结果通过 |
+|---|---|---|
+| `examples\pizza-salami.vflow.json` | 阈值分割 ×2、区域筛选 ×2、区域处理 ×2、Region 形状转换 ×1 | 否：全部 `FailWhenNotFound = true`，示例图结果非空 |
+| `examples\blister-check.vflow.json` | 阈值分割 ×2、区域筛选 ×3、区域处理 ×5、Region 形状转换 ×2 | 否：全部 `FailWhenNotFound = true` |
+| `examples\threshold-region.vflow.json` | 阈值分割 ×1、形态学（`morphology-circle`）×1、区域筛选 ×1 | 否：默认 `FailWhenNotFound = true`；流程输出引用 `区域筛选1.Count`，示例图上恒为非空 |
+| `examples\region-measure.vflow.json` | 阈值分割 ×1、区域筛选 ×1 | 否：默认 `FailWhenNotFound = true` |
+| `examples\wafer-chips.vflow.json` | 阈值分割 ×1、区域筛选 ×1 | 否：默认 `FailWhenNotFound = true`；`ChipCount` 引用的是 `行列排序.Count`，区域排序不属受影响工具（其空判断走自身 `CountObj`，不共用 `RegionOutput`） |
+| `examples\xld-line.vflow.json` | 无 | — |
+| `examples\cookie-box.vflow.json` | 无（4 处 `FailWhenNotFound = false` 属 range-classify / descriptor-match） | — |
+| `README.md` | 工具表与示例表文字描述 | 否：无流程依赖 |
+| `docs\` | 各计划 / 评审文字与算子探测 | 否：无内嵌可执行流程（`"Kind"` / `"ToolId"` 仅出现在标定与逻辑数据计划，均不引用本项工具） |
+
+结论：**无依赖，可改**。
+
+补充发现（超出文档列的 10 个工具）：`VisionFlow.Tools\Tools\PolarTools.cs:375` 的极坐标逆变换（`polar-inverse`）在配置了区域输入时同样经 `RegionOutput.Set` 输出 Region / Count / Found，本次修复一并改变其空结果语义；`examples` / `docs` / `README` 均无引用该工具的流程，无流程依赖。故实际受影响为 11 个工具，文档原写 10 个。
+
+### 实际修法（2026-10-08）
+
+- `VisionFlow.Tools\Tools\RegionTools.cs`
+  - `RegionOutput.Set` 在判断"未找到"前先调用新增的私有 `DropEmptyObjects`：`count_obj` 后逐对象 `area_center`，只保留面积大于 0 的对象。无空对象时原样透传（不新建对象、不改变计数）；存在空对象时用 `select_obj` 取保留项并释放原对象；全部为 0 时输出 `gen_empty_obj`（0 个对象，与 `select_shape` 无匹配等既有"未找到"一致）。
+  - 有效对象数为 0 时输出 `Count = 0`、`Found = false`，并沿用既有未找到策略（`FailWhenNotFound` true 失败 / false 记录警告并继续）。非空结果的 `Region` / `Count` / `Found` 与日志逐一致（含 `Connection` 拆分计数）。
+- 受影响工具 11 个（见上）。
+
+## 2026-10-08 已修复：ReduceDomain 限定图像域只用第一个区域对象
 
 现象（IMAGE-TOOLS 第三批探测中发现，2026-10-08，Copilot 主动报告）：“ReduceDomain 限定图像域”（`reduce-domain`，`ReduceDomainTool`）的区域输入含多个区域对象时
 （如阈值分割勾选 `Connection`、区域筛选、区域排序的输出），输出图像的定义域只有**第一个**区域对象，其余区域被静默忽略，不报错也不提示。
@@ -569,6 +598,33 @@ Region 形状转换、Region Union1、形态学（`MorphologyTool`）、区域�
 
 影响范围：`ReduceDomainTool` 及其下游——只在区域输入为多对象时出错（单个区域、`Connection` 关闭的阈值结果不受影响）。新工具“图像几何变换”的 `CropRegion` 方式已先 `union1` 再裁剪，不受影响。
 
-处理决定（使用方确认）：**不并入 IMAGE-TOOLS 第三批**，单独立项。建议修法：`ReduceDomainTool` 先对区域 `union1` 再 `reduce_domain`（多对象时定义域变为全部区域的并集），带多对象回归用例；这会改变多对象输入时的现有输出，修复前需确认现场流程是否依赖“只取第一个”的行为。
+处理决定（使用方确认）：**不并入 IMAGE-TOOLS 第三批**，单独立项。建议修法：`ReduceDomainTool` 先对区域 `union1` 再 `reduce_domain`（多对象时定义域变为全部区域的并集），带多对象回归用例；这会改变多对象输入时的现有输出，修复前需确认现场流程是否依赖"只取第一个"的行为。
 
-状态：**未开始**。
+### 依赖排查（修复前完成，2026-10-08）
+
+排查范围：`examples\*.vflow.json`（7 个）、`docs\`、`README.md` 中引用 `reduce-domain` 的流程；逐引用点判断是否存在"依赖多对象只取第一个"的路径。
+
+| 文件 | 引用点（工具） | 区域输入对象数 | 是否依赖"只取第一个" |
+|---|---|---|---|
+| `examples\pizza-salami.vflow.json` | `限定披萨`（`reduce-domain`） | `披萨凸包.Region` ← `披萨`（`selectregion`，`TakeMode = 1` = Largest）单对象，经 `shape_trans convex` 仍单对象 | 否：输入恒为单对象，修复后行为不变 |
+| `examples\blister-check.vflow.json` | `限定泡罩格`（`reduce-domain`） | `泡罩格合并.Region` ← `regionprocess` `Method = 2` = Union1，单对象 | 否：输入恒为单对象 |
+| 其余 examples | 无引用 | — | — |
+| `README.md` / `docs\` | 文字描述与算子探测 | — | 否：无流程依赖 |
+
+结论：**无依赖，可改**（仓库内无流程把多对象区域直接传给 `reduce-domain`）。
+
+### 实际修法（2026-10-08）
+
+- `VisionFlow.Tools\Tools\ImageTools.cs`：`ReduceDomainTool.Run` 对区域输入先 `count_obj`，对象数大于 1 时先 `union1` 合并再 `reduce_domain`（定义域取全部区域的并集），并释放临时合并对象；单对象（含 1 个空区域）不合并、行为与修复前逐一致；0 个对象路径不变。
+- 实测（HALCON 22.11，写入回归用例注释）：101 × 71 字节图，两个矩形 (5, 5) ~ (15, 15)（121 像素）与 (50, 80) ~ (60, 95)（176 像素）组成元组，`reduce_domain` 只用第一个、定义域面积 121；`union1` 后为 297。0 个对象时 `reduce_domain` 不报错，输出定义域为空的退化图像（`get_domain` 0 个对象、`area_center` 面积 0、`get_image_size` 返回空元组）。
+
+### 验证（2026-10-08）
+
+- 全量 `dotnet test --filter "Category!=Soak"`：**1264 通过、0 失败、0 跳过**（基线 1254 + 新增 10）；其中门禁（`Requires=HALCON`）121（基线 111），非门禁 1143（与基线持平）。
+- 构建：0 错误，唯一警告为既有的 `MatchMeasureBatch4Tests.cs(143)` xUnit2000，无新增。
+- 用例更新清单（行为变更，可审计）：
+  - 修改：`VisionFlow.Tests\ImageToolsBatch2Tests.cs` 的 `颜色方式_非三通道或非byte输入给出中文错误_空结果语义与灰度阈值相同`——由旧语义（空结果 Count=1 / Found=true / 默认不失败）改为新语义（Count=0 / Found=false / 默认失败；关闭 `FailWhenNotFound` 后通过并继续）。
+  - 新增：`VisionFlow.Tests\RegionBehaviorFixTests.cs`（10 个 `Requires=HALCON` 用例）——修复 1 的空/非空结果与未找到策略两态、`Connection` 拆分计数不变、关闭未找到后下游继续执行；修复 2 的多对象并集定义域（297）、单对象不变、空对象元组行为按实测固定、下游工具在合并定义域上的运行与直接对并集 `reduce_domain` 一致。
+  - 其余既有用例无依赖旧语义而失败者（全量通过即证）。
+
+状态：**已修复**（2026-10-08，分支 `fix/region-behavior`）。

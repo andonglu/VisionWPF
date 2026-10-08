@@ -286,23 +286,38 @@ public class ImageToolsBatch2Tests
 
         ThresholdTool none = Color(ThresholdSegmentMethod.ColorHsv);
         (none.HueMin, none.HueMax, none.SaturationMin) = (100, 110, 200);
-        // 既有语义（与灰度阈值相同）：不拆连通域时空结果仍是 1 个空区域对象（HALCON store_empty_region 默认 true），Found 为 true
+        // 空结果语义（2026-10-08 修复，原“既有边界”）：HALCON store_empty_region 默认 true，空结果是 1 个面积 0 的空区域对象。
+        // RegionOutput 修复后先去掉面积 0 的对象，全部为 0 时 Count=0、Found=false，FailWhenNotFound（默认 true）生效使节点失败。
         var emptyCtx = ContextWith(PatchImage());
-        Assert.True(none.Run(emptyCtx).IsSuccess);
-        HOperatorSet.AreaCenter(((HalconRegion)emptyCtx.GetVariable("颜色1", "Region").Value).Object, out HTuple emptyArea, out _, out _);
-        Assert.Equal((1, 0), ((int)emptyCtx.GetVariable("颜色1", "Count").Value, emptyArea.I));
+        NodeResult emptyResult = none.Run(emptyCtx);
+        Assert.False(emptyResult.IsSuccess);
+        Assert.Contains("颜色阈值 HSV结果为空", emptyResult.Message);
+        HOperatorSet.CountObj(((HalconRegion)emptyCtx.GetVariable("颜色1", "Region").Value).Object, out HTuple emptyCount);
+        Assert.Equal(0, emptyCount.I);
+        Assert.Equal(0, emptyCtx.GetVariable("颜色1", "Count").Value);
+        Assert.Equal(false, emptyCtx.GetVariable("颜色1", "Found").Value);
+
+        // 灰度方式同语义：阈值范围取不到任何像素时 Count=0、Found=false，默认失败
         var grayTool = new ThresholdTool("阈值1") { ImagePath = "图像1.Image", MinGray = 255, MaxGray = 255 };
         var grayCtx = ContextWith(ByteImage());
-        Assert.True(grayTool.Run(grayCtx).IsSuccess);
-        Assert.Equal(1, grayCtx.GetVariable("阈值1", "Count").Value);
+        Assert.False(grayTool.Run(grayCtx).IsSuccess);
+        Assert.Equal(0, grayCtx.GetVariable("阈值1", "Count").Value);
+        Assert.Equal(false, grayCtx.GetVariable("阈值1", "Found").Value);
 
-        // 拆连通域后同样是 1 个空区域（22.11 的 connection 对空区域也返回 1 个空对象）：
-        // RegionOutput 按对象数判断未找到的既有问题已另行记录（REVIEW-FIX-PROGRESS 2026-10-08 已知边界），本批不改
+        // 关闭未找到时失败：输出 Count=0、Found=false 并继续（沿用既有未找到策略）
+        none.FailWhenNotFound = false;
+        var continueCtx = ContextWith(PatchImage());
+        Assert.True(none.Run(continueCtx).IsSuccess);
+        Assert.Equal(0, continueCtx.GetVariable("颜色1", "Count").Value);
+        Assert.Equal(false, continueCtx.GetVariable("颜色1", "Found").Value);
+
+        // 拆连通域后同样是空结果（22.11 的 connection 对空区域也返回 1 个空对象），修复后同样按未找到处理
         none.Connection = true;
+        none.FailWhenNotFound = true;
         var connectedCtx = ContextWith(PatchImage());
-        Assert.True(none.Run(connectedCtx).IsSuccess);
-        Assert.Equal(1, connectedCtx.GetVariable("颜色1", "Count").Value);
-        Assert.Equal(true, connectedCtx.GetVariable("颜色1", "Found").Value);
+        Assert.False(none.Run(connectedCtx).IsSuccess);
+        Assert.Equal(0, connectedCtx.GetVariable("颜色1", "Count").Value);
+        Assert.Equal(false, connectedCtx.GetVariable("颜色1", "Found").Value);
     }
 
     [Fact]

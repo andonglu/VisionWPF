@@ -497,7 +497,23 @@ namespace VisionFlow.Tools
         {
             HObject image = Input<HalconImage>(ctx, ImagePath).Object;
             HObject region = Input<HalconRegion>(ctx, RegionPath).Object;
-            HOperatorSet.ReduceDomain(image, region, out HObject output);
+
+            // HALCON 的 reduce_domain(Image, Region) 对多个区域对象只取第一个，其余静默忽略。
+            // 多对象时先 union1 合并为一个区域，定义域取全部区域的并集；单个区域对象（含 1 个空区域）
+            // 不合并，行为与修复前逐一致。0 个对象（GenEmptyObj）沿用算子行为，见 RegionBehaviorFixTests。
+            HObject domain = region;
+            HOperatorSet.CountObj(region, out HTuple regionCount);
+            if (regionCount.I > 1)
+            {
+                HOperatorSet.Union1(region, out HObject union);
+                domain = union;
+            }
+
+            HOperatorSet.ReduceDomain(image, domain, out HObject output);
+            if (domain != region)
+            {
+                domain.Dispose();
+            }
 
             SetOutput(ctx, Variable.Object(ModuleName, "Image", new HalconImage(output), 1));
             ctx.AddLog(FlowLogLevel.Info, "[ReduceDomain] 已按 Region 限定图像域");
