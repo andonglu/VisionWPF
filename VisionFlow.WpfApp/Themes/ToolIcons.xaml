@@ -815,6 +815,26 @@
         </Canvas>
     </Viewbox>
 
+    <!-- 手工追加：极坐标展开（左侧圆环，经箭头展开为右侧矩形） -->
+    <Viewbox x:Key="ToolIcon.polar-unwrap" x:Shared="False" Width="24" Height="24" Stretch="Uniform">
+        <Canvas Width="24" Height="24">
+            <Ellipse Canvas.Left="2" Canvas.Top="6" Width="11" Height="11" Stroke="{DynamicResource TextFillColorPrimaryBrush}" StrokeThickness="1.4" Fill="{x:Null}" />
+            <Ellipse Canvas.Left="5" Canvas.Top="9" Width="5" Height="5" Stroke="{DynamicResource TextFillColorPrimaryBrush}" StrokeThickness="1.2" Fill="{x:Null}" />
+            <Path Data="M13.5,11.5 L16,11.5 M15,10.5 L16,11.5 L15,12.5" Stroke="{DynamicResource TextFillColorPrimaryBrush}" StrokeThickness="1.2" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Fill="{x:Null}" />
+            <Rectangle Canvas.Left="17" Canvas.Top="7" Width="5" Height="9" Stroke="{DynamicResource AccentFillColorDefaultBrush}" StrokeThickness="1.6" Fill="{x:Null}" />
+        </Canvas>
+    </Viewbox>
+
+    <!-- 手工追加：极坐标逆变换（左侧矩形，经箭头还原为右侧圆环） -->
+    <Viewbox x:Key="ToolIcon.polar-inverse" x:Shared="False" Width="24" Height="24" Stretch="Uniform">
+        <Canvas Width="24" Height="24">
+            <Rectangle Canvas.Left="2" Canvas.Top="7" Width="5" Height="9" Stroke="{DynamicResource TextFillColorPrimaryBrush}" StrokeThickness="1.4" Fill="{x:Null}" />
+            <Path Data="M8,11.5 L10.5,11.5 M9.5,10.5 L10.5,11.5 L9.5,12.5" Stroke="{DynamicResource TextFillColorPrimaryBrush}" StrokeThickness="1.2" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Fill="{x:Null}" />
+            <Ellipse Canvas.Left="11" Canvas.Top="6" Width="11" Height="11" Stroke="{DynamicResource AccentFillColorDefaultBrush}" StrokeThickness="1.6" Fill="{x:Null}" />
+            <Ellipse Canvas.Left="14" Canvas.Top="9" Width="5" Height="5" Stroke="{DynamicResource AccentFillColorDefaultBrush}" StrokeThickness="1.2" Fill="{x:Null}" />
+        </Canvas>
+    </Viewbox>
+
     <Viewbox x:Key="ToolIcon._default" x:Shared="False" Width="24" Height="24" Stretch="Uniform">
         <Canvas Width="24" Height="24">
             <Rectangle Canvas.Left="4" Canvas.Top="4" Width="16" Height="16" RadiusX="2" RadiusY="2" Stroke="{DynamicResource TextFillColorPrimaryBrush}" StrokeThickness="1.8" Fill="{x:Null}" />

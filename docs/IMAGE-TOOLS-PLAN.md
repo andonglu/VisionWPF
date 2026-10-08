@@ -1,7 +1,7 @@
 # 图像处理补充开发计划
 
 编写日期：2026-10-06
-状态：第一批 IP-01（图像滤波）/ IP-03（灰度增强）已实现（分支 `feature/image-tools-batch1`，算子探测见第 10 节，验收见第 11 节）；第二批 IP-08（阈值分割颜色方式）/ IP-02（图像运算）已实现（分支 `feature/image-tools-batch2`，算子探测见第 12 节，验收见第 13 节）；第三批 IP-04（图像几何变换）已实现（分支 `feature/image-tools-batch3`，算子探测见第 14 节，验收见第 15 节）；其余各项按评审建议分批（IP-05 + IP-06、IP-07），动工前各做一次小评审。
+状态：第一批 IP-01（图像滤波）/ IP-03（灰度增强）已实现（分支 `feature/image-tools-batch1`，算子探测见第 10 节，验收见第 11 节）；第二批 IP-08（阈值分割颜色方式）/ IP-02（图像运算）已实现（分支 `feature/image-tools-batch2`，算子探测见第 12 节，验收见第 13 节）；第三批 IP-04（图像几何变换）已实现（分支 `feature/image-tools-batch3`，算子探测见第 14 节，验收见第 15 节）；第四批 IP-05（极坐标展开）/ IP-06（极坐标逆变换）已实现（分支 `feature/image-tools-batch4`，算子探测见第 16 节，验收见第 17 节）；剩余 IP-07 按评审建议单独一批，动工前做一次小评审。
 范围：工具箱“02 图像处理”（`VisionFlow.Tools\Tools\ImageTools.cs`），以及与图像相关的“阈值分割”颜色方式。
 HALCON 版本基线：22.11 及以上（与仓库现行基线一致；原文写 20.11）。
 关联文档：[Region 相关算子补充开发计划](REGION-TOOLS-PLAN.md)（原暂缓项 `region_to_bin` / `paint_region` 在本文 IP-07 实现）、[数据处理、判定与逻辑补充开发计划](LOGIC-DATA-TOOLS-PLAN.md)。
@@ -183,6 +183,17 @@ HALCON 版本基线：22.11 及以上（与仓库现行基线一致；原文写 
 - 输出：`Image`（展开图）；`PolarParams`（对象，记录实际使用的圆心、起止角、起止半径、展开图尺寸、原图尺寸），供 IP-06 映射回原图。
 - 编辑窗口：在原图上拖动圆心和内外半径，旁边实时显示展开图。
 
+**实现说明（第四批已完成）**
+
+- 类型：`PolarUnwrapTool : ToolBase, IToolConfigurationCheck, IToolParameterVisibility`（`VisionFlow.Tools\Tools\PolarTools.cs`），`BuiltinToolIdentities` 登记 `polar-unwrap`，工具箱 `02 图像处理 / 极坐标展开`（默认模块名“极坐标展开N”），图标 `ToolIcon.polar-unwrap`。
+- 输入：图像 `ImagePath`（必填，默认 `Input.Image`）；圆心行 `CenterRowPath` / 圆心列 `CenterColumnPath`（`double`，可选，须同时配置）；定位矩阵 `MatrixPath`（`HomMat2D`，可选）。
+- 参数：`CenterRow` / `CenterColumn`（默认 256，两个圆心引用都配置时隐藏）、`AngleStartDeg` / `AngleEndDeg`（度，默认 0 ~ 360）、`RadiusStart` / `RadiusEnd`（默认 0 ~ 100）、`OutputWidth` / `OutputHeight`（默认 0 = 自动）、`Interpolation`（新枚举 `PolarInterpolation`，成员名即 HALCON 取值，默认 `nearest_neighbor`，按数字保存）。
+- 圆心来源与“跟随”（第 16.2 节）：圆心引用优先；未配置引用时用固定圆心，配置定位矩阵时经 `FollowMatrixResolver.TryResolve` 取矩阵（多个矩阵沿用 XLD 处理的单矩阵报错措辞），圆心经矩阵变换、起止角加矩阵旋转量、半径乘等比缩放系数；镜像或退化矩阵（行列式 ≤ 0）运行时报错；圆心引用与定位矩阵同时配置时流程校验报错。
+- 自动尺寸：宽 = round(|角度跨度（弧度）| × 外半径)、高 = round(|半径差|)，结果超过 32768 时运行报错并提示填写对应参数。
+- 输出：`Image`（展开图，新图像）；`PolarParams`（`PolarParams` 对象，沿用 `HomMat2D` 的 CLR 对象变量机制，记录实际使用的圆心、弧度起止角（另给度）、半径、展开图尺寸、原图尺寸与插值，不是配置值）。
+- 校验：流程校验与运行共用同一组与图像无关的检查（圆心引用须成对、引用与矩阵互斥、数值为有限数、起止角不同、半径 ≥ 0 且不同、展开尺寸 0 或 1 ~ 32768、枚举为定义值），信息含参数名与当前值；算子报错转成“极坐标展开失败（实际参数，插值）：原因”。
+- 编辑窗口：新建专用窗口 `WpfPolarUnwrapToolEditWindow`（沿用阈值分割窗口的模式：预览与执行测试都走 `ToolTestRun` 的一次性副本，只有“确定”写回节点）。左上为原图，叠加内（黄）、外（绿）两个 `CircleRoi`，可用鼠标拖动圆心与内外半径（两圆圆心同步，内半径 ≤ 1 视为 0），并标出上次运行的实际圆心；左下实时显示展开图与实际参数摘要；右侧为引用与数值参数。拖动或修改字段后 300 毫秒自动预览。
+
 ### IP-06 极坐标逆变换
 
 - 工具箱：`02 图像处理 / 极坐标逆变换`，ID `polar-inverse`，类 `PolarInverseTool`。
@@ -191,6 +202,13 @@ HALCON 版本基线：22.11 及以上（与仓库现行基线一致；原文写 
 - 算子：`polar_trans_region_inv`、`polar_trans_contour_xld_inv`。
 - 输出：`Region`、`Xld`、`Count`、`Found`。
 - 与 IP-05 拆成两个工具的原因：逆变换必须在展开图上的检测完成之后才能运行，不能放在同一个节点里。
+
+**实现说明（第四批已完成）**
+
+- 类型：`PolarInverseTool : ToolBase, INotFoundPolicy, IToolConfigurationCheck`（同文件），`BuiltinToolIdentities` 登记 `polar-inverse`，工具箱 `02 图像处理 / 极坐标逆变换`（默认模块名“极坐标逆变换N”），图标 `ToolIcon.polar-inverse`，加入 `WpfToolEditorRouter.IsVisualPreviewTool()`（通用视觉预览窗口）。
+- 输入：极坐标参数 `PolarParamsPath`（`PolarParams`，必填）；区域 `RegionPath`、XLD `XldPath`（可选，至少配置一个，流程校验与运行措辞一致）。
+- 算子：`polar_trans_region_inv`（插值固定 `nearest_neighbor`）、`polar_trans_contour_xld_inv`，展开参数、展开图尺寸、原图尺寸全部取自 `PolarParams`。
+- 输出：`Region`、`Xld`、`Count`、`Found`。配置了区域时经 `RegionOutput.Set` 输出（`Count` / `Found` / 未找到策略沿用既有语义，含已知的空区域 `Found = true` 边界）；只配置 XLD 时 `Count` / `Found` 取轮廓数并按未找到策略处理；未配置的一侧输出空对象。
 
 ### IP-07 区域转图像
 
@@ -223,7 +241,7 @@ HALCON 版本基线：22.11 及以上（与仓库现行基线一致；原文写 
 - IP-02：新增运算与直接调用 HALCON 一致；尺寸不一致时明确失败（第二批已完成，见第 13 节）。
 - IP-03：`PercentStretch` 对已知直方图的合成图像结果正确；`ConvertType` 输出类型正确（第一批已完成，另有各方式与 HALCON 逐像素一致，见第 11 节）。
 - IP-04：在新图上取一点，用 `InverseHomMat` 映射回原图，与原图对应点误差小于 0.5 像素（缩放、旋转、镜像、裁剪各一例）（第三批已完成，见第 15 节）。
-- IP-05 / IP-06：在合成圆环上画一个缺陷，展开后检测到的区域经逆变换后与原缺陷重合（面积误差小于 5%）。
+- IP-05 / IP-06：在合成圆环上画一个缺陷，展开后检测到的区域经逆变换后与原缺陷重合（面积误差小于 5%）（第四批已完成，见第 17 节）。
 - IP-07：二值图前景、背景灰度正确；绘制方式只改变区域内（或边缘）像素。
 - IP-08：合成色块图中，指定颜色范围只提取对应色块；色相跨 0 的红色能正确提取（第二批已完成，见第 13 节）。
 - 全部回归测试和 `examples\*.vflow.json` 通过。
@@ -432,3 +450,62 @@ HALCON 版本基线：22.11 及以上（与仓库现行基线一致；原文写 
 - 全量 `dotnet test`（`Category!=Soak`）1190 个通过（基线 1146 + 新增 44，含 `examples\*.vflow.json` 加载用例）；排除带 `Requires=HALCON` 标注的用例后 1101 个通过（基线 1076 + 新增非门禁 25）。按第二批评审的本机口径（无 HALCON 原生库），预计为 823 通过 / 367 门禁失败（798 + 25 / 348 + 19）。构建 0 错误，唯一警告为既有的 `MatchMeasureBatch4Tests.cs(143)` xUnit2000。
 - 界面验收：脚本经 Windows UI Automation 驱动真实的 `VisionFlow.WpfApp.exe`，43 项检查全部通过（连续两次）。流程为图像加载（两个圆斑 + 灰条）→ 区域源（阈值）→ 图像几何变换 → 亮斑（阈值，拆连通域）→ 区域排序 → 图像坐标转世界坐标（变换矩阵引用 `几何变换1.InverseHomMat`），即“在新图上检测、映射回原图”的典型用法。工具箱 `02 图像处理` 新建“几何变换1”，侧栏按方式显隐；编辑窗口方式下拉 6 项、插值下拉 5 项、镜像下拉 3 项，ZoomFactor（2 × 1.5、bilinear）/ ZoomSize（180 × 200）/ Rotate（30°）/ Mirror（diagonal）/ CropRectangle（(20, 30) ~ (150, 220)）/ CropRegion（区域源）逐一切换，显隐正确、预览为本工具输出且随方式变化；每种方式运行后亮斑数量、排序坐标、`HomMat` / `InverseHomMat` 与映射回原图的坐标都与无界面运行逐字一致，两个圆斑映射回原图与圆心相差 0.000 ~ 0.195 像素（阈值区域中心）；保存后 `Method` 5，重新加载再运行一致，侧栏回显。
 - 脚本问题：无（初始流程有意引用待新建节点，打开时的校验提示框由脚本关闭并核对内容，沿用前两批做法）。
+
+## 16. 第四批算子探测结论（IP-05 / IP-06）
+
+**探测环境**：HALCON 22.11 Steady（同第 10 节）。探测在写 IP-05 / IP-06 代码之前完成。坐标对应用“亮点法”实测：200 × 160 字节图上以 (80, 100) 为圆心、按 HALCON 角度约定（行 = 圆心行 − r·sin θ、列 = 圆心列 + r·cos θ）在 (r, θ) = (30, 0.3)、(50, 1.4)、(40, 2.6)、(60, 4.0) 画四个小圆点，展开后测量亮点位置并与候选公式比较；XLD 正、逆变换给出精确坐标作核对。另用第 10 节的各类型图像核对类型与定义域行为。参数取值集合来自 `get_param_info`，参数顺序来自 `get_param_names`。
+
+### 16.1 逐项结论
+
+| 算子 / 机制 | 结论 |
+|---|---|
+| `polar_trans_image_ext` 参数与单位 | 参数 `(Image, Row, Column, AngleStart, AngleEnd, RadiusStart, RadiusEnd, Width, Height, Interpolation)`，默认 0 / 6.2831853 / 0 / 100 / 512 / 512 / `nearest_neighbor`。**角度单位为弧度**（把 0 ~ 360 当作角度传入时按弧度处理，展开 57 圈，亮点重复出现），工具参数以度填写、调用时换算 |
+| 展开图的行列 | **列对应角度、行对应半径**：列 = (θ − AngleStart) / (AngleEnd − AngleStart) × (Width − 1)，行 = (r − RadiusStart) / (RadiusEnd − RadiusStart) × (Height − 1)（`polar_trans_contour_xld` 正变换与此公式逐位一致，例：(30, 0.3) → (59.571, 17.141)）。角度增大对应列增大，半径增大对应行增大；角度方向与 HALCON 一致（逆时针为正） |
+| 起止角 | 任意实数：`AngleStart > AngleEnd` 可用（按顺时针展开，列序反向）、可为负、跨度可超过 2π（0 ~ 4π 时每个亮点出现两次）；**起止角相同报 #1304** |
+| 起止半径 | `RadiusStart` 可为 0；**负值报 #1305**；`RadiusEnd` 为负或与 `RadiusStart` 相同报 **#1306**；`RadiusStart > RadiusEnd` 可用（行序反向）；半径超出图像不报错（超出部分为 0） |
+| Width / Height | **不能为 0**：0、负数报 #1307 / #1308，因此“0 = 自动”须由工具计算；上限 32768（32769 报错）。自动尺寸取宽 = round(\|AngleEnd − AngleStart\| × 外半径)、高 = round(\|RadiusEnd − RadiusStart\|)（外半径 = 两个半径中较大者），使外圈与径向采样间距约 1 像素：0 ~ 2π、半径 20 ~ 70 时为 440 × 50，外圈相邻列间距 1.0019 像素、径向 1.0204 像素，内圈 0.2862 像素（内圈过采样，不丢信息） |
+| 插值 | `value_list` **只有 `nearest_neighbor`、`bilinear`**（默认 `nearest_neighbor`）；`bicubic` / `constant` / `weighted` 报 #1309。与第 14 节三个算子的插值集合不同，另建枚举 |
+| 类型与定义域 | byte / uint2 / int2 / real 与三通道都可处理，类型不变；**输出定义域为整幅展开图，不使用输入定义域**（空定义域、缩小定义域的输入都得到整幅定义域）；圆心在图像外不报错 |
+| `polar_trans_region_inv` | 参数 `(PolarRegion, Row, Column, AngleStart, AngleEnd, RadiusStart, RadiusEnd, WidthIn, HeightIn, Width, Height, Interpolation)`：前六个与展开时相同，**`WidthIn` / `HeightIn` 为展开图尺寸，`Width` / `Height` 为原图尺寸**（输出区域裁到原图范围内：传 50 × 40 时只剩 31 像素）；插值同为 `nearest_neighbor` / `bilinear`。多个区域对象逐个变换（2 进 2 出）；空区域输出 1 个面积 0 的区域（与第 13 节记录的 `store_empty_region` 行为一致）。**输出就在原图坐标系**：展开图上阈值得到的四个亮点逆变换后，与原图亮点直接求交，交集 84 = 4 × 21 像素（原图亮点全部覆盖），中心相差 ≤ 0.2 像素；整幅展开图（半径 20 ~ 70）逆变换为圆环，面积 14248 / 14420（自动尺寸）对理论 14137 |
+| `polar_trans_contour_xld_inv` | 参数 `(PolarContour, Row, Column, AngleStart, AngleEnd, RadiusStart, RadiusEnd, WidthIn, HeightIn, Width, Height)`（无插值），含义同上；展开图上 (59.57, 17.14) 逆变换为 (71.134, 128.660)，与原亮点圆心逐位一致；展开图上一条水平线逆变换为半径 50 的圆（最大偏差 0.000） |
+| 往返验证（第 8 节验收的可行性） | 原图上画一块扇环缺陷（半径 35 ~ 50、角度 0.8 ~ 1.3 弧度，面积 361 像素），按自动尺寸展开、阈值检测、`polar_trans_region_inv` 逆变换后面积 362（+0.28%），与原缺陷重叠 357 像素 |
+| 交互（编辑窗口拖动） | `HalconImageView` 已有 ROI 拖动机制：`HMouseDown` / `HMouseMove` / `HMouseUp` 驱动 `RoiCollection` 命中测试，`CircleRoi` 有圆心与半径两个手柄（`MoveByHandle`），拖动过程中每次移动都触发 `RoiChanged`。因此用两个 `CircleRoi`（内、外半径）即可拖动圆心与内外半径，不需要新控件；两个圆的圆心由窗口同步。限制：`CircleRoi` 半径最小为 1（内半径 0 用“半径 ≤ 1 视为 0”处理），起止角没有拖动手柄（数值输入）；`BeginPickPoint` 只是单点拾取，不用于拖动 |
+| `PolarParams` 变量传递 | 普通 CLR 对象作变量输出已有先例：`HomMat2D`（`[ToolOutput(..., ElementClrType = typeof(HomMat2D))]` + `Variable.Object(…, 对象, 1)`），引用候选与流程校验按 `ElementClrType` 的类型兼容（`IsAssignableFrom`）匹配。`PolarParams` 沿用同法 |
+| 定位矩阵“跟随” | 先例：`FollowMatrixResolver.TryResolve`（未配置返回 [null]、配置但解析失败报错），单矩阵工具在多矩阵时报“只支持单个矩阵…放在 For 循环中引用 Loop.Current.HomMat”（XLD 处理的仿射跟随）。IP-05 沿用同一机制与措辞 |
+
+### 16.2 由探测确定的实现约定
+
+- **角度**：参数 `AngleStartDeg` / `AngleEndDeg` 以度填写，调用时换算为弧度；`PolarParams` 记录实际使用的弧度值（同时给出度）。起止角不能相同，其余任意。
+- **半径**：`RadiusStart ≥ 0`、`RadiusEnd ≥ 0`、两者不能相同（允许起点大于终点）。
+- **展开尺寸**：`OutputWidth` / `OutputHeight` 为 0 时按上表公式自动计算，否则须在 1 ~ 32768；自动结果同样须在范围内，运行时检查。
+- **插值**：新枚举 `PolarInterpolation`（`nearest_neighbor`、`bilinear`，顺序同 `value_list`），默认 `nearest_neighbor`（HALCON 默认），按数字保存。IP-06 的区域逆变换固定用 `nearest_neighbor`（HALCON 默认，区域变换不需要插值平滑）。
+- **圆心来源**：配置圆心行、列引用（须同时配置）时用引用值；否则用固定 `CenterRow` / `CenterColumn`，配置定位矩阵时按矩阵跟随——圆心经矩阵变换、起止角加上矩阵的旋转量、半径乘矩阵的等比缩放系数；含镜像（行列式为负）的矩阵无法保持角度方向，运行时报错。圆心引用与定位矩阵互斥（引用已给出当前位置，同时配置时流程校验报错，同区域初始化测量“不能同时配置变换矩阵”的先例）。
+- **PolarParams**：记录实际值（引用 / 跟随后的圆心、换算并跟随后的弧度起止角、跟随后的半径、自动计算后的展开尺寸、原图尺寸、插值），IP-06 直接用它调用逆变换。
+- **IP-06 输出**：配置了区域时按 `RegionOutput` 的既有机制输出 `Region` / `Count` / `Found`（含已知的空区域 `Found = true` 边界，不改语义）；配置了 XLD 时输出 `Xld`；只配置 XLD 时 `Count` / `Found` 取轮廓数；未配置的一侧输出空对象，避免下游读到上一轮的值。
+
+## 17. 第四批（IP-05 + IP-06）实现与验收记录
+
+**开工依据**：基线 `origin/main`（`39f8da0`，含第三批与其评审记录）；先探测后实现，第 16 节（算子、交互与变量传递）在写代码前完成。`PolarParams` 沿用 `HomMat2D` 的 CLR 对象变量机制，定位矩阵跟随沿用 `FollowMatrixResolver` 与 XLD 处理的单矩阵措辞，拖动交互沿用 `HalconImageView` 现有的 `CircleRoi`，没有新造控件或变量机制。
+
+**与任务说明或计划不一致处（如实记录）**
+
+| 项 | 处理 |
+|---|---|
+| 定位矩阵跟随的范围 | 计划只写“跟随”。按矩阵定义补齐：圆心经矩阵变换、起止角加旋转量、半径乘等比缩放系数；镜像 / 退化矩阵（行列式 ≤ 0）使角度方向反向，运行时报错而不是静默展开反向图；圆心引用与定位矩阵同时配置时流程校验报错（同区域初始化测量的互斥先例） |
+| 圆心引用 | 行、列引用须同时配置（只配一个时流程校验报错）；两个都配置时侧栏隐藏固定圆心 |
+| IP-06 区域逆变换插值 | 计划未列插值参数，固定用 `nearest_neighbor`（HALCON 默认），不新增参数 |
+| IP-06 只配置 XLD 时 | `Count` / `Found` 取轮廓数并按未找到策略处理；未配置的一侧输出空对象，避免下游读到上一轮的值 |
+| XLD 验收口径 | 展开图边界轮廓逆变换后按轮廓围成面积比较偏大约 18%（XLD 取在边界像素的外沿），XLD 用例改为比较重心（< 1 像素），面积 < 5% 的验收以区域逆变换为准 |
+| 编辑窗口初始化缺陷（开发中已修） | 界面验收首轮发现：窗口构造时设置插值下拉触发预览，预览计时器尚未创建导致空引用崩溃；改为先建计时器、窗口加载前不安排预览，修复后两轮界面验收全部通过 |
+| 图标 | 任务未提，按惯例补 `ToolIcon.polar-unwrap`、`ToolIcon.polar-inverse` |
+| 基线拉取 | 首次 `git fetch` 因 TLS 握手失败，重试成功，`ls-remote` 核对 `origin/main` = `39f8da0` |
+
+**验收结果**
+
+- 单元/集成测试：新增 `ImageToolsBatch4Tests` 31 个用例（含 Theory 数据行），其中 8 个为 HALCON 门禁（`Requires=HALCON`）：
+  - 展开结果与直接调用 `polar_trans_image_ext` 逐像素一致（两种插值、自动尺寸与指定尺寸），`PolarParams` 为实际值（3 个）。
+  - 第 8 节验收：合成圆环（圆心 (160, 200)，半径 30 ~ 110）上画扇环缺陷，展开后阈值检测，经 `PolarInverseTool` 逆变换后与原缺陷面积误差 < 5% 并与原缺陷重叠；XLD 逆变换重心与原缺陷相差 < 1 像素、只配置 XLD 时 `Count` / `Found` 取轮廓数且区域输出为空对象；圆心引用接圆形测量的 `Row` / `Column` 时 `PolarParams` 圆心跟随实测圆心（< 1 像素）；定位矩阵跟随（圆心、起止角、半径）与镜像 / 多矩阵报错；自动尺寸超上限的中文错误（5 个）。
+  - 非门禁 23 个：展开参数越界的流程校验与运行措辞一致（含参数名与当前值）；IP-06 极坐标参数必填与“区域与 XLD 至少配置一个”校验与运行措辞一致；默认参数校验通过；固定圆心按圆心引用显隐；`PolarParams` 记录实际值、度与弧度换算、文本摘要；枚举成员顺序、按数字保存与缺省值；输出名与类型、不与参数同名、输入元数据；工具箱登记、图标键、编辑器路由。
+- 全量 `dotnet test`（`Category!=Soak`）1221 个通过（基线 1190 + 新增 31，含 `examples\*.vflow.json` 加载用例）；排除带 `Requires=HALCON` 标注的用例后 1124 个通过（基线 1101 + 新增非门禁 23）。按第二批评审的本机口径（无 HALCON 原生库），预计为 846 通过 / 375 门禁失败（823 + 23 / 367 + 8）。构建 0 错误，唯一警告为既有的 `MatchMeasureBatch4Tests.cs(143)` xUnit2000。
+- 界面验收：脚本经 Windows UI Automation 驱动真实的 `VisionFlow.WpfApp.exe`，20 项检查全部通过（连续两次）。流程为图像加载（圆环 + 扇环缺陷，缺陷面积 914）→ 极坐标展开 → 缺陷（阈值）→ 极坐标逆变换 → 面积（区域特征）。工具箱 `02 图像处理` 新建“极坐标展开1”“极坐标逆变换1”；侧栏显隐正确，“极坐标参数”候选按类型列出 `极坐标展开1.PolarParams`；默认参数（缺陷不在展开范围内）可运行。专用窗口：粗调字段后执行测试摘要“展开图 628×60；实际圆心 (150, 190)，角度 0° ~ 360°，半径 40 ~ 100”；**真实鼠标拖动**圆心手柄后圆心字段变为 (159.84, 200) 且半径不变，拖动外、内半径手柄后 `RadiusEnd` 110.44、`RadiusStart` 30.68 且圆心不变，拖动后自动预览摘要随之更新；填入精确值执行测试为“展开图 691×80；实际圆心 (160, 200)，角度 0° ~ 360°，半径 30 ~ 110”（自动尺寸），展开图区域显示展开结果。确定后运行流程，逆变换回原图的缺陷面积 911 对原缺陷 914（−0.33%），界面运行与无界面运行的单值、数组长度逐字一致；逆变换通用预览窗口显示本工具 `Region`；保存后文件含两个 `ToolId`、圆心与半径为确定时的值、展开尺寸 0（自动），重新加载再运行与无界面一致，重新打开窗口字段回显并自动预览。
+- 脚本问题：第二轮首次启动因输出目录未建失败（脚本问题），建目录后通过。初始流程有意引用待新建节点，打开时的校验提示框由脚本关闭并核对内容，沿用前几批做法。

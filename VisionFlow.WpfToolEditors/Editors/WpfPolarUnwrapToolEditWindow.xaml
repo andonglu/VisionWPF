@@ -1,0 +1,140 @@
+<Window x:Class="VisionFlow.WpfToolEditors.Editors.WpfPolarUnwrapToolEditWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:wfi="clr-namespace:System.Windows.Forms.Integration;assembly=WindowsFormsIntegration"
+        xmlns:vfc="clr-namespace:VisionFlow.Controls;assembly=VisionFlow.Controls"
+        Title="极坐标展开"
+        Width="1280"
+        Height="900"
+        MinWidth="1080"
+        MinHeight="760"
+        WindowStartupLocation="CenterOwner">
+    <Grid Margin="24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="420" />
+        </Grid.ColumnDefinitions>
+
+        <Grid Grid.Row="0" Grid.Column="0" Margin="0,0,24,0">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="3*" />
+                <RowDefinition Height="2*" />
+            </Grid.RowDefinitions>
+            <Border Grid.Row="0" Style="{StaticResource PanelBorderStyle}" Margin="0,0,0,16">
+                <DockPanel>
+                    <Grid DockPanel.Dock="Top" Margin="0,0,0,8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="原图（拖动圆心与内外半径）" Style="{StaticResource EditorSectionTitleStyle}" />
+                        <Button Grid.Column="1" Content="执行测试" Click="TestRun_Click" />
+                    </Grid>
+                    <TextBlock DockPanel.Dock="Bottom" Margin="0,8,0,0" TextWrapping="Wrap" Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                               Text="绿色为外半径、黄色为内半径：拖动圆心手柄移动圆心（两圆同步），拖动圆周右侧的手柄调整半径（内半径 ≤ 1 视为 0）。十字为实际使用的圆心（配置圆心引用或定位矩阵时与固定圆心不同）。起止角在右侧以度填写，逆时针为正。" />
+                    <wfi:WindowsFormsHost>
+                        <vfc:HalconImageView x:Name="SourceImageView" />
+                    </wfi:WindowsFormsHost>
+                </DockPanel>
+            </Border>
+            <Border Grid.Row="1" Style="{StaticResource PanelBorderStyle}">
+                <DockPanel>
+                    <TextBlock DockPanel.Dock="Top" Text="展开图" Style="{StaticResource EditorSectionTitleStyle}" Margin="0,0,0,8" />
+                    <TextBlock x:Name="SummaryText" DockPanel.Dock="Bottom" Margin="0,8,0,0" TextWrapping="Wrap" FontWeight="SemiBold" />
+                    <wfi:WindowsFormsHost>
+                        <vfc:HalconImageView x:Name="PolarImageView" />
+                    </wfi:WindowsFormsHost>
+                </DockPanel>
+            </Border>
+        </Grid>
+
+        <ScrollViewer Grid.Row="0" Grid.Column="1" VerticalScrollBarVisibility="Auto">
+            <StackPanel>
+                <Border Style="{StaticResource EditorCardStyle}">
+                    <StackPanel>
+                        <TextBlock Text="输入" Style="{StaticResource EditorSectionTitleStyle}" />
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="130" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="模块名" Style="{StaticResource EditorFieldLabelStyle}" />
+                            <TextBox x:Name="ModuleNameText" Grid.Row="0" Grid.Column="1" Margin="0,0,0,8" />
+                            <TextBlock Grid.Row="1" Grid.Column="0" Text="图像" Style="{StaticResource EditorFieldLabelStyle}" />
+                            <ComboBox x:Name="ImagePathCombo" Grid.Row="1" Grid.Column="1" IsEditable="True" Margin="0,0,0,8" SelectionChanged="ImagePathCombo_SelectionChanged" />
+                            <TextBlock Grid.Row="2" Grid.Column="0" Text="圆心行" Style="{StaticResource EditorFieldLabelStyle}" />
+                            <ComboBox x:Name="CenterRowPathCombo" Grid.Row="2" Grid.Column="1" IsEditable="True" Margin="0,0,0,8" />
+                            <TextBlock Grid.Row="3" Grid.Column="0" Text="圆心列" Style="{StaticResource EditorFieldLabelStyle}" />
+                            <ComboBox x:Name="CenterColumnPathCombo" Grid.Row="3" Grid.Column="1" IsEditable="True" Margin="0,0,0,8" />
+                            <TextBlock Grid.Row="4" Grid.Column="0" Text="定位矩阵" Style="{StaticResource EditorFieldLabelStyle}" />
+                            <ComboBox x:Name="MatrixPathCombo" Grid.Row="4" Grid.Column="1" IsEditable="True" Margin="0,0,0,8" />
+                        </Grid>
+                        <TextBlock Margin="0,4,0,0" TextWrapping="Wrap" Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                   Text="圆心行、列引用（如圆形测量的 Row / Column）须同时配置，配置后不用固定圆心；定位矩阵按跟随处理（固定圆心经矩阵变换、起止角加旋转量、半径乘缩放），与圆心引用互斥。" />
+                    </StackPanel>
+                </Border>
+
+                <Border Style="{StaticResource EditorCardStyle}">
+                    <StackPanel>
+                        <TextBlock Text="展开参数" Style="{StaticResource EditorSectionTitleStyle}" />
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="130" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+                            <TextBlock x:Name="CenterRowLabel" Grid.Row="0" Grid.Column="0" Text="CenterRow" Style="{StaticResource EditorFieldLabelStyle}" />
+                            <TextBox x:Name="CenterRowText" Grid.Row="0" Grid.Column="1" Margin="0,0,0,8" LostFocus="Field_LostFocus" />
+                            <TextBlock x:Name="CenterColumnLabel" Grid.Row="1" Grid.Column="0" Text="CenterColumn" Style="{StaticResource EditorFieldLabelStyle}" />
+                            <TextBox x:Name="CenterColumnText" Grid.Row="1" Grid.Column="1" Margin="0,0,0,8" LostFocus="Field_LostFocus" />
+                            <TextBlock Grid.Row="2" Grid.Column="0" Text="AngleStartDeg" Style="{StaticResource EditorFieldLabelStyle}" />
+                            <TextBox x:Name="AngleStartDegText" Grid.Row="2" Grid.Column="1" Margin="0,0,0,8" LostFocus="Field_LostFocus" />
+                            <TextBlock Grid.Row="3" Grid.Column="0" Text="AngleEndDeg" Style="{StaticResource EditorFieldLabelStyle}" />
+                            <TextBox x:Name="AngleEndDegText" Grid.Row="3" Grid.Column="1" Margin="0,0,0,8" LostFocus="Field_LostFocus" />
+                            <TextBlock Grid.Row="4" Grid.Column="0" Text="RadiusStart" Style="{StaticResource EditorFieldLabelStyle}" />
+                            <TextBox x:Name="RadiusStartText" Grid.Row="4" Grid.Column="1" Margin="0,0,0,8" LostFocus="Field_LostFocus" />
+                            <TextBlock Grid.Row="5" Grid.Column="0" Text="RadiusEnd" Style="{StaticResource EditorFieldLabelStyle}" />
+                            <TextBox x:Name="RadiusEndText" Grid.Row="5" Grid.Column="1" Margin="0,0,0,8" LostFocus="Field_LostFocus" />
+                            <TextBlock Grid.Row="6" Grid.Column="0" Text="OutputWidth" Style="{StaticResource EditorFieldLabelStyle}" />
+                            <TextBox x:Name="OutputWidthText" Grid.Row="6" Grid.Column="1" Margin="0,0,0,8" LostFocus="Field_LostFocus" />
+                            <TextBlock Grid.Row="7" Grid.Column="0" Text="OutputHeight" Style="{StaticResource EditorFieldLabelStyle}" />
+                            <TextBox x:Name="OutputHeightText" Grid.Row="7" Grid.Column="1" Margin="0,0,0,8" LostFocus="Field_LostFocus" />
+                            <TextBlock Grid.Row="8" Grid.Column="0" Text="Interpolation" Style="{StaticResource EditorFieldLabelStyle}" />
+                            <ComboBox x:Name="InterpolationCombo" Grid.Row="8" Grid.Column="1" Margin="0,0,0,8" SelectionChanged="InterpolationCombo_SelectionChanged" />
+                        </Grid>
+                        <TextBlock Margin="0,4,0,0" TextWrapping="Wrap" Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                   Text="展开图的列对应角度（起始角在第 0 列）、行对应半径（起始半径在第 0 行）。OutputWidth / OutputHeight 为 0 时按外圈周长与半径差自动计算（外圈约 1 像素一列）。" />
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+        </ScrollViewer>
+
+        <DockPanel Grid.Row="1" Grid.ColumnSpan="2" LastChildFill="False" Margin="0,24,0,0">
+            <TextBlock x:Name="StatusText" VerticalAlignment="Center" TextWrapping="Wrap" MaxWidth="900"
+                       Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+            <Button DockPanel.Dock="Right" Content="取消" MinWidth="96" Margin="8,0,0,0" Click="Cancel_Click" />
+            <Button DockPanel.Dock="Right" Content="确定" MinWidth="96" Style="{StaticResource AccentButtonStyle}" Click="Ok_Click" />
+        </DockPanel>
+    </Grid>
+</Window>

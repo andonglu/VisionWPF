@@ -29,6 +29,8 @@ namespace VisionFlow.Tools
             FlowSerializer.RegisterToolType(typeof(MeanImageTool), "mean-image");
             FlowSerializer.RegisterToolType(typeof(GrayEnhanceTool), "gray-enhance");
             FlowSerializer.RegisterToolType(typeof(ImageGeometryTool), "image-geometry");
+            FlowSerializer.RegisterToolType(typeof(PolarUnwrapTool), "polar-unwrap");
+            FlowSerializer.RegisterToolType(typeof(PolarInverseTool), "polar-inverse");
             FlowSerializer.RegisterToolType(typeof(AffineTransformImageTool), "affine-trans-image");
             FlowSerializer.RegisterToolType(typeof(ReduceDomainTool), "reduce-domain");
             FlowSerializer.RegisterToolType(typeof(AddSubImageTool), "add-sub-image");

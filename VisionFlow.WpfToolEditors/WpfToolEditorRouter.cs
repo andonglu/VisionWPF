@@ -83,6 +83,11 @@ namespace VisionFlow.WpfToolEditors
             {
                 return new WpfThresholdToolEditWindow(thresholdTool, context);
             }
+            // 极坐标展开走专用窗口：在原图上拖动圆心与内外半径，旁边显示展开图
+            if (tool is PolarUnwrapTool polarUnwrapTool)
+            {
+                return new WpfPolarUnwrapToolEditWindow(polarUnwrapTool, context);
+            }
             return IsVisualPreviewTool(tool)
                 ? (Window)new WpfVisualToolEditWindow(tool, context)
                 : new WpfGenericToolEditWindow(tool, context);
@@ -93,6 +98,7 @@ namespace VisionFlow.WpfToolEditors
             return tool is MeanImageTool
                 || tool is GrayEnhanceTool
                 || tool is ImageGeometryTool
+                || tool is PolarInverseTool
                 || tool is AffineTransformImageTool
                 || tool is ReduceDomainTool
                 || tool is AddSubImageTool
