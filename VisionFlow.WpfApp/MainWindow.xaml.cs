@@ -1093,7 +1093,7 @@ namespace VisionFlow.WpfApp
             HObject overlay = null;
             try
             {
-                HObject imageToShow = DisplayOverlayBuilder.ResolveDisplayBaseImage(lastRunContext, row.Variable);
+                HObject imageToShow = DisplayOverlayBuilder.ResolveDisplayBaseImage(lastRunContext, row.Variable, _model.Root);
                 if (imageToShow != null && imageToShow.IsInitialized())
                 {
                     ImageView.ShowImage(imageToShow);
