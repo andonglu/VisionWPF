@@ -99,6 +99,7 @@ namespace VisionFlow.WpfToolEditors
                 || tool is GrayEnhanceTool
                 || tool is ImageGeometryTool
                 || tool is PolarInverseTool
+                || tool is RegionToImageTool
                 || tool is AffineTransformImageTool
                 || tool is ReduceDomainTool
                 || tool is AddSubImageTool

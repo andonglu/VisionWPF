@@ -131,6 +131,8 @@ namespace VisionFlow.Editing
                 new ToolNode(new PolarUnwrapTool(NextModuleName("极坐标展开")))));
             Register(new ToolboxItem("polar-inverse", "02 图像处理", "极坐标逆变换", () =>
                 new ToolNode(new PolarInverseTool(NextModuleName("极坐标逆变换")))));
+            Register(new ToolboxItem("region-to-image", "02 图像处理", "区域转图像", () =>
+                new ToolNode(new RegionToImageTool(NextModuleName("区域转图像")))));
             Register(new ToolboxItem("affine-trans-image", "02 图像处理", "图像仿射变换", () =>
                 new ToolNode(new AffineTransformImageTool(NextModuleName("图像仿射")))));
             Register(new ToolboxItem("reduce-domain", "02 图像处理", "ReduceDomain 限定图像域", () =>
