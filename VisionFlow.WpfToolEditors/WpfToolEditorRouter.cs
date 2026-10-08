@@ -86,6 +86,7 @@ namespace VisionFlow.WpfToolEditors
         private static bool IsVisualPreviewTool(ToolBase tool)
         {
             return tool is MeanImageTool
+                || tool is GrayEnhanceTool
                 || tool is AffineTransformImageTool
                 || tool is ReduceDomainTool
                 || tool is AddSubImageTool

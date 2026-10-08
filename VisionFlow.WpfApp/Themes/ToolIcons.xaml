@@ -796,6 +796,16 @@
         </Canvas>
     </Viewbox>
 
+    <!-- 手工追加：灰度增强（左暗右亮的渐变条，上方一条上扬的映射曲线） -->
+    <Viewbox x:Key="ToolIcon.gray-enhance" x:Shared="False" Width="24" Height="24" Stretch="Uniform">
+        <Canvas Width="24" Height="24">
+            <Rectangle Canvas.Left="4" Canvas.Top="15" Width="16" Height="5" RadiusX="1" RadiusY="1" Stroke="{DynamicResource TextFillColorPrimaryBrush}" StrokeThickness="1.4" Fill="{x:Null}" />
+            <Rectangle Canvas.Left="4" Canvas.Top="15" Width="5.3" Height="5" Stroke="{x:Null}" Fill="{DynamicResource TextFillColorPrimaryBrush}" />
+            <Rectangle Canvas.Left="9.3" Canvas.Top="15" Width="5.4" Height="5" Stroke="{x:Null}" Fill="{DynamicResource TextFillColorSecondaryBrush}" />
+            <Path Data="M4,12 C9,12 10,4 20,4" Stroke="{DynamicResource AccentFillColorDefaultBrush}" StrokeThickness="1.8" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Fill="{x:Null}" />
+        </Canvas>
+    </Viewbox>
+
     <Viewbox x:Key="ToolIcon._default" x:Shared="False" Width="24" Height="24" Stretch="Uniform">
         <Canvas Width="24" Height="24">
             <Rectangle Canvas.Left="4" Canvas.Top="4" Width="16" Height="16" RadiusX="2" RadiusY="2" Stroke="{DynamicResource TextFillColorPrimaryBrush}" StrokeThickness="1.8" Fill="{x:Null}" />

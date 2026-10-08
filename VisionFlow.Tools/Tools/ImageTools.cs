@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using HalconDotNet;
 using VisionFlow.Core;
 using VisionFlow.Variables;
@@ -37,20 +39,284 @@ namespace VisionFlow.Tools
         bilinear
     }
 
-    [ToolOutput("Image", VariableKind.Object, VariableType.Object, ElementClrType = typeof(HalconImage))]
-    public sealed class MeanImageTool : ToolBase
+    /// <summary>图像滤波方式（按数字保存；Mean 在首位即默认，等于旧版“均值滤波”）。</summary>
+    public enum ImageFilterMethod
     {
+        Mean,
+        Gauss,
+        Median,
+        Smooth,
+        Bilateral,
+        Emphasize,
+        SobelAmp,
+        GrayErosion,
+        GrayDilation,
+        GrayOpening,
+        GrayClosing
+    }
+
+    /// <summary>gauss_filter 的 Size（22.11 只接受 3 / 5 / 7 / 9 / 11），按数字保存即尺寸本身。</summary>
+    public enum GaussFilterSize
+    {
+        Size3 = 3,
+        Size5 = 5,
+        Size7 = 7,
+        Size9 = 9,
+        Size11 = 11
+    }
+
+    /// <summary>median_image 的 MaskType（名称即 HALCON 参数值）。</summary>
+    public enum MedianMaskType
+    {
+        circle,
+        square
+    }
+
+    /// <summary>median_image 的 Margin 字符串取值（名称即 HALCON 参数值）；灰度常数边界暂不提供。</summary>
+    public enum MedianMargin
+    {
+        mirrored,
+        cyclic,
+        continued
+    }
+
+    /// <summary>smooth_image 的 Filter（名称即 HALCON 参数值）。</summary>
+    public enum SmoothFilterType
+    {
+        deriche1,
+        deriche2,
+        shen,
+        gauss
+    }
+
+    /// <summary>sobel_amp 的 FilterType 全集（名称即 HALCON 参数值，顺序同 get_param_info 的 value_list）。</summary>
+    public enum SobelFilterType
+    {
+        sum_abs,
+        thin_sum_abs,
+        thin_max_abs,
+        sum_sqrt,
+        x,
+        y,
+        sum_abs_binomial,
+        thin_sum_abs_binomial,
+        thin_max_abs_binomial,
+        sum_sqrt_binomial,
+        x_binomial,
+        y_binomial
+    }
+
+    /// <summary>sobel_amp 的 Size（value_list 列到 39，22.11 实测只接受 3 ~ 13 的奇数），按数字保存即尺寸本身。</summary>
+    public enum SobelFilterSize
+    {
+        Size3 = 3,
+        Size5 = 5,
+        Size7 = 7,
+        Size9 = 9,
+        Size11 = 11,
+        Size13 = 13
+    }
+
+    /// <summary>
+    /// 图像滤波（工具箱原名“均值滤波”，ID mean-image 与类型名不变）。Mean 方式与旧版逐字相同；
+    /// 其余方式的参数约束、通道与像素类型要求见 IMAGE-TOOLS-PLAN 第 10 节（22.11 实测）。
+    /// 灰度形态学 gray_*_rect 的参数顺序为（高, 宽），与 mean_image / emphasize（宽, 高）相反。
+    /// </summary>
+    [ToolOutput("Image", VariableKind.Object, VariableType.Object, ElementClrType = typeof(HalconImage))]
+    public sealed class MeanImageTool : ToolBase, IToolConfigurationCheck, IToolParameterVisibility
+    {
+        private static readonly string[] AllTypes = { "byte", "uint2", "int2", "real" };
+        private static readonly string[] NoInt2 = { "byte", "uint2", "real" };
+        private static readonly string[] NoReal = { "byte", "uint2", "int2" };
+
         [InputRef("图像", typeof(HalconImage))]
         public string ImagePath { get; set; } = "Input.Image";
 
+        /// <summary>滤波方式。</summary>
+        public ImageFilterMethod Method { get; set; } = ImageFilterMethod.Mean;
+        /// <summary>掩膜宽（Mean / Emphasize / 灰度形态学）。</summary>
         public int Width { get; set; } = 9;
+        /// <summary>掩膜高（Mean / Emphasize / 灰度形态学）。</summary>
         public int Height { get; set; } = 9;
+        /// <summary>高斯滤波尺寸。</summary>
+        public GaussFilterSize GaussSize { get; set; } = GaussFilterSize.Size5;
+        /// <summary>中值滤波掩膜形状。</summary>
+        public MedianMaskType MaskType { get; set; } = MedianMaskType.circle;
+        /// <summary>中值滤波半径（≥ 1，上限约为图像短边的一半）。</summary>
+        public int Radius { get; set; } = 1;
+        /// <summary>中值滤波边界处理。</summary>
+        public MedianMargin Margin { get; set; } = MedianMargin.mirrored;
+        /// <summary>平滑滤波器。</summary>
+        public SmoothFilterType SmoothFilter { get; set; } = SmoothFilterType.deriche2;
+        /// <summary>平滑系数（> 0）。</summary>
+        public double Alpha { get; set; } = 0.5;
+        /// <summary>双边滤波空间标准差（≥ 0.6）。</summary>
+        public double SigmaSpatial { get; set; } = 3;
+        /// <summary>双边滤波灰度标准差（> 0）。</summary>
+        public double SigmaRange { get; set; } = 20;
+        /// <summary>锐化系数（≥ 0）。</summary>
+        public double Factor { get; set; } = 1;
+        /// <summary>Sobel 滤波类型。</summary>
+        public SobelFilterType SobelType { get; set; } = SobelFilterType.sum_abs;
+        /// <summary>Sobel 滤波尺寸。</summary>
+        public SobelFilterSize SobelSize { get; set; } = SobelFilterSize.Size3;
 
         public MeanImageTool(string moduleName) : base(moduleName)
         {
         }
 
+        public IEnumerable<ToolConfigurationIssue> CheckConfiguration()
+        {
+            switch (Method)
+            {
+                case ImageFilterMethod.Mean:
+                    if (Width <= 0 || Height <= 0)
+                    {
+                        yield return new ToolConfigurationIssue("Width / Height", "均值滤波核宽高必须大于 0");
+                    }
+                    break;
+                case ImageFilterMethod.Gauss:
+                    if (!Enum.IsDefined(typeof(GaussFilterSize), GaussSize))
+                    {
+                        yield return new ToolConfigurationIssue(nameof(GaussSize), "高斯滤波尺寸只能是 3、5、7、9、11");
+                    }
+                    break;
+                case ImageFilterMethod.Median:
+                    if (!Enum.IsDefined(typeof(MedianMaskType), MaskType))
+                    {
+                        yield return new ToolConfigurationIssue(nameof(MaskType), "中值滤波掩膜形状只能是 circle / square");
+                    }
+                    if (Radius < 1)
+                    {
+                        yield return new ToolConfigurationIssue(nameof(Radius), "中值滤波半径必须不小于 1");
+                    }
+                    if (!Enum.IsDefined(typeof(MedianMargin), Margin))
+                    {
+                        yield return new ToolConfigurationIssue(nameof(Margin), "中值滤波边界处理只能是 mirrored / cyclic / continued");
+                    }
+                    break;
+                case ImageFilterMethod.Smooth:
+                    if (!Enum.IsDefined(typeof(SmoothFilterType), SmoothFilter))
+                    {
+                        yield return new ToolConfigurationIssue(nameof(SmoothFilter), "平滑滤波器只能是 deriche1 / deriche2 / shen / gauss");
+                    }
+                    if (!(Alpha > 0) || double.IsInfinity(Alpha))
+                    {
+                        yield return new ToolConfigurationIssue(nameof(Alpha), "平滑系数 Alpha 必须大于 0");
+                    }
+                    break;
+                case ImageFilterMethod.Bilateral:
+                    if (!(SigmaSpatial >= 0.6) || double.IsInfinity(SigmaSpatial))
+                    {
+                        yield return new ToolConfigurationIssue(nameof(SigmaSpatial), "双边滤波空间标准差 SigmaSpatial 必须不小于 0.6");
+                    }
+                    if (!(SigmaRange > 0) || double.IsInfinity(SigmaRange))
+                    {
+                        yield return new ToolConfigurationIssue(nameof(SigmaRange), "双边滤波灰度标准差 SigmaRange 必须大于 0");
+                    }
+                    break;
+                case ImageFilterMethod.Emphasize:
+                    if (Width < 3 || Height < 3)
+                    {
+                        yield return new ToolConfigurationIssue("Width / Height", "锐化掩膜宽高必须不小于 3");
+                    }
+                    if (!(Factor >= 0) || double.IsInfinity(Factor))
+                    {
+                        yield return new ToolConfigurationIssue(nameof(Factor), "锐化系数 Factor 必须不小于 0");
+                    }
+                    break;
+                case ImageFilterMethod.SobelAmp:
+                    if (!Enum.IsDefined(typeof(SobelFilterType), SobelType))
+                    {
+                        yield return new ToolConfigurationIssue(nameof(SobelType), "Sobel 滤波类型无效");
+                    }
+                    if (!Enum.IsDefined(typeof(SobelFilterSize), SobelSize))
+                    {
+                        yield return new ToolConfigurationIssue(nameof(SobelSize), "Sobel 滤波尺寸只能是 3、5、7、9、11、13");
+                    }
+                    break;
+                case ImageFilterMethod.GrayErosion:
+                case ImageFilterMethod.GrayDilation:
+                case ImageFilterMethod.GrayOpening:
+                case ImageFilterMethod.GrayClosing:
+                    if (Width < 1 || Height < 1)
+                    {
+                        yield return new ToolConfigurationIssue("Width / Height", "灰度形态学掩膜宽高必须大于 0");
+                    }
+                    break;
+                default:
+                    yield return new ToolConfigurationIssue(nameof(Method), $"未知的滤波方式 {(int)Method}");
+                    break;
+            }
+        }
+
+        public bool IsParameterVisible(string propertyName)
+        {
+            switch (propertyName)
+            {
+                case nameof(Width):
+                case nameof(Height):
+                    return Method == ImageFilterMethod.Mean || Method == ImageFilterMethod.Emphasize || IsGrayMorphology;
+                case nameof(GaussSize):
+                    return Method == ImageFilterMethod.Gauss;
+                case nameof(MaskType):
+                case nameof(Radius):
+                case nameof(Margin):
+                    return Method == ImageFilterMethod.Median;
+                case nameof(SmoothFilter):
+                case nameof(Alpha):
+                    return Method == ImageFilterMethod.Smooth;
+                case nameof(SigmaSpatial):
+                case nameof(SigmaRange):
+                    return Method == ImageFilterMethod.Bilateral;
+                case nameof(Factor):
+                    return Method == ImageFilterMethod.Emphasize;
+                case nameof(SobelType):
+                case nameof(SobelSize):
+                    return Method == ImageFilterMethod.SobelAmp;
+                default:
+                    return true;
+            }
+        }
+
+        private bool IsGrayMorphology => Method == ImageFilterMethod.GrayErosion || Method == ImageFilterMethod.GrayDilation
+            || Method == ImageFilterMethod.GrayOpening || Method == ImageFilterMethod.GrayClosing;
+
         public override NodeResult Run(FlowContext ctx)
+        {
+            if (Method == ImageFilterMethod.Mean)
+            {
+                return RunMean(ctx);
+            }
+            ToolConfigurationIssue issue = CheckConfiguration().FirstOrDefault();
+            if (issue != null)
+            {
+                return NodeResult.Fail($"{ModuleName} {issue.Parameter}：{issue.Message}");
+            }
+
+            HObject image = Input<HalconImage>(ctx, ImagePath).Object;
+            string typeError = ImageInputRequirements.CheckType(image, SupportedTypes(), $"图像滤波 {Method} 方式");
+            if (typeError != null)
+            {
+                return NodeResult.Fail($"{ModuleName} {typeError}");
+            }
+            HObject output;
+            string detail;
+            try
+            {
+                output = Filter(image, out detail);
+            }
+            catch (HalconException ex)
+            {
+                return NodeResult.Fail($"{ModuleName} 图像滤波 {Method} 失败：{DescribeError(image, ex)}");
+            }
+            SetOutput(ctx, Variable.Object(ModuleName, "Image", new HalconImage(output), 1));
+            ctx.AddLog(FlowLogLevel.Info, $"[图像滤波] Method={Method}, {detail}");
+            return NodeResult.Ok;
+        }
+
+        /// <summary>旧版均值滤波，错误信息与日志逐字不变。</summary>
+        private NodeResult RunMean(FlowContext ctx)
         {
             if (Width <= 0 || Height <= 0)
             {
@@ -62,6 +328,115 @@ namespace VisionFlow.Tools
             SetOutput(ctx, Variable.Object(ModuleName, "Image", new HalconImage(output), 1));
             ctx.AddLog(FlowLogLevel.Info, $"[均值滤波] Width={Width}, Height={Height}");
             return NodeResult.Ok;
+        }
+
+        private string[] SupportedTypes()
+        {
+            switch (Method)
+            {
+                case ImageFilterMethod.Smooth:
+                case ImageFilterMethod.Bilateral:
+                    return NoInt2;
+                case ImageFilterMethod.Emphasize:
+                    return NoReal;
+                default:
+                    return AllTypes;
+            }
+        }
+
+        private HObject Filter(HObject image, out string detail)
+        {
+            HObject output;
+            switch (Method)
+            {
+                case ImageFilterMethod.Gauss:
+                    HOperatorSet.GaussFilter(image, out output, (int)GaussSize);
+                    detail = $"Size={(int)GaussSize}";
+                    break;
+                case ImageFilterMethod.Median:
+                    HOperatorSet.MedianImage(image, out output, MaskType.ToString(), Radius, Margin.ToString());
+                    detail = $"MaskType={MaskType}, Radius={Radius}, Margin={Margin}";
+                    break;
+                case ImageFilterMethod.Smooth:
+                    HOperatorSet.SmoothImage(image, out output, SmoothFilter.ToString(), Alpha);
+                    detail = $"Filter={SmoothFilter}, Alpha={Alpha}";
+                    break;
+                case ImageFilterMethod.Bilateral:
+                    HOperatorSet.BilateralFilter(image, image, out output, SigmaSpatial, SigmaRange, new HTuple(), new HTuple());
+                    detail = $"SigmaSpatial={SigmaSpatial}, SigmaRange={SigmaRange}";
+                    break;
+                case ImageFilterMethod.Emphasize:
+                    HOperatorSet.Emphasize(image, out output, Width, Height, Factor);
+                    detail = $"Width={Width}, Height={Height}, Factor={Factor}";
+                    break;
+                case ImageFilterMethod.SobelAmp:
+                    HOperatorSet.SobelAmp(image, out output, SobelType.ToString(), (int)SobelSize);
+                    detail = $"FilterType={SobelType}, Size={(int)SobelSize}";
+                    break;
+                case ImageFilterMethod.GrayErosion:
+                    HOperatorSet.GrayErosionRect(image, out output, Height, Width);
+                    detail = $"Width={Width}, Height={Height}";
+                    break;
+                case ImageFilterMethod.GrayDilation:
+                    HOperatorSet.GrayDilationRect(image, out output, Height, Width);
+                    detail = $"Width={Width}, Height={Height}";
+                    break;
+                case ImageFilterMethod.GrayOpening:
+                    HOperatorSet.GrayOpeningRect(image, out output, Height, Width);
+                    detail = $"Width={Width}, Height={Height}";
+                    break;
+                case ImageFilterMethod.GrayClosing:
+                    HOperatorSet.GrayClosingRect(image, out output, Height, Width);
+                    detail = $"Width={Width}, Height={Height}";
+                    break;
+                default:
+                    throw new InvalidOperationException($"未知的滤波方式 {(int)Method}");
+            }
+            return output;
+        }
+
+        /// <summary>随图像尺寸变化的上限只能在运行时发现，转成带图像尺寸的中文说明。</summary>
+        private string DescribeError(HObject image, HalconException ex)
+        {
+            string size = ImageInputRequirements.SizeText(image);
+            int code = ex.GetErrorCode();
+            if (Method == ImageFilterMethod.Median && code == 1302)
+            {
+                return $"中值滤波半径 {Radius} 超出图像允许的范围（图像 {size}，半径须小于短边的一半左右）";
+            }
+            if (code == 3033)
+            {
+                return Method == ImageFilterMethod.Bilateral
+                    ? $"空间标准差 SigmaSpatial={SigmaSpatial} 对应的滤波尺寸超过图像尺寸（图像 {size}）"
+                    : $"滤波掩膜尺寸超过图像尺寸（图像 {size}）";
+            }
+            return ex.Message;
+        }
+    }
+
+    /// <summary>图像工具对通道数与像素类型的前置检查（IMAGE-TOOLS-PLAN 第 10.2 节）。</summary>
+    internal static class ImageInputRequirements
+    {
+        /// <summary>像素类型不在支持列表时返回中文错误（含支持的类型与转换建议），否则返回 null。</summary>
+        public static string CheckType(HObject image, string[] supportedTypes, string what)
+        {
+            HOperatorSet.GetImageType(image, out HTuple type);
+            string actual = type.Length > 0 ? type[0].S : string.Empty;
+            return supportedTypes.Contains(actual)
+                ? null
+                : $"{what}不支持 {actual} 图像（支持 {string.Join(" / ", supportedTypes)}），可先接灰度增强的 ConvertType 转换像素类型";
+        }
+
+        public static int Channels(HObject image)
+        {
+            HOperatorSet.CountChannels(image, out HTuple channels);
+            return channels.Length > 0 ? channels[0].I : 0;
+        }
+
+        public static string SizeText(HObject image)
+        {
+            HOperatorSet.GetImageSize(image, out HTuple width, out HTuple height);
+            return width.Length > 0 ? $"{width[0].I}×{height[0].I}" : "未知";
         }
     }
 

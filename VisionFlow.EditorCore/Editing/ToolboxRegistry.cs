@@ -121,8 +121,10 @@ namespace VisionFlow.Editing
                 {
                     FilePath = RepoPaths.Find("src/Image/razors1.png")
                 })));
-            Register(new ToolboxItem("mean-image", "02 图像处理", "均值滤波", () =>
-                new ToolNode(new MeanImageTool(NextModuleName("均值滤波")))));
+            Register(new ToolboxItem("mean-image", "02 图像处理", "图像滤波", () =>
+                new ToolNode(new MeanImageTool(NextModuleName("图像滤波")))));
+            Register(new ToolboxItem("gray-enhance", "02 图像处理", "灰度增强", () =>
+                new ToolNode(new GrayEnhanceTool(NextModuleName("灰度增强")))));
             Register(new ToolboxItem("affine-trans-image", "02 图像处理", "图像仿射变换", () =>
                 new ToolNode(new AffineTransformImageTool(NextModuleName("图像仿射")))));
             Register(new ToolboxItem("reduce-domain", "02 图像处理", "ReduceDomain 限定图像域", () =>

@@ -27,6 +27,7 @@ namespace VisionFlow.Tools
             FlowSerializer.RegisterToolType(typeof(CircleFollowMeasureTool), "measurecircle");
             FlowSerializer.RegisterToolType(typeof(LoadImageTool), "loadimage");
             FlowSerializer.RegisterToolType(typeof(MeanImageTool), "mean-image");
+            FlowSerializer.RegisterToolType(typeof(GrayEnhanceTool), "gray-enhance");
             FlowSerializer.RegisterToolType(typeof(AffineTransformImageTool), "affine-trans-image");
             FlowSerializer.RegisterToolType(typeof(ReduceDomainTool), "reduce-domain");
             FlowSerializer.RegisterToolType(typeof(AddSubImageTool), "add-sub-image");

@@ -415,8 +415,20 @@ namespace VisionFlow.WpfToolEditors.Editors
             }
             if (ViewTargetCombo.Items.Count > 0)
             {
-                ViewTargetCombo.SelectedIndex = ViewTargetCombo.Items.Count - 1;
+                // 预览成功后默认查看当前工具的输出（优先图像 / 区域 / 轮廓），而不是上下文中最后一个变量：
+                // 预览上下文派生自上次运行，工具不是流程最后一个节点时，最后一个变量属于下游节点
+                List<ViewTarget> targets = ViewTargetCombo.Items.Cast<ViewTarget>().ToList();
+                List<ViewTarget> own = includeOutput
+                    ? targets.Where(t => string.Equals(t.Variable?.ModuleName, _tool.ModuleName, StringComparison.OrdinalIgnoreCase)).ToList()
+                    : new List<ViewTarget>();
+                ViewTarget preferred = own.LastOrDefault(t => IsDisplayable(t.Variable?.Value)) ?? own.LastOrDefault();
+                ViewTargetCombo.SelectedIndex = preferred != null ? targets.IndexOf(preferred) : ViewTargetCombo.Items.Count - 1;
             }
+        }
+
+        private static bool IsDisplayable(object value)
+        {
+            return value is HalconImage || value is HalconRegion || value is HalconXld || value is HObject;
         }
 
         private void ShowSelectedTarget()

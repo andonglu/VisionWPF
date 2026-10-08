@@ -1,9 +1,9 @@
 # 图像处理补充开发计划
 
 编写日期：2026-10-06
-状态：待开发
+状态：第一批 IP-01（图像滤波）/ IP-03（灰度增强）已实现（分支 `feature/image-tools-batch1`，算子探测见第 10 节，验收见第 11 节）；其余各项按评审建议分批（IP-08 + IP-02、IP-04、IP-05 + IP-06、IP-07），动工前各做一次小评审。
 范围：工具箱“02 图像处理”（`VisionFlow.Tools\Tools\ImageTools.cs`），以及与图像相关的“阈值分割”颜色方式。
-HALCON 版本基线：20.11 及以上。
+HALCON 版本基线：22.11 及以上（与仓库现行基线一致；原文写 20.11）。
 关联文档：[Region 相关算子补充开发计划](REGION-TOOLS-PLAN.md)（原暂缓项 `region_to_bin` / `paint_region` 在本文 IP-07 实现）、[数据处理、判定与逻辑补充开发计划](LOGIC-DATA-TOOLS-PLAN.md)。
 
 ## 1. 现状
@@ -53,16 +53,24 @@ HALCON 版本基线：20.11 及以上。
 | 方式 | 算子 | 参数 |
 |---|---|---|
 | `Mean` | `mean_image` | 复用 `Width` / `Height` |
-| `Gauss` | `gauss_filter` | `Size`（3、5、7、9、11） |
-| `Median` | `median_image` | `MaskType`（`circle` / `square`）、`Radius`、`Margin`（默认 `mirrored`） |
-| `Smooth` | `smooth_image` | `SmoothFilter`（`deriche1` / `deriche2` / `shen` / `gauss`）、`Alpha` |
-| `Bilateral` | `bilateral_filter` | `SigmaSpatial`、`SigmaRange`（引导图使用输入图本身） |
-| `Emphasize` | `emphasize` | 复用 `Width` / `Height`，新增 `Factor` |
-| `SobelAmp` | `sobel_amp` | `SobelType`（`sum_abs` / `sum_sqrt` / `x` / `y` / `x_binomial` / `y_binomial` 等）、`Size` |
-| `GrayErosion` / `GrayDilation` / `GrayOpening` / `GrayClosing` | `gray_erosion_rect` / `gray_dilation_rect` / `gray_opening_rect` / `gray_closing_rect` | 复用 `Width` / `Height`（注意 HALCON 参数顺序为高、宽） |
+| `Gauss` | `gauss_filter` | `GaussSize`（枚举 3、5、7、9、11，第 10 节） |
+| `Median` | `median_image` | `MaskType`（`circle` / `square`）、`Radius`（≥ 1）、`Margin`（`mirrored` 默认 / `cyclic` / `continued`） |
+| `Smooth` | `smooth_image` | `SmoothFilter`（`deriche1` / `deriche2` 默认 / `shen` / `gauss`）、`Alpha`（> 0） |
+| `Bilateral` | `bilateral_filter` | `SigmaSpatial`（≥ 0.6）、`SigmaRange`（> 0）（引导图使用输入图本身） |
+| `Emphasize` | `emphasize` | 复用 `Width` / `Height`（≥ 3），新增 `Factor`（≥ 0） |
+| `SobelAmp` | `sobel_amp` | `SobelType`（12 个，见第 10 节）、`SobelSize`（枚举 3 ~ 13 的奇数；`value_list` 列到 39，22.11 实测 15 起报错） |
+| `GrayErosion` / `GrayDilation` / `GrayOpening` / `GrayClosing` | `gray_erosion_rect` / `gray_dilation_rect` / `gray_opening_rect` / `gray_closing_rect` | 复用 `Width` / `Height`（HALCON 参数顺序为高、宽，第 10 节已实测确认） |
 
 - 输出不变：`Image`。
 - 编辑窗口按方式显示参数；`Gauss` 的 `Size` 用下拉框限定合法值。
+
+**实现说明（第一批已完成）**
+
+- 类型：`MeanImageTool : ToolBase, IToolConfigurationCheck, IToolParameterVisibility`，ID `mean-image` 与类型名不变；工具箱显示名改为“图像滤波”，新建节点的默认模块名由“均值滤波N”改为“图像滤波N”（评审 P2-2，纯显示，历史流程不受影响）。
+- 参数建模（评审 P1-2）：新枚举 `ImageFilterMethod`（`Mean` 在首位即默认）；取值集合固定的参数一律为枚举、成员名即 HALCON 字符串值、按数字保存——`GaussFilterSize { Size3 = 3 … Size11 = 11 }`（属性 `GaussSize`，流程文件中即 `"GaussSize": 9`）、`SobelFilterSize { Size3 = 3 … Size13 = 13 }`（属性 `SobelSize`）、`MedianMaskType`、`MedianMargin`、`SmoothFilterType`（属性 `SmoothFilter`）、`SobelFilterType`（12 个）。两个尺寸枚举的属性分别命名为 `GaussSize` / `SobelSize`（同一工具中不能有两个 `Size`）。自由数值 `Radius`（int）、`Alpha`、`SigmaSpatial`、`SigmaRange`、`Factor` 做范围校验（第 10.3 节）。`Width` / `Height` 被 Mean / Emphasize / 四种灰度形态学复用，`IToolParameterVisibility` 按方式精确显隐；灰度形态学按 HALCON 的（高, 宽）顺序传参。
+- `Mean` 方式保持旧代码路径：运行时错误信息“均值滤波核宽高必须大于 0”（不带模块名前缀）与日志“[均值滤波] Width=…, Height=…”逐字不变；新增的流程校验用同一句话（旧版只在运行时报）。其余方式日志为“[图像滤波] Method=…, …”。
+- 校验与运行：`CheckConfiguration` 与 `Run` 共用同一组检查，运行时信息为“模块名 参数：说明”。调用算子前按第 10.2 节检查像素类型（不支持时说明支持哪些类型，建议先接灰度增强的 ConvertType）；随图像尺寸变化的上限（#3033、中值半径 #1302、双边 `SigmaSpatial` 过大）转成带图像尺寸的中文错误。多通道图逐通道处理（探测表明全部方式都支持）。
+- 输出 `Image` 为新生成图像、归运行上下文所有，不透传、不释放输入图（用例固定）。
 
 ### IP-02 图像加减扩展为图像运算
 
@@ -100,16 +108,27 @@ HALCON 版本基线：20.11 及以上。
 | 方式 `Method` | 算子 | 参数 |
 |---|---|---|
 | `Linear` | `scale_image` | `Mult`、`Add` |
-| `AutoStretch` | `scale_image_max` | 无（拉伸到全灰度范围） |
-| `PercentStretch` | `min_max_gray`（`Percent`）+ `scale_image` | `Percent`（两端各舍弃的百分比，默认 1） |
+| `AutoStretch` | `scale_image_max` | 无（拉伸到全灰度范围；输出一律为 byte，第 10 节） |
+| `PercentStretch` | `get_domain` + `min_max_gray`（`Percent`）+ `scale_image` | `Percent`（两端各舍弃的百分比，0 ~ 50，默认 1） |
 | `EquHisto` | `equ_histo_image` | 无 |
 | `Invert` | `invert_image` | 无 |
-| `Gamma` | `gamma_image` | `Gamma`、`Offset`、`Threshold`、`MaxGray`、`Encode` |
+| `Gamma` | `gamma_image` | `Gamma`、`Offset`、`Threshold`、`MaxGray`、`Encode`（`bool`，对应 HALCON 的 `'true'` / `'false'`） |
 | `Illuminate` | `illuminate` | `MaskWidth`、`MaskHeight`、`Factor` |
-| `RgbToGray` | `rgb1_to_gray` | 无 |
+| `RgbToGray` | `rgb1_to_gray` | 无（工具自行检查三通道，第 10 节） |
 | `ConvertType` | `convert_image_type` | `NewType`（`byte` / `uint2` / `int2` / `real`） |
 
+- 共 9 种方式，`Linear` 在首位即默认。各方式对通道数与像素类型的要求见第 10.2 节。
+
 - `PercentStretch` 只统计图像定义域内的灰度；配合 ReduceDomain 可按 ROI 拉伸。
+
+**实现说明（第一批已完成）**
+
+- 类型：`GrayEnhanceTool : ToolBase, IToolConfigurationCheck, IToolParameterVisibility`（`VisionFlow.Tools\Tools\GrayEnhanceTools.cs`），`BuiltinToolIdentities` 登记 `gray-enhance`（流程文件的 `ToolId` 只来自这里），工具箱 `02 图像处理 / 灰度增强`（默认模块名“灰度增强N”），图标 `ToolIcon.gray-enhance`，加入 `WpfToolEditorRouter.IsVisualPreviewTool()`（通用视觉预览窗口，零窗口开发）。
+- 参数：`GrayEnhanceMethod`（9 种，`Linear` 在首位即默认）、`Mult` / `Add`、`Percent`（0 ~ 50）、`Gamma` / `Offset` / `Threshold` / `MaxGray`（默认值与 `gamma_image` 相同）、`Encode`（`bool`，默认 `true`）、`MaskWidth` / `MaskHeight` / `Factor`（默认值与 `illuminate` 相同）、`NewType`（枚举 `ConvertImageNewType`：`byte` / `uint2` / `int2` / `real`，按数字保存）；按方式精确显隐。
+- PercentStretch（评审 P1-4）：用 `get_domain` 取定义域做 `min_max_gray`，按定义域的 [Min, Max] 拉伸；只接受单通道 byte / uint2；空定义域失败；灰度全部相同时输出副本并警告（第 10.3 节）。
+- RgbToGray：工具自行检查三通道（`rgb1_to_gray` 对单通道不报错），否则报“需要三通道彩色图像（当前 n 通道）”。其余方式按第 10.2 节逐通道处理并检查像素类型。
+- Linear：`scale_image` 出界饱和截断不报错，工具按定义域各通道的灰度范围估算结果，超出像素类型范围时写警告日志。
+- 校验与运行措辞一致（同图像滤波）；输出 `Image` 为新生成图像（PercentStretch 无法拉伸时同样输出副本，不透传输入）。
 
 ### IP-04 图像几何变换
 
@@ -174,9 +193,9 @@ HALCON 版本基线：20.11 及以上。
 
 ## 8. 验收
 
-- IP-01：每种方式输出与直接调用 HALCON 算子逐像素一致；`Mean` 结果与旧版一致。
+- IP-01：每种方式输出与直接调用 HALCON 算子逐像素一致；`Mean` 结果与旧版一致（第一批已完成，见第 11 节）。
 - IP-02：新增运算与直接调用 HALCON 一致；尺寸不一致时明确失败。
-- IP-03：`PercentStretch` 对已知直方图的合成图像结果正确；`ConvertType` 输出类型正确。
+- IP-03：`PercentStretch` 对已知直方图的合成图像结果正确；`ConvertType` 输出类型正确（第一批已完成，另有各方式与 HALCON 逐像素一致，见第 11 节）。
 - IP-04：在新图上取一点，用 `InverseHomMat` 映射回原图，与原图对应点误差小于 0.5 像素（缩放、旋转、镜像、裁剪各一例）。
 - IP-05 / IP-06：在合成圆环上画一个缺陷，展开后检测到的区域经逆变换后与原缺陷重合（面积误差小于 5%）。
 - IP-07：二值图前景、背景灰度正确；绘制方式只改变区域内（或边缘）像素。
@@ -190,3 +209,100 @@ HALCON 版本基线：20.11 及以上。
 3. IP-04（图像几何变换）。
 4. IP-05、IP-06（极坐标展开与逆变换），一起开发。
 5. IP-07（区域转图像）。
+
+## 10. 第一批算子探测结论（IP-01 / IP-03）
+
+**探测环境**：HALCON 22.11 Steady（`C:\Program Files\MVTec\HALCON-22.11-Steady`），部署到其他版本前需复核。探测在写 IP-01 / IP-03 代码之前完成（评审 P1-1）。合成图像为 64 × 48 字节图（水平渐变加小噪声），另由它转换得到 uint2 / int2 / real 单通道图、三通道彩色图（原图、反相图、0.5 倍图合成）与空定义域图；参数取值集合来自 `get_param_info` 的 `value_list`，参数顺序来自 `get_param_names`，再逐项实测。
+
+### 10.1 逐项结论
+
+| 算子 | 结论 |
+|---|---|
+| `gauss_filter` | `Size` 只能是 3 / 5 / 7 / 9 / 11（`value_list` 同），其余（含 1、偶数、13 及以上）报 #3022。byte / uint2 / int2 / real 与三通道（逐通道）都可处理；int1 / int4 报 #9001 |
+| `median_image` | `MaskType` 只有 `circle` / `square`（其他报 #1301）；`Radius` ≥ 1 才可用（0、负数报 #1302），上限随图像尺寸变化：64 × 48 图最大 23、512 × 512 图在 211 ~ 261 之间、2000 × 2000 图在 961 ~ 1011 之间（约为短边的一半），超出报 #1302，只能在运行时发现；`Margin` 取 `mirrored` / `cyclic` / `continued` 或一个灰度常数（0 ~ 255，300 报 #1303，−1 被当作 `continued`、12.5 截为 12），其他字符串报 #1303。byte / uint2 / int2 / real 与三通道都可处理 |
+| `smooth_image` | `Filter` 为 `deriche1` / `deriche2` / `shen` / `gauss`（其他报 #1301），四种都要求 `Alpha` > 0（0、负数报 #1302），没有上限（实测到 100）。int2 报 #9001；byte / uint2 / real 与三通道可处理 |
+| `bilateral_filter` | 参数为 `(Image, ImageJoint, SigmaSpatial, SigmaRange, GenParamName, GenParamValue)`；`SigmaSpatial` ≥ 0.6（0.5999 报 #1301，0.6 可用），过大时报 #3033“滤波尺寸超过图像”（64 × 48 图 20 可用、25 不可用）；`SigmaRange` > 0（0、负数报 #1302），上限未见（100000 可用）。引导图传输入图自身即普通双边滤波。int2 报 #9001；byte / uint2 / real 与三通道可处理 |
+| `sobel_amp` | `FilterType` 全集 12 个：`sum_abs`、`thin_sum_abs`、`thin_max_abs`、`sum_sqrt`、`x`、`y`、`sum_abs_binomial`、`thin_sum_abs_binomial`、`thin_max_abs_binomial`、`sum_sqrt_binomial`、`x_binomial`、`y_binomial`（其他报 #1301）。`Size` 的 `value_list` 列出 3 ~ 39 的奇数，**但 22.11 实测只接受 3 / 5 / 7 / 9 / 11 / 13**（15 及以上在 64 × 48、512 × 512、2000 × 2000 图上都报 #1302，与图像尺寸无关），以实测为准。byte 输入时 `x` / `y` 系列输出 int1（带符号），其余输出 byte。byte / uint2 / int2 / real 与三通道都可处理 |
+| `gray_erosion_rect` 等四个 | 参数为 `(Image, MaskHeight, MaskWidth)`——**先高后宽**，与 `mean_image` / `emphasize`（先宽后高）相反。实测：单个暗点经 `gray_erosion_rect(·, 1, 7)` 扩展为 1 行 7 列、`(·, 7, 1)` 扩展为 7 行 1 列。宽高 ≥ 1（0、负数报 #1301 / #1302），偶数可用；上限随图像尺寸（64 × 48 图 121 可用、131 报 #3033）。byte / uint2 / int2 / real 与三通道都可处理 |
+| `emphasize` | 参数为 `(Image, MaskWidth, MaskHeight, Factor)`；宽、高都须 ≥ 3（1、2 报 #1301 / #1302），上限随图像尺寸（#3033）；`Factor` ≥ 0（−1 报 #1303），0 与 100 都可用，没有 0.7 ~ 1.9 的硬性限制。real 报 #9001；byte / uint2 / int2 与三通道可处理 |
+| `mean_image`（Mean 方式） | 参数为 `(Image, MaskWidth, MaskHeight)`；宽高 ≥ 1（0 报 #1301），上限随图像尺寸（64 × 48 图 121 可用、131 报 #3033）。byte / uint2 / int2 / real 与三通道都可处理 |
+| `gamma_image` | 参数为 `(Image, Gamma, Offset, Threshold, MaxGray, Encode)`，默认值 0.416666666667 / 0.055 / 0.0031308 / 255 / `'true'`。`Encode` 是字符串 `'true'` / `'false'`（整数 1 / 0 报 #1205 类型错误，`'yes'` 报 #1305）；`Gamma` > 0（0、负数报 #1301）；`Offset` ≥ 0（−1 报 #1302）；`Threshold` ≥ 0（−1 报 #1303）；`MaxGray` > 0（0、负数报 #1304）。int2 报 #9001；byte / uint2 / real 与三通道可处理 |
+| `min_max_gray` | 参数为 `(Regions, Image, Percent, Min, Max, Range)`，`Percent` 取 0 ~ 50（−1、51 报 #1301；50 时最小值 = 最大值）。**空区域、空定义域不报错**，返回 Min = Max = Range = 0；区域完全在图像外同样返回 0。只统计传入区域与图像定义域的交集：缩小定义域的图像传全图矩形时结果与定义域相同，因此 PercentStretch 用 `get_domain` 取定义域（评审 P1-4）。**三通道图只统计第一通道**（结果与单通道原图相同），不报错 |
+| `scale_image_max` | 对 byte / uint2 / int2 / real 输入**一律输出 byte**，等价于按定义域最小、最大值线性拉伸到 0 ~ 255（与手算 `scale_image(255 / (max − min), −min · 255 / (max − min))` 逐像素一致；uint2 放大 100 倍后结果与 byte 原图相同）。三通道逐通道拉伸（输出 3 通道 byte，各通道比例不同）。只拉伸定义域、保留定义域；空定义域不报错；常数图不报错，输出 128 |
+| `equ_histo_image` | byte / uint2 可处理（类型不变），int2 / real 报 #9001；三通道逐通道均衡；空定义域不报错 |
+| `rgb1_to_gray` | 三通道（byte / uint2 / real）输出同类型单通道（例：(110, 145, 85) → 128）。**单通道输入不报错，原样输出单通道**；2 通道、4 通道报 #9009“不是三通道彩色图”。所以 RgbToGray 的“需要三通道彩色图像”须由工具自行检查通道数 |
+| `convert_image_type` | `NewType` 全集：`int1`、`int2`、`uint2`、`int4`、`int8`、`byte`、`real`、`direction`、`cyclic`、`complex`（其他报 #1301）。real → byte 四舍五入并截断到 0 ~ 255（−5 → 0、12.4 → 12、12.5 → 13、300 → 255）；real → uint2 截断到 0 ~ 65535，→ int2 截断到 −32768 ~ 32767。三通道逐通道转换 |
+| `scale_image` | 结果超出像素类型范围时**饱和截断、不报错**：byte 截到 0 ~ 255，uint2 到 0 ~ 65535，int2 到 −32768 ~ 32767；real 不截断，可得到 ∞。结果四舍五入（0.5 × 110 + 0.6 = 55.6 → 56）。三通道逐通道处理；保留定义域 |
+| `invert_image` | byte 为 255 − g，uint2 为 65535 − g，int2 / real 为 −g；三通道逐通道 |
+| `illuminate` | 参数为 `(Image, MaskWidth, MaskHeight, Factor)`，默认 101 / 101 / 0.7；`Factor` ≥ 0（−1 报 #1303）；**宽为 0 或负数不报错**（结果与宽 1 相同），上限随图像尺寸（#3033）。real 报 #9001；byte / uint2 / int2 与三通道可处理 |
+
+### 10.2 各方式的输入要求（评审 P1-3）
+
+所有方式只对图像**定义域**处理并保留定义域；空定义域图像除 PercentStretch 外都正常输出（空定义域）。下表“类型”只列已实测的 byte / uint2 / int2 / real，其他类型（int1、int4 等）一律视为不支持；不支持的类型在调用算子前由工具检查并给出中文错误，说明支持哪些类型，并建议先接灰度增强的 ConvertType。
+
+| 工具 / 方式 | 通道 | 类型 |
+|---|---|---|
+| 图像滤波 Mean / Median / SobelAmp / GrayErosion / GrayDilation / GrayOpening / GrayClosing | 单通道或多通道（逐通道） | byte / uint2 / int2 / real |
+| 图像滤波 Gauss | 同上 | byte / uint2 / int2 / real |
+| 图像滤波 Smooth / Bilateral | 同上 | byte / uint2 / real |
+| 图像滤波 Emphasize | 同上 | byte / uint2 / int2 |
+| 灰度增强 Linear / Invert / ConvertType | 同上 | byte / uint2 / int2 / real |
+| 灰度增强 AutoStretch | 同上（逐通道拉伸，彩色图各通道比例不同，色调会变化） | byte / uint2 / int2 / real，输出 byte |
+| 灰度增强 EquHisto | 同上（逐通道均衡，色调会变化） | byte / uint2 |
+| 灰度增强 Gamma | 同上 | byte / uint2 / real |
+| 灰度增强 Illuminate | 同上 | byte / uint2 / int2 |
+| 灰度增强 PercentStretch | **只接受单通道**：`min_max_gray` 对彩色图只统计第一通道、不报错，结果会悄悄错误，因此彩色图报错“先接灰度增强的 RgbToGray 或通道分解” | byte（拉伸到 0 ~ 255）/ uint2（拉伸到 0 ~ 65535） |
+| 灰度增强 RgbToGray | **只接受三通道**：单通道时 `rgb1_to_gray` 不报错、原样输出，工具自行检查并报“需要三通道彩色图像” | byte / uint2 / real |
+
+多通道策略经使用方确认（2026-10-08）：探测表明除 `min_max_gray` 外，上述算子对三通道图都逐通道正确处理，因此只有 PercentStretch 拒绝彩色图，其余方式逐通道处理；评审 P1-3 建议的“EquHisto / ConvertType / Gamma / PercentStretch / AutoStretch 一律报错”按实测收窄为只有 PercentStretch。
+
+### 10.3 由探测确定的实现约定
+
+- **参数校验（流程校验与运行一致）**：只校验与图像无关的取值约束——Mean 宽高 > 0（沿用旧版信息“均值滤波核宽高必须大于 0”）；Median 半径 ≥ 1；Smooth `Alpha` > 0；Bilateral `SigmaSpatial` ≥ 0.6、`SigmaRange` > 0；Emphasize 宽高 ≥ 3、`Factor` ≥ 0；灰度形态学宽高 ≥ 1；Gamma `Gamma` > 0、`Offset` ≥ 0、`Threshold` ≥ 0、`MaxGray` > 0；Illuminate 宽高 ≥ 1（HALCON 对 0 与负数不报错，工具仍拒绝，避免静默当作 1）、`Factor` ≥ 0；PercentStretch `Percent` 0 ~ 50；Linear `Mult` / `Add` 为有限数。枚举参数手工改成未定义的数字时同样报错。
+- **随图像尺寸变化的上限**（滤波核超过图像 #3033、中值半径超过约半个短边 #1302、双边 `SigmaSpatial` 过大 #3033）无法在流程校验时判断，运行时转成中文错误，带图像尺寸。
+- **PercentStretch**：`get_domain` 取定义域 → `min_max_gray(定义域, 图像, Percent)` → `scale_image` 把 [Min, Max] 线性映射到 byte 的 0 ~ 255 或 uint2 的 0 ~ 65535（超出部分按 `scale_image` 规则截断）。空定义域运行失败“图像定义域为空，无法统计灰度”；定义域内 Min = Max（含 `Percent` = 50）时输出输入图的副本并写警告日志，不中断流程（使用方确认）。实现时补测：灰度 50 ~ 150 均匀分布的 byte 图，`Percent` = 0 的结果与 `scale_image_max` 逐像素一致；`scale_image` 对 `Add` = −50 × 2.55（双精度为 −127.49999999999999）的取整使灰度 50 映射为 1 而不是 0（传字面量 −127.5 时为 0），`scale_image_max` 的结果同样为 1，属 HALCON 自身的量化行为，验收按与 HALCON 直接调用逐像素一致判定。
+- **Linear**：`scale_image` 出界时饱和截断不报错；工具按定义域内各通道的最小、最大灰度估算结果范围，超出像素类型范围时写警告日志（说明会被截断，建议调整 `Mult` / `Add` 或先 ConvertType 到 real）。
+- **Gamma 的 `Encode`**：HALCON 只接受字符串 `'true'` / `'false'`，取值即布尔，参数用 `bool`（默认 `true`），调用时转成字符串；不建成名为 `true` / `false` 的枚举（C# 关键字）。
+- **Median 的 `Margin`**：枚举只含 `mirrored`（默认）/ `cyclic` / `continued` 三个字符串取值；HALCON 另支持的“灰度常数”边界本批不提供（不常用，且常数范围随像素类型变化），需要时再追加枚举成员与常数参数。
+- **SobelAmp 的 `Size`**：枚举只列实测可用的 3 ~ 13 六个奇数（`value_list` 中的 15 ~ 39 实测报错）。
+- **ConvertType 的 `NewType`**：枚举按计划提供 `byte`（默认）/ `uint2` / `int2` / `real`；`int1` / `int4` / `int8` / `direction` / `cyclic` / `complex` 本批不提供（多数图像工具不支持，见 10.1），需要时追加在末尾。
+
+## 11. 第一批（IP-01 + IP-03）评审处理与验收记录
+
+**开工依据**：基线 `origin/main`（`ccabebc`）；评审 `IMAGE-TOOLS-PLAN-REVIEW.md` 的 P1-1（先探测后实现）在写代码前完成并记入第 10 节，计划与探测冲突处已按探测改正（第 4、5 节表格）。
+
+**评审意见处理**
+
+| 评审项 | 处理 |
+|---|---|
+| P1-1 探测 | 14 行清单逐项实测，另补 `mean_image` / `invert_image` / `illuminate`，结论与报错码记入第 10.1 节 |
+| P1-2 参数建模 | 固定取值集合一律枚举、成员名即 HALCON 取值、按数字保存；`GaussFilterSize` / `SobelFilterSize` 显式数值；守卫用例固定成员顺序与取值 |
+| P1-3 通道与类型 | 第 10.2 节表格；多通道策略经使用方确认按实测收窄为只有 PercentStretch 拒绝彩色图；RgbToGray 由工具检查三通道 |
+| P1-4 定义域 | PercentStretch 用 `get_domain`，用例固定“只统计定义域而非全图”；空定义域与灰度一致两种边界经使用方确认 |
+| P2-1 登记清单 | `BuiltinToolIdentities`、`ToolboxRegistry`、`ToolIcon.gray-enhance`、`IsVisualPreviewTool()`、README |
+| P2-2 默认模块名 | 改为“图像滤波N” |
+| P2-3 共享参数显隐 | `Width` / `Height` 只在 Mean / Emphasize / 灰度形态学显示，其余参数互不串显（逐方式用例） |
+| P2-4 校验与运行一致 | 每种方式至少一个越界用例，校验信息与运行信息相同；Mean 错误信息与旧版逐字相同 |
+| P2-5 图像资源 | 输出均为新生成图像，用例固定输出与输入不是同一对象、运行后输入图仍有效 |
+| P2-6 日志 | Mean 沿用“[均值滤波] …”，其余“[图像滤波] Method=…”、“[灰度增强] Method=…” |
+
+**与任务说明或计划不一致处（如实记录）**
+
+| 项 | 处理 |
+|---|---|
+| “灰度增强十种方式” | 计划第 5 节表格为 9 种（Linear、AutoStretch、PercentStretch、EquHisto、Invert、Gamma、Illuminate、RgbToGray、ConvertType），按表格实现 9 种 |
+| SobelAmp 的 `Size` | `get_param_info` 列出 3 ~ 39，22.11 实测 15 起一律报错，枚举只列 3 ~ 13 |
+| 评审 P1-3 建议五种方式拒绝彩色图 | 探测表明只有 `min_max_gray` 对彩色图静默出错，经使用方确认只有 PercentStretch 拒绝彩色图 |
+| Gamma 的 `Encode` | HALCON 只接受 `'true'` / `'false'`，参数用 `bool`（`true` / `false` 不能作为 C# 枚举成员名） |
+| Median 的 `Margin` | 只提供三个字符串取值，灰度常数边界暂不提供 |
+| `rgb1_to_gray` 单通道 | HALCON 不报错、原样输出，“需要三通道彩色图像”由工具自行检查 |
+| 图标与路由的守卫用例 | 测试工程是 `net9.0`、不引用 WPF 工程，图标键与 `IsVisualPreviewTool()` 用源文件文本检查；实际路由由界面验收覆盖 |
+| Mean 方式的流程校验 | 旧版宽高 ≤ 0 只在运行时报错，现在流程校验也报同一句话（运行时行为与信息不变） |
+
+**验收结果**
+
+- 单元/集成测试：新增 `ImageToolsBatch1Tests` 96 个用例（含 Theory 数据行），其中 39 个为 HALCON 门禁（`Requires=HALCON`）：图像滤波 11 种方式在字节图、彩色图、缩小定义域图上与直接调用算子逐像素一致（宽 7 高 3，固定灰度形态学的高宽顺序）；单个暗点按宽 7 高 1 只沿行方向扩展；Mean 与旧版 `mean_image` 一致且日志不变；不支持的像素类型与随图像尺寸变化的上限给出中文错误；灰度增强 7 种方式（三种输入）与 HALCON 一致；RgbToGray 三通道一致、单通道与双通道报错；PercentStretch 已知直方图（Percent 0 与 `scale_image_max` 一致，Percent 10 与手算一致）、只统计定义域、uint2 拉伸到 65535、空定义域失败、灰度一致输出副本并警告、彩色图报错；ConvertType 四种输出类型；Linear 出界警告。非门禁 57 个：两个工具每种方式的越界校验与运行措辞一致、Mean 错误信息逐字回归、默认参数校验通过且只校验当前方式、逐方式参数显隐、枚举成员顺序与取值、按数字保存与历史文件缺省 `Mean` / `Linear`、输出只有 `Image` 且不与参数同名、工具箱改名与登记、图标键与视觉预览路由。
+- 全量 `dotnet test`（`Category!=Soak`）1095 个通过（基线 999 + 新增 96，含 `examples\*.vflow.json` 加载用例）；排除带 `Requires=HALCON` 标注的用例后 1047 个通过（基线 990 + 新增非门禁 57）。构建 0 错误，唯一警告为既有的 `MatchMeasureBatch4Tests.cs(143)` xUnit2000。
+- 界面验收：脚本经 Windows UI Automation 驱动真实的 `VisionFlow.WpfApp.exe`，43 项检查全部通过（连续两次）：工具箱 `02 图像处理` 中已无“均值滤波”，新建“图像滤波1”“灰度增强1”；侧栏按方式显隐；默认参数运行结果（经下游“区域灰度统计”的最小、最大、均值、标准差）与无界面运行逐字一致；图像滤波编辑窗口方式下拉 11 项，Gauss / Median / Smooth / Bilateral / Emphasize / SobelAmp / GrayClosing / Mean 逐一切换显隐正确，`GaussSize` 下拉 5 项、`SobelSize` 6 项、`SobelType` 12 项；预览后“查看内容”默认为本工具输出，Gauss 与 SobelAmp 的预览画面不同；Median square / 2 / cyclic 运行与无界面一致；灰度增强方式下拉 9 项，Linear（1.5, −20）、Gamma（2.2）、RgbToGray 依次切换，显隐（含 `Encode` 复选框）正确，预览逐次更新，运行结果与无界面一致；保存后两个 `ToolId` 与参数正确，重新加载再运行一致，侧栏回显。
+- 验证中发现并修复的问题（既有行为，经使用方确认本批修复）：通用 / 视觉预览编辑窗口（`WpfGenericToolEditWindow`，约 30 个工具共用）预览后“查看内容”默认选中预览上下文中的**最后一个变量**；预览上下文派生自上次运行，工具不是流程最后一个节点时，最后一个变量属于下游节点（本次为“统计增强.Found”），预览区显示的不是本工具的结果。改为预览成功后默认选中本工具最后一个可显示的输出（图像 / 区域 / 轮廓），没有时取本工具最后一个输出，再没有时沿用原来的最后一个变量。
+- 脚本问题（已修脚本）：初始流程有意引用两个待新建节点，打开时的“流程校验”提示框需要先关闭（并核对提示内容）；一次双击流程树节点后编辑窗口未打开（既有现象），脚本改为重试一次。
