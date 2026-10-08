@@ -556,3 +556,19 @@ Region 形状转换、Region Union1、形态学（`MorphologyTool`）、区域�
 `FailWhenNotFound` 处理；这会改变默认行为（`FailWhenNotFound` 默认 true，原来“空结果也通过”的流程会改为失败），须带回归用例并在评审中确认迁移说明。
 
 状态：**未开始**。
+
+## 2026-10-08 已知边界（未修）：ReduceDomain 限定图像域只用第一个区域对象
+
+现象（IMAGE-TOOLS 第三批探测中发现，2026-10-08，Copilot 主动报告）：“ReduceDomain 限定图像域”（`reduce-domain`，`ReduceDomainTool`）的区域输入含多个区域对象时
+（如阈值分割勾选 `Connection`、区域筛选、区域排序的输出），输出图像的定义域只有**第一个**区域对象，其余区域被静默忽略，不报错也不提示。
+
+复现（HALCON 22.11 实测，`IMAGE-TOOLS-PLAN.md` 第 14 节）：101 × 71 字节图，两个区域对象 (5, 5) ~ (15, 15) 与 (50, 80) ~ (60, 95) 用 `concat_obj` 组成元组传给 `reduce_domain`，
+定义域面积 121（只有第一个矩形）；同样两个矩形 `union2` 成一个区域时面积 297。
+
+原因：HALCON 的 `reduce_domain(Image, Region)` 对多个区域对象只取第一个；`ImageTools.cs` 中 `ReduceDomainTool.Run` 直接把上游区域传给 `reduce_domain`，没有先合并。
+
+影响范围：`ReduceDomainTool` 及其下游——只在区域输入为多对象时出错（单个区域、`Connection` 关闭的阈值结果不受影响）。新工具“图像几何变换”的 `CropRegion` 方式已先 `union1` 再裁剪，不受影响。
+
+处理决定（使用方确认）：**不并入 IMAGE-TOOLS 第三批**，单独立项。建议修法：`ReduceDomainTool` 先对区域 `union1` 再 `reduce_domain`（多对象时定义域变为全部区域的并集），带多对象回归用例；这会改变多对象输入时的现有输出，修复前需确认现场流程是否依赖“只取第一个”的行为。
+
+状态：**未开始**。

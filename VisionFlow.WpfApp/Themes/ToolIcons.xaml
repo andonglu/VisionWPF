@@ -806,6 +806,15 @@
         </Canvas>
     </Viewbox>
 
+    <!-- 手工追加：图像几何变换（虚线原图框，经旋转、缩小后的实线新图框） -->
+    <Viewbox x:Key="ToolIcon.image-geometry" x:Shared="False" Width="24" Height="24" Stretch="Uniform">
+        <Canvas Width="24" Height="24">
+            <Rectangle Canvas.Left="3" Canvas.Top="3" Width="14" Height="14" RadiusX="1" RadiusY="1" Stroke="{DynamicResource TextFillColorPrimaryBrush}" StrokeThickness="1.4" StrokeDashArray="2 1.5" Fill="{x:Null}" />
+            <Path Data="M13,9 L21,12 L18,20 L10,17 Z" Stroke="{DynamicResource AccentFillColorDefaultBrush}" StrokeThickness="1.8" StrokeLineJoin="Round" Fill="{x:Null}" />
+            <Path Data="M7,20 A6,6 0 0 1 3,14" Stroke="{DynamicResource TextFillColorPrimaryBrush}" StrokeThickness="1.4" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Fill="{x:Null}" />
+        </Canvas>
+    </Viewbox>
+
     <Viewbox x:Key="ToolIcon._default" x:Shared="False" Width="24" Height="24" Stretch="Uniform">
         <Canvas Width="24" Height="24">
             <Rectangle Canvas.Left="4" Canvas.Top="4" Width="16" Height="16" RadiusX="2" RadiusY="2" Stroke="{DynamicResource TextFillColorPrimaryBrush}" StrokeThickness="1.8" Fill="{x:Null}" />

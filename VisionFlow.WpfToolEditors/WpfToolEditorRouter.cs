@@ -92,6 +92,7 @@ namespace VisionFlow.WpfToolEditors
         {
             return tool is MeanImageTool
                 || tool is GrayEnhanceTool
+                || tool is ImageGeometryTool
                 || tool is AffineTransformImageTool
                 || tool is ReduceDomainTool
                 || tool is AddSubImageTool
