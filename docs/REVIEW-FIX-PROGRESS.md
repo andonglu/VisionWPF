@@ -572,3 +572,16 @@ Region 形状转换、Region Union1、形态学（`MorphologyTool`）、区域�
 处理决定（使用方确认）：**不并入 IMAGE-TOOLS 第三批**，单独立项。建议修法：`ReduceDomainTool` 先对区域 `union1` 再 `reduce_domain`（多对象时定义域变为全部区域的并集），带多对象回归用例；这会改变多对象输入时的现有输出，修复前需确认现场流程是否依赖“只取第一个”的行为。
 
 状态：**未开始**。
+
+
+## 2026-10-09 RECOGNITION 识别工具线完成（RC-01 ~ RC-04）
+
+识别补充开发计划（`docs\RECOGNITION-TOOLS-PLAN.md`）全部完成，分支 `feature/recognition-tools`：
+
+- RC-01"一维码"扩展为**读码**（`barcode1d` 不变）：二维码（8 码制 × 3 识别强度）、多码读取、ISO 15416/15415 质量评级、模型训练保存；显示名"一维码"→"读码"（ID/类型名不变）。
+- 新增**字符识别**（`ocr`，TextModel / Deep OCR，ROI + 定位矩阵跟随、字符集过滤、期望格式正则）。
+- 新增**颜色识别**（`color-classify`，RGB/HSV/CIELAB 均值比对参考色）。
+- 新增**颜色分割**（`color-segment`，MLP/GMM 逐像素分类，框选样本训练、序列化保存）。
+- 4 个专用 WPF 编辑窗口 + 图标；测试项目新增仅测试依赖 ZXing.Net / System.Drawing.Common（使用方批准）。
+
+算子探测（计划文档第 12 节）发现并修正了初测错误：2D `stop_after_result_num` 不传参数只返回 1 个码。验证：全量 1320 通过 / 0 失败（基线 1254 + 66 新用例）。UI 交互待人工验收。详见 `docs\RECOGNITION-TOOLS-PLAN.md` 第 13 节。

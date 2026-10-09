@@ -215,8 +215,14 @@ namespace VisionFlow.Editing
                 new ToolNode(new GeometryRelationTool(NextModuleName("几何关系")))));
             Register(new ToolboxItem("angle-convert", "05 几何测量", "单位换算", () =>
                 new ToolNode(new AngleConvertTool(NextModuleName("角度换算")))));
-            Register(new ToolboxItem("barcode1d", "06 识别工具", "一维码", () =>
-                new ToolNode(new Barcode1DTool(NextModuleName("一维码")))));
+            Register(new ToolboxItem("barcode1d", "06 识别工具", "读码", () =>
+                new ToolNode(new Barcode1DTool(NextModuleName("读码")))));
+            Register(new ToolboxItem("ocr", "06 识别工具", "字符识别", () =>
+                new ToolNode(new OcrTool(NextModuleName("字符识别")))));
+            Register(new ToolboxItem("color-classify", "06 识别工具", "颜色识别", () =>
+                new ToolNode(new ColorClassifyTool(NextModuleName("颜色识别")))));
+            Register(new ToolboxItem("color-segment", "06 识别工具", "颜色分割", () =>
+                new ToolNode(new ColorSegmentTool(NextModuleName("颜色分割")))));
             Register(new ToolboxItem("range-classify", "07 数据与判定", "数值区间分类", () =>
                 new ToolNode(new RangeClassifyTool(NextModuleName("区间分类")))));
             Register(new ToolboxItem("expression-calc", "07 数据与判定", "变量计算", () =>

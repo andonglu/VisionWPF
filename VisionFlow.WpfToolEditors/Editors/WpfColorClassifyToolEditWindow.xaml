@@ -1,0 +1,137 @@
+<Window x:Class="VisionFlow.WpfToolEditors.Editors.WpfColorClassifyToolEditWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:wfi="clr-namespace:System.Windows.Forms.Integration;assembly=WindowsFormsIntegration"
+        xmlns:vfc="clr-namespace:VisionFlow.Controls;assembly=VisionFlow.Controls"
+        Title="颜色识别"
+        Width="1280"
+        Height="900"
+        MinWidth="1080"
+        MinHeight="760"
+        WindowStartupLocation="CenterOwner">
+    <Grid Margin="24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="420" />
+        </Grid.ColumnDefinitions>
+
+        <Grid Grid.Row="0" Grid.Column="0" Margin="0,0,24,0">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="3*" />
+                <RowDefinition Height="2*" />
+            </Grid.RowDefinitions>
+            <Border Grid.Row="0" Style="{StaticResource PanelBorderStyle}" Margin="0,0,0,16">
+                <DockPanel>
+                    <Grid DockPanel.Dock="Top" Margin="0,0,0,8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="图像（框选样本区域自动取均值追加参考颜色）" Style="{StaticResource EditorSectionTitleStyle}" />
+                        <Button x:Name="SampleButton" Grid.Column="1" Content="框选样本" Margin="8,0,0,0" Click="Sample_Click" />
+                        <Button Grid.Column="2" Content="执行测试" Margin="8,0,0,0" Click="TestRun_Click" />
+                    </Grid>
+                    <StackPanel DockPanel.Dock="Bottom" Margin="0,8,0,0">
+                        <TextBlock Text="参考颜色（代表色块）" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                        <WrapPanel x:Name="ReferenceLegend" Margin="0,4,0,0" />
+                    </StackPanel>
+                    <wfi:WindowsFormsHost>
+                        <vfc:HalconImageView x:Name="PreviewImageView" />
+                    </wfi:WindowsFormsHost>
+                </DockPanel>
+            </Border>
+            <Border Grid.Row="1" Style="{StaticResource PanelBorderStyle}">
+                <DockPanel>
+                    <TextBlock DockPanel.Dock="Top" Text="识别结果（每个区域的颜色标签与距离；均值色块已换算回 RGB 显示）" Style="{StaticResource EditorSectionTitleStyle}" Margin="0,0,0,8" />
+                    <TextBlock x:Name="SummaryText" DockPanel.Dock="Bottom" Margin="0,8,0,0" TextWrapping="Wrap" FontWeight="SemiBold" />
+                    <ListView x:Name="ResultList">
+                        <ListView.View>
+                            <GridView>
+                                <GridViewColumn Header="区域" DisplayMemberBinding="{Binding Index}" Width="48" />
+                                <GridViewColumn Header="标签" DisplayMemberBinding="{Binding Label}" Width="120" />
+                                <GridViewColumn Header="距离" DisplayMemberBinding="{Binding Distance}" Width="90" />
+                                <GridViewColumn Header="均值色" Width="70">
+                                    <GridViewColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <Border Width="28" Height="14" CornerRadius="2" BorderBrush="{DynamicResource TextFillColorSecondaryBrush}"
+                                                    BorderThickness="1" Background="{Binding MeanBrush}" />
+                                        </DataTemplate>
+                                    </GridViewColumn.CellTemplate>
+                                </GridViewColumn>
+                            </GridView>
+                        </ListView.View>
+                    </ListView>
+                </DockPanel>
+            </Border>
+        </Grid>
+
+        <ScrollViewer Grid.Row="0" Grid.Column="1" VerticalScrollBarVisibility="Auto">
+            <StackPanel>
+                <Border Style="{StaticResource EditorCardStyle}">
+                    <StackPanel>
+                        <TextBlock Text="输入" Style="{StaticResource EditorSectionTitleStyle}" />
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="130" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="模块名" Style="{StaticResource EditorFieldLabelStyle}" />
+                            <TextBox x:Name="ModuleNameText" Grid.Row="0" Grid.Column="1" Margin="0,0,0,8" />
+                            <TextBlock Grid.Row="1" Grid.Column="0" Text="图像" Style="{StaticResource EditorFieldLabelStyle}" />
+                            <ComboBox x:Name="ImagePathCombo" Grid.Row="1" Grid.Column="1" IsEditable="True" Margin="0,0,0,8" SelectionChanged="ImagePathCombo_SelectionChanged" />
+                            <TextBlock Grid.Row="2" Grid.Column="0" Text="区域" Style="{StaticResource EditorFieldLabelStyle}" />
+                            <ComboBox x:Name="RegionPathCombo" Grid.Row="2" Grid.Column="1" IsEditable="True" Margin="0,0,0,8" />
+                        </Grid>
+                        <TextBlock Margin="0,4,0,0" TextWrapping="Wrap" Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                   Text="区域为必填：逐个区域取均值颜色与参考颜色比较（引用上游的区域输出）。" />
+                    </StackPanel>
+                </Border>
+
+                <Border Style="{StaticResource EditorCardStyle}">
+                    <StackPanel>
+                        <TextBlock Text="识别参数" Style="{StaticResource EditorSectionTitleStyle}" />
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="130" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="色彩空间" Style="{StaticResource EditorFieldLabelStyle}" />
+                            <ComboBox x:Name="ColorSpaceCombo" Grid.Row="0" Grid.Column="1" Margin="0,0,0,8" SelectionChanged="ColorSpaceCombo_SelectionChanged" />
+                            <TextBlock Grid.Row="1" Grid.Column="0" Text="References" Style="{StaticResource EditorFieldLabelStyle}" />
+                            <TextBox x:Name="ReferencesText" Grid.Row="1" Grid.Column="1" AcceptsReturn="True" VerticalScrollBarVisibility="Auto"
+                                     MinHeight="140" TextChanged="ReferencesText_TextChanged" />
+                            <TextBlock Grid.Row="2" Grid.Column="0" Text="UnknownLabel" Style="{StaticResource EditorFieldLabelStyle}" />
+                            <TextBox x:Name="UnknownLabelText" Grid.Row="2" Grid.Column="1" Margin="0,8,0,8" />
+                            <CheckBox x:Name="FailWhenNotFoundCheck" Grid.Row="3" Grid.Column="1" Content="FailWhenNotFound（无区域时失败）" Margin="0,4,0,0" />
+                        </Grid>
+                        <TextBlock Margin="0,4,0,0" TextWrapping="Wrap" Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                   Text="每行一个参考颜色：名称|通道1|通道2|通道3|允许距离（允许距离可省略，默认 60），通道值为所选色彩空间的值。点击“框选样本”后在图像上框一个区域，自动取均值追加一行（名称默认 颜色N，可再编辑）。" />
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+        </ScrollViewer>
+
+        <DockPanel Grid.Row="1" Grid.ColumnSpan="2" LastChildFill="False" Margin="0,24,0,0">
+            <TextBlock x:Name="StatusText" VerticalAlignment="Center" TextWrapping="Wrap" MaxWidth="900"
+                       Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+            <Button DockPanel.Dock="Right" Content="取消" MinWidth="96" Margin="8,0,0,0" Click="Cancel_Click" />
+            <Button DockPanel.Dock="Right" Content="确定" MinWidth="96" Style="{StaticResource AccentButtonStyle}" Click="Ok_Click" />
+        </DockPanel>
+    </Grid>
+</Window>

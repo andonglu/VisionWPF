@@ -88,6 +88,23 @@ namespace VisionFlow.WpfToolEditors
             {
                 return new WpfPolarUnwrapToolEditWindow(polarUnwrapTool, context);
             }
+            // 识别线四个工具走专用窗口：读码（含二维码训练）、字符识别、颜色识别（框选样本）、颜色分割（类管理与训练）
+            if (tool is Barcode1DTool barcodeTool)
+            {
+                return new WpfBarcodeToolEditWindow(barcodeTool, context);
+            }
+            if (tool is OcrTool ocrTool)
+            {
+                return new WpfOcrToolEditWindow(ocrTool, context);
+            }
+            if (tool is ColorClassifyTool colorClassifyTool)
+            {
+                return new WpfColorClassifyToolEditWindow(colorClassifyTool, context);
+            }
+            if (tool is ColorSegmentTool colorSegmentTool)
+            {
+                return new WpfColorSegmentToolEditWindow(colorSegmentTool, context);
+            }
             return IsVisualPreviewTool(tool)
                 ? (Window)new WpfVisualToolEditWindow(tool, context)
                 : new WpfGenericToolEditWindow(tool, context);

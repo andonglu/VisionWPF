@@ -85,6 +85,9 @@ namespace VisionFlow.Tools
             FlowSerializer.RegisterToolType(typeof(AlignmentOffsetTool), "alignment-offset");
             FlowSerializer.RegisterToolType(typeof(ImageRectifyTool), "image-rectify");
             FlowSerializer.RegisterToolType(typeof(Barcode1DTool), "barcode1d", "ldwelding.barcode1d");
+            FlowSerializer.RegisterToolType(typeof(OcrTool), "ocr");
+            FlowSerializer.RegisterToolType(typeof(ColorClassifyTool), "color-classify");
+            FlowSerializer.RegisterToolType(typeof(ColorSegmentTool), "color-segment");
         }
     }
 }
