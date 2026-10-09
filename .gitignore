@@ -13,3 +13,4 @@
 *.pdb
 
 src/Image/temp.shm
+.workbuddy-ai/

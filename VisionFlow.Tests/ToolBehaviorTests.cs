@@ -47,11 +47,17 @@ public class ToolBehaviorTests
         Assert.Contains(typeof(LineFollowMeasureTool), policyTypes);
         Assert.Contains(typeof(SelectRegionTool), policyTypes);
         Assert.Contains(typeof(Barcode1DTool), policyTypes);
+        Assert.Contains(typeof(ColorClassifyTool), policyTypes);
+        Assert.Contains(typeof(ColorSegmentTool), policyTypes);
         foreach (Type type in policyTypes)
         {
             var tool = (INotFoundPolicy)Activator.CreateInstance(type, "工具")!;
             Assert.True(tool.FailWhenNotFound, $"{type.Name} 默认应在未找到时失败");
-            Assert.Contains(ToolMetadata.GetOutputs(type), o => o.Name == "Found" && o.Type == VariableType.Bool);
+            // 颜色识别的“未找到”信号是 Count=0（输出无 Found，见 RECOGNITION-TOOLS-PLAN RC-03），其余工具都有 Found 输出
+            if (type != typeof(ColorClassifyTool))
+            {
+                Assert.Contains(ToolMetadata.GetOutputs(type), o => o.Name == "Found" && o.Type == VariableType.Bool);
+            }
         }
     }
 

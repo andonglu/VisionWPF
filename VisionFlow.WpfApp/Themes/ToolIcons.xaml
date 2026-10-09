@@ -845,6 +845,41 @@
         </Canvas>
     </Viewbox>
 
+    <Viewbox x:Key="ToolIcon.barcode1d" x:Shared="False" Width="24" Height="24" Stretch="Uniform">
+        <Canvas Width="24" Height="24">
+            <Path Data="M4,6 V18 M7.5,6 V18 M11,6 V18 M15,6 V18 M18.5,6 V18" Stroke="{DynamicResource TextFillColorPrimaryBrush}" StrokeThickness="1.8" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Fill="{x:Null}" />
+            <Path Data="M13,6 V18" Stroke="{DynamicResource AccentFillColorDefaultBrush}" StrokeThickness="1.8" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Fill="{x:Null}" />
+            <Line X1="3" Y1="20" X2="21" Y2="20" Stroke="{DynamicResource TextFillColorPrimaryBrush}" StrokeThickness="1.8" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Fill="{x:Null}" />
+        </Canvas>
+    </Viewbox>
+
+    <Viewbox x:Key="ToolIcon.ocr" x:Shared="False" Width="24" Height="24" Stretch="Uniform">
+        <Canvas Width="24" Height="24">
+            <Path Data="M6,18 L11.2,5.5 L16.4,18 M8.3,13.4 L14.1,13.4" Stroke="{DynamicResource TextFillColorPrimaryBrush}" StrokeThickness="1.8" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Fill="{x:Null}" />
+            <Path Data="M17,16 L21.5,20.5 M20.2,17.5 L21.5,16.2 L19.3,14 L18,15.3" Stroke="{DynamicResource AccentFillColorDefaultBrush}" StrokeThickness="1.8" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Fill="{x:Null}" />
+        </Canvas>
+    </Viewbox>
+
+    <Viewbox x:Key="ToolIcon.color-classify" x:Shared="False" Width="24" Height="24" Stretch="Uniform">
+        <Canvas Width="24" Height="24">
+            <Ellipse Canvas.Left="3.5" Canvas.Top="6" Width="6" Height="6" Stroke="{x:Null}" StrokeThickness="1.8" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Fill="#D9C42B1C" />
+            <Ellipse Canvas.Left="9" Canvas.Top="6" Width="6" Height="6" Stroke="{x:Null}" StrokeThickness="1.8" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Fill="#D92E7D32" />
+            <Ellipse Canvas.Left="14.5" Canvas.Top="6" Width="6" Height="6" Stroke="{x:Null}" StrokeThickness="1.8" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Fill="#D91F4E79" />
+            <Path Data="M4,17 H20 M4,17 L6,15.2 M20,17 L18,15.2" Stroke="{DynamicResource TextFillColorPrimaryBrush}" StrokeThickness="1.8" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Fill="{x:Null}" />
+            <Path Data="M11,17 L12.2,14.6 L14.6,14.2" Stroke="{DynamicResource AccentFillColorDefaultBrush}" StrokeThickness="1.8" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Fill="{x:Null}" />
+        </Canvas>
+    </Viewbox>
+
+    <Viewbox x:Key="ToolIcon.color-segment" x:Shared="False" Width="24" Height="24" Stretch="Uniform">
+        <Canvas Width="24" Height="24">
+            <Rectangle Canvas.Left="3" Canvas.Top="3" Width="18" Height="18" RadiusX="1.5" RadiusY="1.5" Stroke="{DynamicResource TextFillColorPrimaryBrush}" StrokeThickness="1.8" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Fill="{x:Null}" />
+            <Path Data="M3,12 H12 V3 Z" Stroke="{x:Null}" StrokeThickness="1.8" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Fill="#D9C42B1C" />
+            <Path Data="M12,3 H21 V12 H12 Z" Stroke="{x:Null}" StrokeThickness="1.8" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Fill="#D92E7D32" />
+            <Path Data="M3,12 H12 V21 H3 Z" Stroke="{x:Null}" StrokeThickness="1.8" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Fill="#D91F4E79" />
+            <Path Data="M12,12 H21 V21 H12 Z" Stroke="{x:Null}" StrokeThickness="1.8" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Fill="#D98A8A8A" />
+        </Canvas>
+    </Viewbox>
+
     <Viewbox x:Key="ToolIcon._default" x:Shared="False" Width="24" Height="24" Stretch="Uniform">
         <Canvas Width="24" Height="24">
             <Rectangle Canvas.Left="4" Canvas.Top="4" Width="16" Height="16" RadiusX="2" RadiusY="2" Stroke="{DynamicResource TextFillColorPrimaryBrush}" StrokeThickness="1.8" Fill="{x:Null}" />

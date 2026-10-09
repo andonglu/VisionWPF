@@ -1,0 +1,168 @@
+<Window x:Class="VisionFlow.WpfToolEditors.Editors.WpfOcrToolEditWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:wfi="clr-namespace:System.Windows.Forms.Integration;assembly=WindowsFormsIntegration"
+        xmlns:vfc="clr-namespace:VisionFlow.Controls;assembly=VisionFlow.Controls"
+        Title="字符识别"
+        Width="1280"
+        Height="900"
+        MinWidth="1080"
+        MinHeight="760"
+        WindowStartupLocation="CenterOwner">
+    <Grid Margin="24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="420" />
+        </Grid.ColumnDefinitions>
+
+        <Grid Grid.Row="0" Grid.Column="0" Margin="0,0,24,0">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="3*" />
+                <RowDefinition Height="2*" />
+            </Grid.RowDefinitions>
+            <Border Grid.Row="0" Style="{StaticResource PanelBorderStyle}" Margin="0,0,0,16">
+                <DockPanel>
+                    <Grid DockPanel.Dock="Top" Margin="0,0,0,8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="图像（青色叠加为识别到的字符区域 / 词轮廓；DeepOcr 的字符区域按词框均分近似，仅用于定位参考）" Style="{StaticResource EditorSectionTitleStyle}" />
+                        <Button Grid.Column="1" Content="执行测试" Click="TestRun_Click" />
+                    </Grid>
+                    <TextBlock x:Name="OverlayInfoText" DockPanel.Dock="Bottom" Margin="0,8,0,0" TextWrapping="Wrap"
+                               Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                    <wfi:WindowsFormsHost>
+                        <vfc:HalconImageView x:Name="PreviewImageView" />
+                    </wfi:WindowsFormsHost>
+                </DockPanel>
+            </Border>
+            <Border Grid.Row="1" Style="{StaticResource PanelBorderStyle}">
+                <DockPanel>
+                    <TextBlock DockPanel.Dock="Top" Text="识别结果（红色为低置信度字符）" Style="{StaticResource EditorSectionTitleStyle}" Margin="0,0,0,8" />
+                    <TextBlock x:Name="SummaryText" DockPanel.Dock="Bottom" Margin="0,8,0,0" TextWrapping="Wrap" FontWeight="SemiBold" />
+                    <ListView x:Name="ResultList">
+                        <ListView.ItemContainerStyle>
+                            <Style TargetType="ListViewItem">
+                                <Setter Property="Foreground" Value="{Binding Brush}" />
+                            </Style>
+                        </ListView.ItemContainerStyle>
+                        <ListView.View>
+                            <GridView>
+                                <GridViewColumn Header="序号" DisplayMemberBinding="{Binding Index}" Width="48" />
+                                <GridViewColumn Header="字符" DisplayMemberBinding="{Binding Char}" Width="70" />
+                                <GridViewColumn Header="置信度" DisplayMemberBinding="{Binding Confidence}" Width="90" />
+                                <GridViewColumn Header="所在行" DisplayMemberBinding="{Binding Line}" Width="200" />
+                            </GridView>
+                        </ListView.View>
+                    </ListView>
+                </DockPanel>
+            </Border>
+        </Grid>
+
+        <ScrollViewer Grid.Row="0" Grid.Column="1" VerticalScrollBarVisibility="Auto">
+            <StackPanel>
+                <Border Style="{StaticResource EditorCardStyle}">
+                    <StackPanel>
+                        <TextBlock Text="输入" Style="{StaticResource EditorSectionTitleStyle}" />
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="130" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="模块名" Style="{StaticResource EditorFieldLabelStyle}" />
+                            <TextBox x:Name="ModuleNameText" Grid.Row="0" Grid.Column="1" Margin="0,0,0,8" />
+                            <TextBlock Grid.Row="1" Grid.Column="0" Text="图像" Style="{StaticResource EditorFieldLabelStyle}" />
+                            <ComboBox x:Name="ImagePathCombo" Grid.Row="1" Grid.Column="1" IsEditable="True" Margin="0,0,0,8" SelectionChanged="ImagePathCombo_SelectionChanged" />
+                            <TextBlock Grid.Row="2" Grid.Column="0" Text="ROI 区域" Style="{StaticResource EditorFieldLabelStyle}" />
+                            <ComboBox x:Name="RegionPathCombo" Grid.Row="2" Grid.Column="1" IsEditable="True" Margin="0,0,0,8" />
+                            <TextBlock Grid.Row="3" Grid.Column="0" Text="变换矩阵" Style="{StaticResource EditorFieldLabelStyle}" />
+                            <ComboBox x:Name="MatrixPathCombo" Grid.Row="3" Grid.Column="1" IsEditable="True" Margin="0,0,0,8" />
+                        </Grid>
+                        <TextBlock Margin="0,4,0,0" TextWrapping="Wrap" Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                   Text="ROI 区域可选：只在区域内识别。变换矩阵可选（通常接模板匹配的 BestHomMat）：ROI 按矩阵变换到当前位置，并把文字旋转为水平后识别。" />
+                    </StackPanel>
+                </Border>
+
+                <Border Style="{StaticResource EditorCardStyle}">
+                    <StackPanel>
+                        <TextBlock Text="识别参数" Style="{StaticResource EditorSectionTitleStyle}" />
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="130" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="Engine" Style="{StaticResource EditorFieldLabelStyle}" />
+                            <ComboBox x:Name="EngineCombo" Grid.Row="0" Grid.Column="1" Margin="0,0,0,8" SelectionChanged="EngineCombo_SelectionChanged" />
+
+                            <TextBlock x:Name="ClassifierLabel" Grid.Row="1" Grid.Column="0" Text="Classifier" Style="{StaticResource EditorFieldLabelStyle}" />
+                            <ComboBox x:Name="ClassifierCombo" Grid.Row="1" Grid.Column="1" IsEditable="True" Margin="0,0,0,8" />
+                            <TextBlock x:Name="PolarityLabel" Grid.Row="2" Grid.Column="0" Text="Polarity" Style="{StaticResource EditorFieldLabelStyle}" />
+                            <ComboBox x:Name="PolarityCombo" Grid.Row="2" Grid.Column="1" IsEditable="True" Margin="0,0,0,8" />
+                            <CheckBox x:Name="DotPrintCheck" Grid.Row="3" Grid.Column="1" Content="DotPrint（喷码点阵字符）" Margin="0,4,0,8" />
+                            <TextBlock x:Name="MinCharHeightLabel" Grid.Row="4" Grid.Column="0" Text="MinCharHeight" Style="{StaticResource EditorFieldLabelStyle}" />
+                            <TextBox x:Name="MinCharHeightText" Grid.Row="4" Grid.Column="1" Margin="0,0,0,8" />
+                            <TextBlock x:Name="MaxCharHeightLabel" Grid.Row="5" Grid.Column="0" Text="MaxCharHeight" Style="{StaticResource EditorFieldLabelStyle}" />
+                            <TextBox x:Name="MaxCharHeightText" Grid.Row="5" Grid.Column="1" Margin="0,0,0,8" />
+                            <TextBlock x:Name="MinStrokeWidthLabel" Grid.Row="6" Grid.Column="0" Text="MinStrokeWidth" Style="{StaticResource EditorFieldLabelStyle}" />
+                            <TextBox x:Name="MinStrokeWidthText" Grid.Row="6" Grid.Column="1" Margin="0,0,0,8" />
+                            <TextBlock x:Name="MaxStrokeWidthLabel" Grid.Row="7" Grid.Column="0" Text="MaxStrokeWidth" Style="{StaticResource EditorFieldLabelStyle}" />
+                            <TextBox x:Name="MaxStrokeWidthText" Grid.Row="7" Grid.Column="1" Margin="0,0,0,8" />
+                            <TextBlock x:Name="TextLineSeparatorsLabel" Grid.Row="8" Grid.Column="0" Text="行分隔符" Style="{StaticResource EditorFieldLabelStyle}" />
+                            <TextBox x:Name="TextLineSeparatorsText" Grid.Row="8" Grid.Column="1" Margin="0,0,0,8" />
+
+                            <TextBlock x:Name="ModeLabel" Grid.Row="9" Grid.Column="0" Text="Mode" Style="{StaticResource EditorFieldLabelStyle}" />
+                            <ComboBox x:Name="ModeCombo" Grid.Row="9" Grid.Column="1" IsEditable="True" Margin="0,0,0,8" />
+                            <TextBlock x:Name="DeviceLabel" Grid.Row="10" Grid.Column="0" Text="Device" Style="{StaticResource EditorFieldLabelStyle}" />
+                            <ComboBox x:Name="DeviceCombo" Grid.Row="10" Grid.Column="1" IsEditable="True" Margin="0,0,0,8" />
+                            <TextBlock x:Name="ConfidenceThresholdLabel" Grid.Row="11" Grid.Column="0" Text="置信度阈值" Style="{StaticResource EditorFieldLabelStyle}" />
+                            <TextBox x:Name="ConfidenceThresholdText" Grid.Row="11" Grid.Column="1" Margin="0,0,0,8" />
+
+                            <TextBlock Grid.Row="12" Grid.Column="0" Text="Alphabet" Style="{StaticResource EditorFieldLabelStyle}" />
+                            <TextBox x:Name="AlphabetText" Grid.Row="12" Grid.Column="1" Margin="0,0,0,8" />
+                            <TextBlock Grid.Row="13" Grid.Column="0" Text="ExpectedPattern" Style="{StaticResource EditorFieldLabelStyle}" />
+                            <TextBox x:Name="ExpectedPatternText" Grid.Row="13" Grid.Column="1" Margin="0,0,0,8" />
+                            <CheckBox x:Name="FailWhenNotFoundCheck" Grid.Row="14" Grid.Column="1" Content="FailWhenNotFound（未识别到时失败）" Margin="0,4,0,0" />
+                        </Grid>
+                        <TextBlock Margin="0,4,0,0" TextWrapping="Wrap" Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                   Text="TextModel 引擎用传统分类器自动分割字符；DeepOcr 引擎自动检测文字区域（需要深度学习授权）。字符高度 / 笔画宽度填 0 表示不限制。ExpectedPattern 为可选正则（如 ^\d{8}$），只影响 PatternOk 输出。DeepOcr 的置信度阈值在 0~1 之间，0 表示不过滤。" />
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+        </ScrollViewer>
+
+        <DockPanel Grid.Row="1" Grid.ColumnSpan="2" LastChildFill="False" Margin="0,24,0,0">
+            <TextBlock x:Name="StatusText" VerticalAlignment="Center" TextWrapping="Wrap" MaxWidth="900"
+                       Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+            <Button DockPanel.Dock="Right" Content="取消" MinWidth="96" Margin="8,0,0,0" Click="Cancel_Click" />
+            <Button DockPanel.Dock="Right" Content="确定" MinWidth="96" Style="{StaticResource AccentButtonStyle}" Click="Ok_Click" />
+        </DockPanel>
+    </Grid>
+</Window>

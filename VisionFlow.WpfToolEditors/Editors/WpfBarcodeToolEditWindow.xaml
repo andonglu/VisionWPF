@@ -1,0 +1,135 @@
+<Window x:Class="VisionFlow.WpfToolEditors.Editors.WpfBarcodeToolEditWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:wfi="clr-namespace:System.Windows.Forms.Integration;assembly=WindowsFormsIntegration"
+        xmlns:vfc="clr-namespace:VisionFlow.Controls;assembly=VisionFlow.Controls"
+        Title="读码"
+        Width="1280"
+        Height="900"
+        MinWidth="1080"
+        MinHeight="760"
+        WindowStartupLocation="CenterOwner">
+    <Grid Margin="24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="420" />
+        </Grid.ColumnDefinitions>
+
+        <Grid Grid.Row="0" Grid.Column="0" Margin="0,0,24,0">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="3*" />
+                <RowDefinition Height="2*" />
+            </Grid.RowDefinitions>
+            <Border Grid.Row="0" Style="{StaticResource PanelBorderStyle}" Margin="0,0,0,16">
+                <DockPanel>
+                    <Grid DockPanel.Dock="Top" Margin="0,0,0,8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="图像（青色叠加为识别到的码区域 / 符号轮廓）" Style="{StaticResource EditorSectionTitleStyle}" />
+                        <Button x:Name="TrainButton" Grid.Column="1" Content="用当前图像训练" Margin="8,0,0,0" Click="Train_Click" />
+                        <Button Grid.Column="2" Content="执行测试" Margin="8,0,0,0" Click="TestRun_Click" />
+                    </Grid>
+                    <TextBlock x:Name="TrainInfoText" DockPanel.Dock="Bottom" Margin="0,8,0,0" TextWrapping="Wrap"
+                               Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                    <wfi:WindowsFormsHost>
+                        <vfc:HalconImageView x:Name="PreviewImageView" />
+                    </wfi:WindowsFormsHost>
+                </DockPanel>
+            </Border>
+            <Border Grid.Row="1" Style="{StaticResource PanelBorderStyle}">
+                <DockPanel>
+                    <TextBlock DockPanel.Dock="Top" Text="识别结果" Style="{StaticResource EditorSectionTitleStyle}" Margin="0,0,0,8" />
+                    <TextBlock x:Name="SummaryText" DockPanel.Dock="Bottom" Margin="0,8,0,0" TextWrapping="Wrap" FontWeight="SemiBold" />
+                    <ListView x:Name="ResultList">
+                        <ListView.View>
+                            <GridView>
+                                <GridViewColumn Header="序号" DisplayMemberBinding="{Binding Index}" Width="48" />
+                                <GridViewColumn Header="内容" DisplayMemberBinding="{Binding Content}" Width="260" />
+                                <GridViewColumn Header="码制" DisplayMemberBinding="{Binding CodeType}" Width="150" />
+                                <GridViewColumn Header="质量等级" DisplayMemberBinding="{Binding Grade}" Width="80" />
+                            </GridView>
+                        </ListView.View>
+                    </ListView>
+                </DockPanel>
+            </Border>
+        </Grid>
+
+        <ScrollViewer Grid.Row="0" Grid.Column="1" VerticalScrollBarVisibility="Auto">
+            <StackPanel>
+                <Border Style="{StaticResource EditorCardStyle}">
+                    <StackPanel>
+                        <TextBlock Text="输入" Style="{StaticResource EditorSectionTitleStyle}" />
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="130" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="模块名" Style="{StaticResource EditorFieldLabelStyle}" />
+                            <TextBox x:Name="ModuleNameText" Grid.Row="0" Grid.Column="1" Margin="0,0,0,8" />
+                            <TextBlock Grid.Row="1" Grid.Column="0" Text="图像" Style="{StaticResource EditorFieldLabelStyle}" />
+                            <ComboBox x:Name="ImagePathCombo" Grid.Row="1" Grid.Column="1" IsEditable="True" Margin="0,0,0,8" SelectionChanged="ImagePathCombo_SelectionChanged" />
+                            <TextBlock Grid.Row="2" Grid.Column="0" Text="ROI 区域" Style="{StaticResource EditorFieldLabelStyle}" />
+                            <ComboBox x:Name="RegionPathCombo" Grid.Row="2" Grid.Column="1" IsEditable="True" Margin="0,0,0,8" />
+                        </Grid>
+                        <TextBlock Margin="0,4,0,0" TextWrapping="Wrap" Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                   Text="ROI 区域可选：配置后只在区域内查找条码（引用上游的区域输出）。" />
+                    </StackPanel>
+                </Border>
+
+                <Border Style="{StaticResource EditorCardStyle}">
+                    <StackPanel>
+                        <TextBlock Text="识别参数" Style="{StaticResource EditorSectionTitleStyle}" />
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="130" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="读码方式" Style="{StaticResource EditorFieldLabelStyle}" />
+                            <ComboBox x:Name="CodeKindCombo" Grid.Row="0" Grid.Column="1" Margin="0,0,0,8" SelectionChanged="CodeKindCombo_SelectionChanged" />
+                            <TextBlock x:Name="CodeTypeLabel" Grid.Row="1" Grid.Column="0" Text="一维码码制" Style="{StaticResource EditorFieldLabelStyle}" />
+                            <ComboBox x:Name="CodeTypeCombo" Grid.Row="1" Grid.Column="1" IsEditable="True" Margin="0,0,0,8" />
+                            <TextBlock x:Name="DataCodeTypeLabel" Grid.Row="2" Grid.Column="0" Text="二维码码制" Style="{StaticResource EditorFieldLabelStyle}" />
+                            <ComboBox x:Name="DataCodeTypeCombo" Grid.Row="2" Grid.Column="1" IsEditable="True" Margin="0,0,0,8" />
+                            <TextBlock x:Name="RecognitionLevelLabel" Grid.Row="3" Grid.Column="0" Text="识别强度" Style="{StaticResource EditorFieldLabelStyle}" />
+                            <ComboBox x:Name="RecognitionLevelCombo" Grid.Row="3" Grid.Column="1" IsEditable="True" Margin="0,0,0,8" />
+                            <TextBlock Grid.Row="4" Grid.Column="0" Text="MaxCodes" Style="{StaticResource EditorFieldLabelStyle}" />
+                            <TextBox x:Name="MaxCodesText" Grid.Row="4" Grid.Column="1" Margin="0,0,0,8" />
+                            <CheckBox x:Name="GradeQualityCheck" Grid.Row="5" Grid.Column="1" Content="GradeQuality（输出质量等级）" Margin="0,4,0,8" />
+                            <CheckBox x:Name="FailWhenNotFoundCheck" Grid.Row="6" Grid.Column="1" Content="FailWhenNotFound（未识别到时失败）" Margin="0,4,0,0" />
+                        </Grid>
+                        <TextBlock Margin="0,4,0,0" TextWrapping="Wrap" Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                   Text="MaxCodes 为 0 表示读取全部。质量等级为 ISO/IEC 15416（一维码）/ 15415（二维码）总体等级 0~4（F~A），需勾选 GradeQuality。一维码码制可填 HALCON 条码类型名（auto 表示自动）。" />
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+        </ScrollViewer>
+
+        <DockPanel Grid.Row="1" Grid.ColumnSpan="2" LastChildFill="False" Margin="0,24,0,0">
+            <TextBlock x:Name="StatusText" VerticalAlignment="Center" TextWrapping="Wrap" MaxWidth="900"
+                       Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+            <Button DockPanel.Dock="Right" Content="取消" MinWidth="96" Margin="8,0,0,0" Click="Cancel_Click" />
+            <Button DockPanel.Dock="Right" Content="确定" MinWidth="96" Style="{StaticResource AccentButtonStyle}" Click="Ok_Click" />
+        </DockPanel>
+    </Grid>
+</Window>
