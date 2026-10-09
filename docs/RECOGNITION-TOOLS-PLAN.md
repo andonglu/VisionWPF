@@ -258,4 +258,4 @@ HALCON 版本基线：20.11 及以上（Deep OCR 在 20.11 中可用）。
 
 - 4 个编辑窗口的 UI 交互（框选、叠加渲染、深/浅色主题观感）需人工验收，清单见提交说明。
 - Deep OCR 设备参数（GPU）在 HALCON 22.11 不可用：选 GPU 时预热报中文错误（实测路径有测试覆盖）。
-- `examples\*.vflow.json` 未新增识别示例流程（后续可选补一个读码示例）。
+- 已新增 4 个识别示例流程：`datacode-default-settings.vflow.json`、`ocr-expiration-date.vflow.json`、`color-fuses-classify.vflow.json`、`color-pieces-mlp.vflow.json`；流程内置 `loadimage`，默认使用 `%HALCONIMAGES%` 路径，`图像加载` 编辑窗支持通过 `HALCON 示例` 打开按目录分组的示例图像浏览窗口并记录最近使用，主编辑窗顶部提供最近图像快捷入口，支持固定/取消固定与清空最近记录。

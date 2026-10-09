@@ -880,6 +880,36 @@
         </Canvas>
     </Viewbox>
 
+    <!-- 手工追加：深度学习检测（扫描框圈住两个检出目标框） -->
+    <Viewbox x:Key="ToolIcon.dl-detect" x:Shared="False" Width="24" Height="24" Stretch="Uniform">
+        <Canvas Width="24" Height="24">
+            <Path Data="M3,8 V4 H7 M17,4 H21 V8 M21,16 V20 H17 M7,20 H3 V16" Stroke="{DynamicResource AccentFillColorDefaultBrush}" StrokeThickness="1.8" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Fill="{x:Null}" />
+            <Rectangle Canvas.Left="6" Canvas.Top="7" Width="6" Height="6" RadiusX="0.5" RadiusY="0.5" Stroke="{DynamicResource TextFillColorPrimaryBrush}" StrokeThickness="1.5" Fill="{x:Null}" />
+            <Rectangle Canvas.Left="13.5" Canvas.Top="12" Width="5.5" Height="5.5" RadiusX="0.5" RadiusY="0.5" Stroke="{DynamicResource TextFillColorPrimaryBrush}" StrokeThickness="1.5" Fill="{x:Null}" />
+        </Canvas>
+    </Viewbox>
+
+    <!-- 手工追加：深度学习分类（三条分类榜单，首条高亮并带勾选） -->
+    <Viewbox x:Key="ToolIcon.dl-classify" x:Shared="False" Width="24" Height="24" Stretch="Uniform">
+        <Canvas Width="24" Height="24">
+            <Rectangle Canvas.Left="3" Canvas.Top="3.5" Width="13.5" Height="4.5" RadiusX="1" RadiusY="1" Stroke="{DynamicResource AccentFillColorDefaultBrush}" StrokeThickness="1.6" Fill="{x:Null}" />
+            <Rectangle Canvas.Left="3" Canvas.Top="10" Width="13.5" Height="4.5" RadiusX="1" RadiusY="1" Stroke="{DynamicResource TextFillColorPrimaryBrush}" StrokeThickness="1.6" Fill="{x:Null}" />
+            <Rectangle Canvas.Left="3" Canvas.Top="16.5" Width="13.5" Height="4.5" RadiusX="1" RadiusY="1" Stroke="{DynamicResource TextFillColorPrimaryBrush}" StrokeThickness="1.6" Fill="{x:Null}" />
+            <Path Data="M17.8,12.2 L20.2,14.6 L23.8,9.4" Stroke="{DynamicResource AccentFillColorDefaultBrush}" StrokeThickness="1.9" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Fill="{x:Null}" />
+        </Canvas>
+    </Viewbox>
+
+    <!-- 手工追加：深度学习分割（扫描框圈住 2×2 像素马赛克，一格灰色为拒识） -->
+    <Viewbox x:Key="ToolIcon.dl-segment" x:Shared="False" Width="24" Height="24" Stretch="Uniform">
+        <Canvas Width="24" Height="24">
+            <Path Data="M3,8 V4 H7 M17,4 H21 V8 M21,16 V20 H17 M7,20 H3 V16" Stroke="{DynamicResource AccentFillColorDefaultBrush}" StrokeThickness="1.8" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Fill="{x:Null}" />
+            <Rectangle Canvas.Left="6.5" Canvas.Top="7" Width="5" Height="5" Stroke="{x:Null}" StrokeThickness="1.5" Fill="#D9C42B1C" />
+            <Rectangle Canvas.Left="12.5" Canvas.Top="7" Width="5" Height="5" Stroke="{x:Null}" StrokeThickness="1.5" Fill="#D92E7D32" />
+            <Rectangle Canvas.Left="6.5" Canvas.Top="13" Width="5" Height="5" Stroke="{x:Null}" StrokeThickness="1.5" Fill="#D91F4E79" />
+            <Rectangle Canvas.Left="12.5" Canvas.Top="13" Width="5" Height="5" Stroke="{x:Null}" StrokeThickness="1.5" Fill="#D98A8A8A" />
+        </Canvas>
+    </Viewbox>
+
     <Viewbox x:Key="ToolIcon._default" x:Shared="False" Width="24" Height="24" Stretch="Uniform">
         <Canvas Width="24" Height="24">
             <Rectangle Canvas.Left="4" Canvas.Top="4" Width="16" Height="16" RadiusX="2" RadiusY="2" Stroke="{DynamicResource TextFillColorPrimaryBrush}" StrokeThickness="1.8" Fill="{x:Null}" />

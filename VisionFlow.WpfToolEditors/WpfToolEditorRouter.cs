@@ -105,6 +105,21 @@ namespace VisionFlow.WpfToolEditors
             {
                 return new WpfColorSegmentToolEditWindow(colorSegmentTool, context);
             }
+            // 深度学习检测（DL-02）：参数页 + 检测框叠加与结果列表
+            if (tool is DlDetectTool dlDetectTool)
+            {
+                return new WpfDlDetectToolEditWindow(dlDetectTool, context);
+            }
+            // 深度学习分类（DL-01）：参数页 + TopK 结果列表
+            if (tool is DlClassifyTool dlClassifyTool)
+            {
+                return new WpfDlClassifyToolEditWindow(dlClassifyTool, context);
+            }
+            // 深度学习分割（DL-03）：参数页 + 分割叠加（每类调色板颜色、拒识灰色）与各类面积列表
+            if (tool is DlSegmentTool dlSegmentTool)
+            {
+                return new WpfDlSegmentToolEditWindow(dlSegmentTool, context);
+            }
             return IsVisualPreviewTool(tool)
                 ? (Window)new WpfVisualToolEditWindow(tool, context)
                 : new WpfGenericToolEditWindow(tool, context);

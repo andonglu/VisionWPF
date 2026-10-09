@@ -641,3 +641,15 @@ Region 形状转换、Region Union1、形态学（`MorphologyTool`）、区域�
 - 4 个专用 WPF 编辑窗口 + 图标；测试项目新增仅测试依赖 ZXing.Net / System.Drawing.Common（使用方批准）。
 
 算子探测（计划文档第 12 节）发现并修正了初测错误：2D `stop_after_result_num` 不传参数只返回 1 个码。验证：全量 1320 通过 / 0 失败（基线 1254 + 66 新用例）。UI 交互待人工验收。详见 `docs\RECOGNITION-TOOLS-PLAN.md` 第 13 节。
+
+
+## 2026-10-09 DEEP-LEARNING 深度学习推理线完成（D0 ~ D5）
+
+深度学习推理模块（`docs\DEEP-LEARNING-INFERENCE-PLAN.md`，经三轮评审）全部完成：
+
+- D0 探测（§14）：22.11 无 `preprocess_dl_samples`，手工预处理配方（real + range 缩放 + zoom）实测钉死；三类结果 dict 结构、ROI 裁剪语义、batch 行为全部实测。
+- D1 公共层：`SharedDlModelCache` 引用计数共享池 + `ModelCacheMode`（Instance/Flow/Project 用户可配，默认不变）+ `FlowContext.OwnerToken` 框架锚点（Run 写入、root 预热 AsyncLocal、预览继承）。
+- D2/D3/D4：`dl-detect` / `dl-classify` / `dl-segment` 三工具 + 专用编辑器，HALCON 门禁用官方模型逐值对照（实现期修复分类工具 Instance 缓存键缺陷）。
+- D5：3 个示例流程（loadimage + 官方模型，打开即跑）+ 文档/README 双同步。
+
+验证：全量 1405 通过 / 0 失败。遗留（不阻塞）：四工具装载逻辑重复（改共享池键规则时下沉重构）；共享池 static 计数依赖测试顺序隔离。详见方案 §15 与开发计划状态行。

@@ -66,6 +66,14 @@ namespace VisionFlow.Core
         public bool IsPreview { get; private set; }
         public bool AllowMatrixFallback { get; private set; }
 
+        /// <summary>
+        /// 流程锚点（§5.4）：本次运行所属流程树的根节点实例（引用相等判定），
+        /// 供 Flow 作用域的模型句柄共享确定"同一流程"。
+        /// 由 <see cref="FlowEngine"/> 在运行前写入；预览上下文经 <see cref="CreatePreviewContext"/> 复制继承；
+        /// 仅作弱标识引用，上下文生命周期结束即失效。
+        /// </summary>
+        public object OwnerToken { get; set; }
+
         /// <summary>执行日志（人类可读）。</summary>
         public List<string> Log { get; } = new List<string>();
 
@@ -249,7 +257,8 @@ namespace VisionFlow.Core
             var ctx = new FlowContext
             {
                 IsPreview = true,
-                AllowMatrixFallback = allowMatrixFallback
+                AllowMatrixFallback = allowMatrixFallback,
+                OwnerToken = OwnerToken
             };
             ctx._borrowedResources.UnionWith(_borrowedResources);
             ctx._borrowedResources.UnionWith(_ownedResources.Keys);

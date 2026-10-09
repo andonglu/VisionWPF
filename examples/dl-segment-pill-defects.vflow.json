@@ -1,0 +1,114 @@
+{
+  "FormatVersion": 1,
+  "Id": "c9651842849a499786bab2061da528b9",
+  "Kind": "Sequence",
+  "Name": "HALCON \u6DF1\u5EA6\u5B66\u4E60\u836F\u7247\u7F3A\u9677\u5206\u5272\u793A\u4F8B",
+  "Tool": null,
+  "Condition": null,
+  "Loop": null,
+  "Outputs": null,
+  "FlowOutputs": null,
+  "Children": [
+    {
+      "FormatVersion": null,
+      "Id": "58ef2e16f80c4efd971bdb2789b03096",
+      "Kind": "Tool",
+      "Name": "\u8F7D\u5165\u836F\u7247\u56FE\u50CF",
+      "Tool": {
+        "ToolId": "loadimage",
+        "TypeName": "VisionFlow.Tools.LoadImageTool, VisionFlow.Tools, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null",
+        "ModuleName": "\u8F7D\u5165\u836F\u7247\u56FE\u50CF",
+        "Properties": {
+          "FilePath": "%HALCONIMAGES%\\pill\\ginseng\\contamination\\pill_ginseng_contamination_001.png"
+        }
+      },
+      "Condition": null,
+      "Loop": null,
+      "Outputs": null,
+      "FlowOutputs": null,
+      "Children": null,
+      "IfBranch": null,
+      "ElseBranch": null
+    },
+    {
+      "FormatVersion": null,
+      "Id": "58a801cc127b42929765b1ab0fcc354e",
+      "Kind": "Tool",
+      "Name": "\u7F3A\u9677\u5206\u5272",
+      "Tool": {
+        "ToolId": "dl-segment",
+        "TypeName": "VisionFlow.Tools.DlSegmentTool, VisionFlow.Tools, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null",
+        "ModuleName": "\u7F3A\u9677\u5206\u5272",
+        "Properties": {
+          "ImagePath": "\u8F7D\u5165\u836F\u7247\u56FE\u50CF.Image",
+          "RegionPath": null,
+          "ModelFilePath": "%HALCONEXAMPLES%\\hdevelop\\Deep-Learning\\Segmentation\\segment_pill_defects.hdl",
+          "Device": 0,
+          "BatchSize": 1,
+          "MinScore": 0.5,
+          "ClassFilter": null,
+          "OptimizeForInference": true,
+          "ModelCacheMode": 0,
+          "FailWhenNotFound": false
+        }
+      },
+      "Condition": null,
+      "Loop": null,
+      "Outputs": null,
+      "FlowOutputs": null,
+      "Children": null,
+      "IfBranch": null,
+      "ElseBranch": null
+    },
+    {
+      "FormatVersion": null,
+      "Id": "e196f03ae23d44339e43cf4c75b2a45c",
+      "Kind": "FlowOutput",
+      "Name": "\u6D41\u7A0B\u8F93\u51FA1",
+      "Tool": null,
+      "Condition": null,
+      "Loop": null,
+      "Outputs": null,
+      "FlowOutputs": [
+        {
+          "Name": "Count",
+          "Kind": "Single",
+          "Type": "Int",
+          "ClrTypeName": null,
+          "Value": {
+            "IsConstant": false,
+            "Reference": "\u7F3A\u9677\u5206\u5272.Count",
+            "Constant": null
+          }
+        },
+        {
+          "Name": "Areas",
+          "Kind": "Array",
+          "Type": "Int",
+          "ClrTypeName": null,
+          "Value": {
+            "IsConstant": false,
+            "Reference": "\u7F3A\u9677\u5206\u5272.Areas",
+            "Constant": null
+          }
+        },
+        {
+          "Name": "ClassNames",
+          "Kind": "Array",
+          "Type": "String",
+          "ClrTypeName": null,
+          "Value": {
+            "IsConstant": false,
+            "Reference": "\u7F3A\u9677\u5206\u5272.ClassNames",
+            "Constant": null
+          }
+        }
+      ],
+      "Children": null,
+      "IfBranch": null,
+      "ElseBranch": null
+    }
+  ],
+  "IfBranch": null,
+  "ElseBranch": null
+}

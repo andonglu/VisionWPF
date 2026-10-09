@@ -88,6 +88,10 @@ namespace VisionFlow.Tools
             FlowSerializer.RegisterToolType(typeof(OcrTool), "ocr");
             FlowSerializer.RegisterToolType(typeof(ColorClassifyTool), "color-classify");
             FlowSerializer.RegisterToolType(typeof(ColorSegmentTool), "color-segment");
+            FlowSerializer.RegisterToolType(typeof(DeepLearningInferenceTool), "dl-infer");
+            FlowSerializer.RegisterToolType(typeof(DlDetectTool), "dl-detect");
+            FlowSerializer.RegisterToolType(typeof(DlClassifyTool), "dl-classify");
+            FlowSerializer.RegisterToolType(typeof(DlSegmentTool), "dl-segment");
         }
     }
 }

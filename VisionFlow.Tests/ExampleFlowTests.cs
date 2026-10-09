@@ -32,6 +32,13 @@ public class ExampleFlowTests
     [InlineData("pizza-salami.vflow.json")]
     [InlineData("cookie-box.vflow.json")]
     [InlineData("wafer-chips.vflow.json")]
+    [InlineData("datacode-default-settings.vflow.json")]
+    [InlineData("ocr-expiration-date.vflow.json")]
+    [InlineData("color-fuses-classify.vflow.json")]
+    [InlineData("color-pieces-mlp.vflow.json")]
+    [InlineData("dl-detect-pills.vflow.json")]
+    [InlineData("dl-classify-pill-defects.vflow.json")]
+    [InlineData("dl-segment-pill-defects.vflow.json")]
     public void 示例流程_加载并通过校验(string fileName)
     {
         string path = Path.Combine(ExamplesDir, fileName);

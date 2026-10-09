@@ -1,0 +1,114 @@
+{
+  "FormatVersion": 1,
+  "Id": "e7ab3168e4504cdb800f19ea3018bad4",
+  "Kind": "Sequence",
+  "Name": "HALCON \u6DF1\u5EA6\u5B66\u4E60\u836F\u7247\u68C0\u6D4B\u793A\u4F8B",
+  "Tool": null,
+  "Condition": null,
+  "Loop": null,
+  "Outputs": null,
+  "FlowOutputs": null,
+  "Children": [
+    {
+      "FormatVersion": null,
+      "Id": "294e7f0bdbb044c1a23d3a836e41005d",
+      "Kind": "Tool",
+      "Name": "\u8F7D\u5165\u836F\u888B\u56FE\u50CF",
+      "Tool": {
+        "ToolId": "loadimage",
+        "TypeName": "VisionFlow.Tools.LoadImageTool, VisionFlow.Tools, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null",
+        "ModuleName": "\u8F7D\u5165\u836F\u888B\u56FE\u50CF",
+        "Properties": {
+          "FilePath": "%HALCONIMAGES%\\pill_bag\\pill_bag_001.png"
+        }
+      },
+      "Condition": null,
+      "Loop": null,
+      "Outputs": null,
+      "FlowOutputs": null,
+      "Children": null,
+      "IfBranch": null,
+      "ElseBranch": null
+    },
+    {
+      "FormatVersion": null,
+      "Id": "beb55f8819214e558bc879be6eae836b",
+      "Kind": "Tool",
+      "Name": "\u836F\u7247\u68C0\u6D4B",
+      "Tool": {
+        "ToolId": "dl-detect",
+        "TypeName": "VisionFlow.Tools.DlDetectTool, VisionFlow.Tools, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null",
+        "ModuleName": "\u836F\u7247\u68C0\u6D4B",
+        "Properties": {
+          "ImagePath": "\u8F7D\u5165\u836F\u888B\u56FE\u50CF.Image",
+          "RegionPath": null,
+          "ModelFilePath": "%HALCONEXAMPLES%\\hdevelop\\Deep-Learning\\Detection\\detect_pills.hdl",
+          "Device": 0,
+          "BatchSize": 1,
+          "MinScore": 0.5,
+          "MaxDetections": 0,
+          "OptimizeForInference": true,
+          "ModelCacheMode": 0,
+          "FailWhenNotFound": false
+        }
+      },
+      "Condition": null,
+      "Loop": null,
+      "Outputs": null,
+      "FlowOutputs": null,
+      "Children": null,
+      "IfBranch": null,
+      "ElseBranch": null
+    },
+    {
+      "FormatVersion": null,
+      "Id": "65f27063570d4a4d928525600e9f8cf1",
+      "Kind": "FlowOutput",
+      "Name": "\u6D41\u7A0B\u8F93\u51FA1",
+      "Tool": null,
+      "Condition": null,
+      "Loop": null,
+      "Outputs": null,
+      "FlowOutputs": [
+        {
+          "Name": "Count",
+          "Kind": "Single",
+          "Type": "Int",
+          "ClrTypeName": null,
+          "Value": {
+            "IsConstant": false,
+            "Reference": "\u836F\u7247\u68C0\u6D4B.Count",
+            "Constant": null
+          }
+        },
+        {
+          "Name": "BestClassName",
+          "Kind": "Single",
+          "Type": "String",
+          "ClrTypeName": null,
+          "Value": {
+            "IsConstant": false,
+            "Reference": "\u836F\u7247\u68C0\u6D4B.BestClassName",
+            "Constant": null
+          }
+        },
+        {
+          "Name": "BestScore",
+          "Kind": "Single",
+          "Type": "Double",
+          "ClrTypeName": null,
+          "Value": {
+            "IsConstant": false,
+            "Reference": "\u836F\u7247\u68C0\u6D4B.BestScore",
+            "Constant": null
+          }
+        }
+      ],
+      "Children": null,
+      "IfBranch": null,
+      "ElseBranch": null
+    }
+  ],
+  "IfBranch": null,
+  "ElseBranch": null
+}

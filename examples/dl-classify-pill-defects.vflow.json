@@ -1,0 +1,115 @@
+{
+  "FormatVersion": 1,
+  "Id": "ec7788c463ce439b91c15b6c4ae69a76",
+  "Kind": "Sequence",
+  "Name": "HALCON \u6DF1\u5EA6\u5B66\u4E60\u836F\u7247\u7F3A\u9677\u5206\u7C7B\u793A\u4F8B",
+  "Tool": null,
+  "Condition": null,
+  "Loop": null,
+  "Outputs": null,
+  "FlowOutputs": null,
+  "Children": [
+    {
+      "FormatVersion": null,
+      "Id": "2c9bb733d5b14f5a86593327bf7318a8",
+      "Kind": "Tool",
+      "Name": "\u8F7D\u5165\u836F\u7247\u56FE\u50CF",
+      "Tool": {
+        "ToolId": "loadimage",
+        "TypeName": "VisionFlow.Tools.LoadImageTool, VisionFlow.Tools, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null",
+        "ModuleName": "\u8F7D\u5165\u836F\u7247\u56FE\u50CF",
+        "Properties": {
+          "FilePath": "%HALCONIMAGES%\\pill\\ginseng\\contamination\\pill_ginseng_contamination_001.png"
+        }
+      },
+      "Condition": null,
+      "Loop": null,
+      "Outputs": null,
+      "FlowOutputs": null,
+      "Children": null,
+      "IfBranch": null,
+      "ElseBranch": null
+    },
+    {
+      "FormatVersion": null,
+      "Id": "73780920b2f148d7ab1d84f98f5ab655",
+      "Kind": "Tool",
+      "Name": "\u7F3A\u9677\u5206\u7C7B",
+      "Tool": {
+        "ToolId": "dl-classify",
+        "TypeName": "VisionFlow.Tools.DlClassifyTool, VisionFlow.Tools, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null",
+        "ModuleName": "\u7F3A\u9677\u5206\u7C7B",
+        "Properties": {
+          "ImagePath": "\u8F7D\u5165\u836F\u7247\u56FE\u50CF.Image",
+          "RegionPath": null,
+          "ModelFilePath": "%HALCONEXAMPLES%\\hdevelop\\Deep-Learning\\Classification\\classify_pill_defects.hdl",
+          "Device": 0,
+          "BatchSize": 1,
+          "MinScore": 0,
+          "TopK": 3,
+          "ExpectedClass": null,
+          "OptimizeForInference": true,
+          "ModelCacheMode": 0,
+          "FailWhenNotFound": false
+        }
+      },
+      "Condition": null,
+      "Loop": null,
+      "Outputs": null,
+      "FlowOutputs": null,
+      "Children": null,
+      "IfBranch": null,
+      "ElseBranch": null
+    },
+    {
+      "FormatVersion": null,
+      "Id": "497e539f4cfb44f68c2d28a6a3df847e",
+      "Kind": "FlowOutput",
+      "Name": "\u6D41\u7A0B\u8F93\u51FA1",
+      "Tool": null,
+      "Condition": null,
+      "Loop": null,
+      "Outputs": null,
+      "FlowOutputs": [
+        {
+          "Name": "ClassName",
+          "Kind": "Single",
+          "Type": "String",
+          "ClrTypeName": null,
+          "Value": {
+            "IsConstant": false,
+            "Reference": "\u7F3A\u9677\u5206\u7C7B.ClassName",
+            "Constant": null
+          }
+        },
+        {
+          "Name": "Score",
+          "Kind": "Single",
+          "Type": "Double",
+          "ClrTypeName": null,
+          "Value": {
+            "IsConstant": false,
+            "Reference": "\u7F3A\u9677\u5206\u7C7B.Score",
+            "Constant": null
+          }
+        },
+        {
+          "Name": "TopClassNames",
+          "Kind": "Array",
+          "Type": "String",
+          "ClrTypeName": null,
+          "Value": {
+            "IsConstant": false,
+            "Reference": "\u7F3A\u9677\u5206\u7C7B.TopClassNames",
+            "Constant": null
+          }
+        }
+      ],
+      "Children": null,
+      "IfBranch": null,
+      "ElseBranch": null
+    }
+  ],
+  "IfBranch": null,
+  "ElseBranch": null
+}

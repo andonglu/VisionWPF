@@ -81,6 +81,11 @@ namespace VisionFlow.Engine
         public FlowRunResult Run(FlowNode root, FlowContext initialContext)
         {
             var ctx = initialContext ?? new FlowContext();
+            if (root != null)
+            {
+                // 流程锚点（§5.4）：写入根节点实例，供 Flow 作用域资源共享判定"同一流程"。
+                ctx.OwnerToken = root;
+            }
             var watch = Stopwatch.StartNew();
 
             string inputError = CheckRequiredInputs(ctx);

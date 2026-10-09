@@ -223,6 +223,14 @@ namespace VisionFlow.Editing
                 new ToolNode(new ColorClassifyTool(NextModuleName("颜色识别")))));
             Register(new ToolboxItem("color-segment", "06 识别工具", "颜色分割", () =>
                 new ToolNode(new ColorSegmentTool(NextModuleName("颜色分割")))));
+            Register(new ToolboxItem("dl-infer", "06 识别工具", "深度学习推理", () =>
+                new ToolNode(new DeepLearningInferenceTool(NextModuleName("深度学习推理")))));
+            Register(new ToolboxItem("dl-detect", "06 识别工具", "深度学习检测", () =>
+                new ToolNode(new DlDetectTool(NextModuleName("深度学习检测")))));
+            Register(new ToolboxItem("dl-classify", "06 识别工具", "深度学习分类", () =>
+                new ToolNode(new DlClassifyTool(NextModuleName("深度学习分类")))));
+            Register(new ToolboxItem("dl-segment", "06 识别工具", "深度学习分割", () =>
+                new ToolNode(new DlSegmentTool(NextModuleName("深度学习分割")))));
             Register(new ToolboxItem("range-classify", "07 数据与判定", "数值区间分类", () =>
                 new ToolNode(new RangeClassifyTool(NextModuleName("区间分类")))));
             Register(new ToolboxItem("expression-calc", "07 数据与判定", "变量计算", () =>

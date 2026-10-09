@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
+using System.Threading;
 using VisionFlow.Core;
 using VisionFlow.Nodes;
 
@@ -43,6 +44,15 @@ namespace VisionFlow.Runtime
     /// </summary>
     public static class FlowResources
     {
+        private static readonly AsyncLocal<FlowNode> s_environmentAnchor = new AsyncLocal<FlowNode>();
+
+        /// <summary>
+        /// 预热环境锚点（§5.4）：仅 <see cref="Prepare(FlowNode)"/> 重载在预热循环期间设置的
+        /// 流程树根节点实例（引用相等判定），供 Flow 作用域资源共享读取；
+        /// 快照入口 <see cref="Prepare(IEnumerable{ToolNode})"/> 不设锚点。
+        /// </summary>
+        public static FlowNode CurrentEnvironmentAnchor => s_environmentAnchor.Value;
+
         /// <summary>
         /// 预热流程中的工具；流程中引用的子流程文件一并加载并预热（按文件去重，循环引用不会重复进入）。
         /// 子流程定义由 <see cref="SubFlowLibrary"/> 缓存与释放，<see cref="Release(FlowNode)"/> 不会释放共享的子流程。
@@ -52,7 +62,17 @@ namespace VisionFlow.Runtime
             var toolNodes = new List<ToolNode>();
             var issues = new List<FlowPrepareIssue>();
             CollectForPrepare(root, toolNodes, issues, new HashSet<string>(StringComparer.OrdinalIgnoreCase));
-            FlowPrepareResult result = Prepare(toolNodes);
+            FlowNode previousAnchor = s_environmentAnchor.Value;
+            s_environmentAnchor.Value = root;
+            FlowPrepareResult result;
+            try
+            {
+                result = PrepareCore(toolNodes);
+            }
+            finally
+            {
+                s_environmentAnchor.Value = previousAnchor;
+            }
             if (issues.Count == 0)
             {
                 return result;
@@ -88,9 +108,15 @@ namespace VisionFlow.Runtime
 
         /// <summary>
         /// 预热给定的工具节点。后台预热时应先在拥有流程树的线程上取快照（<see cref="EnumerateToolNodes"/>.ToList()），
-        /// 避免遍历期间流程结构被编辑。
+        /// 避免遍历期间流程结构被编辑。该快照入口无预热环境锚点（<see cref="CurrentEnvironmentAnchor"/> 为 null），
+        /// Flow 作用域资源共享经此入口自动回退 Instance。
         /// </summary>
         public static FlowPrepareResult Prepare(IEnumerable<ToolNode> toolNodes)
+        {
+            return PrepareCore(toolNodes);
+        }
+
+        private static FlowPrepareResult PrepareCore(IEnumerable<ToolNode> toolNodes)
         {
             var watch = Stopwatch.StartNew();
             var issues = new List<FlowPrepareIssue>();

@@ -18,12 +18,17 @@
 
         <Border Grid.Row="0" Style="{StaticResource EditorCardStyle}">
             <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="72" />
-                    <ColumnDefinition Width="180" />
+                    <ColumnDefinition Width="170" />
                     <ColumnDefinition Width="72" />
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="40" />
+                    <ColumnDefinition Width="112" />
                     <ColumnDefinition Width="96" />
                 </Grid.ColumnDefinitions>
                 <TextBlock Grid.Column="0" Text="模块名" Style="{StaticResource EditorFieldLabelStyle}" />
@@ -31,7 +36,28 @@
                 <TextBlock Grid.Column="2" Text="图像文件" Style="{StaticResource EditorFieldLabelStyle}" Margin="16,0,8,16" />
                 <TextBox x:Name="FilePathText" Grid.Column="3" />
                 <Button Grid.Column="4" Content="..." MinWidth="32" Width="32" Padding="0" Click="Browse_Click" />
-                <Button Grid.Column="5" Content="预览" Margin="8,0,0,16" Click="Preview_Click" />
+                <Button Grid.Column="5" Content="HALCON 示例" Margin="8,0,0,16" Click="BrowseHalconExample_Click" />
+                <Button Grid.Column="6" Content="预览" Margin="8,0,0,16" Click="Preview_Click" />
+
+                <TextBlock Grid.Row="1"
+                           Grid.Column="0"
+                           Text="最近使用"
+                           Style="{StaticResource EditorFieldLabelStyle}"
+                           Margin="0,0,0,4" />
+                <Button x:Name="ClearRecentButton"
+                        Grid.Row="1"
+                        Grid.Column="1"
+                        Content="清空最近"
+                        Width="84"
+                        Height="30"
+                        HorizontalAlignment="Left"
+                        Margin="0,0,0,6"
+                        Click="ClearRecent_Click" />
+                <WrapPanel x:Name="RecentFilesPanel"
+                           Grid.Row="1"
+                           Grid.Column="1"
+                           Grid.ColumnSpan="6"
+                           Margin="96,0,0,4" />
             </Grid>
         </Border>
 

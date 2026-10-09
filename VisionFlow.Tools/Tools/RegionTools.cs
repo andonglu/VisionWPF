@@ -24,15 +24,122 @@ namespace VisionFlow.Tools
 
         public override NodeResult Run(FlowContext ctx)
         {
-            if (string.IsNullOrEmpty(FilePath) || !File.Exists(FilePath))
+            if (!TryResolveExistingFilePath(FilePath, out string resolvedPath, out string error))
             {
-                return NodeResult.Fail($"图像文件不存在：{FilePath}");
+                return NodeResult.Fail(error);
             }
 
-            HOperatorSet.ReadImage(out HObject image, FilePath);
+            HOperatorSet.ReadImage(out HObject image, resolvedPath);
             SetOutput(ctx, Variable.Object(ModuleName, "Image", new HalconImage(image), 1));
-            ctx.AddLog(FlowLogLevel.Info, $"[图像加载] {Path.GetFileName(FilePath)}");
+            string source = string.Equals((FilePath ?? string.Empty).Trim(), resolvedPath, StringComparison.OrdinalIgnoreCase)
+                ? Path.GetFileName(resolvedPath)
+                : $"{Path.GetFileName(resolvedPath)} <- {(FilePath ?? string.Empty).Trim()}";
+            ctx.AddLog(FlowLogLevel.Info, $"[图像加载] {source}");
             return NodeResult.Ok;
+        }
+
+        /// <summary>
+        /// 解析图像路径：先展开环境变量，再按绝对路径或仓库相对路径定位。
+        /// 例如支持 <c>%HALCONIMAGES%\color\pizza_01.png</c>、<c>src/Image/razors1.png</c>。
+        /// </summary>
+        public static string ResolveFilePath(string filePath)
+        {
+            string raw = (filePath ?? string.Empty).Trim();
+            if (raw.Length == 0)
+            {
+                return string.Empty;
+            }
+
+            string expanded = Environment.ExpandEnvironmentVariables(raw);
+            string normalized = expanded
+                .Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar)
+                .Trim();
+            if (Path.IsPathRooted(normalized))
+            {
+                return Path.GetFullPath(normalized);
+            }
+
+            return RepoPaths.Find(normalized);
+        }
+
+        /// <summary>把图像路径转换成更可迁移的保存形式；HALCON 示例图像优先保存为 <c>%HALCONIMAGES%\...</c>。</summary>
+        public static string ToStoredFilePath(string filePath)
+        {
+            string raw = (filePath ?? string.Empty).Trim();
+            if (raw.Length == 0)
+            {
+                return string.Empty;
+            }
+
+            string resolved = ResolveFilePath(raw);
+            if (TryGetHalconImagesRoot(out string imageRoot)
+                && TryMakeRelativeToRoot(resolved, imageRoot, out string relativeToImages))
+            {
+                return "%HALCONIMAGES%" + Path.DirectorySeparatorChar + relativeToImages;
+            }
+
+            return raw;
+        }
+
+        /// <summary>解析并验证图像路径存在；失败时返回可直接展示给用户的中文错误。</summary>
+        public static bool TryResolveExistingFilePath(string filePath, out string resolvedPath, out string error)
+        {
+            resolvedPath = ResolveFilePath(filePath);
+            if (string.IsNullOrEmpty(resolvedPath))
+            {
+                error = "图像文件路径不能为空";
+                return false;
+            }
+            if (!File.Exists(resolvedPath))
+            {
+                error = $"图像文件不存在：{(filePath ?? string.Empty).Trim()}";
+                return false;
+            }
+
+            error = null;
+            return true;
+        }
+
+        /// <summary>获取 HALCON 示例图像根目录（环境变量 <c>HALCONIMAGES</c>）；未配置或目录不存在时返回 false。</summary>
+        public static bool TryGetHalconImagesRoot(out string imageRoot)
+        {
+            imageRoot = Environment.GetEnvironmentVariable("HALCONIMAGES") ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(imageRoot))
+            {
+                imageRoot = null;
+                return false;
+            }
+
+            imageRoot = Path.GetFullPath(Environment.ExpandEnvironmentVariables(imageRoot.Trim()));
+            if (!Directory.Exists(imageRoot))
+            {
+                imageRoot = null;
+                return false;
+            }
+
+            return true;
+        }
+
+        private static bool TryMakeRelativeToRoot(string fullPath, string rootPath, out string relativePath)
+        {
+            relativePath = null;
+            if (string.IsNullOrWhiteSpace(fullPath) || string.IsNullOrWhiteSpace(rootPath))
+            {
+                return false;
+            }
+
+            string normalizedFull = Path.GetFullPath(fullPath)
+                .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            string normalizedRoot = Path.GetFullPath(rootPath)
+                .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            string prefix = normalizedRoot + Path.DirectorySeparatorChar;
+            if (!normalizedFull.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            relativePath = normalizedFull.Substring(prefix.Length);
+            return relativePath.Length > 0;
         }
     }
 
