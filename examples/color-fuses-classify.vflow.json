@@ -1,0 +1,133 @@
+{
+  "FormatVersion": 1,
+  "Id": "922931834c5941dabf89fd389f50e741",
+  "Kind": "Sequence",
+  "Name": "HALCON \u4FDD\u9669\u4E1D\u989C\u8272\u8BC6\u522B\u793A\u4F8B",
+  "Tool": null,
+  "Condition": null,
+  "Loop": null,
+  "Outputs": null,
+  "FlowOutputs": null,
+  "Children": [
+    {
+      "FormatVersion": null,
+      "Id": "ece52085e0664ba1930ff783ce268303",
+      "Kind": "Tool",
+      "Name": "\u8F7D\u5165\u4FDD\u9669\u4E1D\u56FE\u50CF",
+      "Tool": {
+        "ToolId": "loadimage",
+        "TypeName": "VisionFlow.Tools.LoadImageTool, VisionFlow.Tools, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null",
+        "ModuleName": "\u8F7D\u5165\u4FDD\u9669\u4E1D\u56FE\u50CF",
+        "Properties": {
+          "FilePath": "%HALCONIMAGES%\\color\\color_fuses_00.png"
+        }
+      },
+      "Condition": null,
+      "Loop": null,
+      "Outputs": null,
+      "FlowOutputs": null,
+      "Children": null,
+      "IfBranch": null,
+      "ElseBranch": null
+    },
+    {
+      "FormatVersion": null,
+      "Id": "4910f83943ad4b0f947a8b9a6fd1bbe6",
+      "Kind": "Tool",
+      "Name": "\u4FDD\u9669\u4E1D\u533A\u57DF",
+      "Tool": {
+        "ToolId": "manual-region",
+        "TypeName": "VisionFlow.Tools.ManualRegionTool, VisionFlow.Tools, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null",
+        "ModuleName": "\u4FDD\u9669\u4E1D\u533A\u57DF",
+        "Properties": {
+          "RoiJson": "{\u0022Items\u0022:[{\u0022Name\u0022:\u0022\\u6A59\\u8272\\u4FDD\\u9669\\u4E1D\u0022,\u0022Kind\u0022:\u0022Rectangle1\u0022,\u0022Polarity\u0022:\u0022Include\u0022,\u0022Row1\u0022:165,\u0022Column1\u0022:45,\u0022Row2\u0022:275,\u0022Column2\u0022:150,\u0022Row\u0022:0,\u0022Column\u0022:0,\u0022Phi\u0022:0,\u0022Length1\u0022:0,\u0022Length2\u0022:0,\u0022Radius\u0022:0},{\u0022Name\u0022:\u0022\\u7EA2\\u8272\\u4FDD\\u9669\\u4E1D\u0022,\u0022Kind\u0022:\u0022Rectangle1\u0022,\u0022Polarity\u0022:\u0022Include\u0022,\u0022Row1\u0022:165,\u0022Column1\u0022:237,\u0022Row2\u0022:275,\u0022Column2\u0022:344,\u0022Row\u0022:0,\u0022Column\u0022:0,\u0022Phi\u0022:0,\u0022Length1\u0022:0,\u0022Length2\u0022:0,\u0022Radius\u0022:0},{\u0022Name\u0022:\u0022\\u84DD\\u8272\\u4FDD\\u9669\\u4E1D\u0022,\u0022Kind\u0022:\u0022Rectangle1\u0022,\u0022Polarity\u0022:\u0022Include\u0022,\u0022Row1\u0022:165,\u0022Column1\u0022:436,\u0022Row2\u0022:275,\u0022Column2\u0022:547,\u0022Row\u0022:0,\u0022Column\u0022:0,\u0022Phi\u0022:0,\u0022Length1\u0022:0,\u0022Length2\u0022:0,\u0022Radius\u0022:0},{\u0022Name\u0022:\u0022\\u9EC4\\u8272\\u4FDD\\u9669\\u4E1D\u0022,\u0022Kind\u0022:\u0022Rectangle1\u0022,\u0022Polarity\u0022:\u0022Include\u0022,\u0022Row1\u0022:165,\u0022Column1\u0022:630,\u0022Row2\u0022:275,\u0022Column2\u0022:742,\u0022Row\u0022:0,\u0022Column\u0022:0,\u0022Phi\u0022:0,\u0022Length1\u0022:0,\u0022Length2\u0022:0,\u0022Radius\u0022:0},{\u0022Name\u0022:\u0022\\u7EFF\\u8272\\u4FDD\\u9669\\u4E1D\u0022,\u0022Kind\u0022:\u0022Rectangle1\u0022,\u0022Polarity\u0022:\u0022Include\u0022,\u0022Row1\u0022:165,\u0022Column1\u0022:834,\u0022Row2\u0022:275,\u0022Column2\u0022:948,\u0022Row\u0022:0,\u0022Column\u0022:0,\u0022Phi\u0022:0,\u0022Length1\u0022:0,\u0022Length2\u0022:0,\u0022Radius\u0022:0}]}",
+          "OutputMode": 2,
+          "MatrixPath": null
+        }
+      },
+      "Condition": null,
+      "Loop": null,
+      "Outputs": null,
+      "FlowOutputs": null,
+      "Children": null,
+      "IfBranch": null,
+      "ElseBranch": null
+    },
+    {
+      "FormatVersion": null,
+      "Id": "9d3d411914cd44329e5db1aadcfb7bf1",
+      "Kind": "Tool",
+      "Name": "\u989C\u8272\u8BC6\u522B",
+      "Tool": {
+        "ToolId": "color-classify",
+        "TypeName": "VisionFlow.Tools.ColorClassifyTool, VisionFlow.Tools, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null",
+        "ModuleName": "\u989C\u8272\u8BC6\u522B",
+        "Properties": {
+          "ImagePath": "\u8F7D\u5165\u4FDD\u9669\u4E1D\u56FE\u50CF.Image",
+          "RegionPath": "\u4FDD\u9669\u4E1D\u533A\u57DF.Region",
+          "ColorSpace": 1,
+          "References": "Orange|20.0|125.1|160.5|22.0\r\nRed|59.6|128.0|131.9|22.0\r\nBlue|101.0|126.5|161.8|19.9\r\nYellow|38.5|82.9|184.2|19.4\r\nGreen|79.9|94.8|184.4|19.4",
+          "UnknownLabel": "\u672A\u77E5",
+          "FailWhenNotFound": true
+        }
+      },
+      "Condition": null,
+      "Loop": null,
+      "Outputs": null,
+      "FlowOutputs": null,
+      "Children": null,
+      "IfBranch": null,
+      "ElseBranch": null
+    },
+    {
+      "FormatVersion": null,
+      "Id": "31a6236f132e4173a1722927b97fbdd0",
+      "Kind": "FlowOutput",
+      "Name": "\u6D41\u7A0B\u8F93\u51FA1",
+      "Tool": null,
+      "Condition": null,
+      "Loop": null,
+      "Outputs": null,
+      "FlowOutputs": [
+        {
+          "Name": "ImagePath",
+          "Kind": "Single",
+          "Type": "String",
+          "ClrTypeName": null,
+          "Value": {
+            "IsConstant": true,
+            "Reference": null,
+            "Constant": "%HALCONIMAGES%\\color\\color_fuses_00.png"
+          }
+        },
+        {
+          "Name": "Labels",
+          "Kind": "Array",
+          "Type": "String",
+          "ClrTypeName": null,
+          "Value": {
+            "IsConstant": false,
+            "Reference": "\u989C\u8272\u8BC6\u522B.Labels",
+            "Constant": null
+          }
+        },
+        {
+          "Name": "AllKnown",
+          "Kind": "Single",
+          "Type": "Bool",
+          "ClrTypeName": null,
+          "Value": {
+            "IsConstant": false,
+            "Reference": "\u989C\u8272\u8BC6\u522B.AllKnown",
+            "Constant": null
+          }
+        }
+      ],
+      "Children": null,
+      "IfBranch": null,
+      "ElseBranch": null
+    }
+  ],
+  "IfBranch": null,
+  "ElseBranch": null
+}

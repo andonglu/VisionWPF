@@ -1,0 +1,251 @@
+{
+  "FormatVersion": 1,
+  "Id": "2bb1d17917c048c8af7df4c6a6d3ecfd",
+  "Kind": "Sequence",
+  "Name": "HALCON \u4E8C\u7EF4\u7801\u9ED8\u8BA4\u8BC6\u522B\u5F3A\u5EA6\u793A\u4F8B",
+  "Tool": null,
+  "Condition": null,
+  "Loop": null,
+  "Outputs": null,
+  "FlowOutputs": null,
+  "Children": [
+    {
+      "FormatVersion": null,
+      "Id": "873d71b7cae74de2ae1f937084375f6e",
+      "Kind": "Tool",
+      "Name": "\u8F7D\u5165\u4E8C\u7EF4\u7801\u56FE\u50CF",
+      "Tool": {
+        "ToolId": "loadimage",
+        "TypeName": "VisionFlow.Tools.LoadImageTool, VisionFlow.Tools, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null",
+        "ModuleName": "\u8F7D\u5165\u4E8C\u7EF4\u7801\u56FE\u50CF",
+        "Properties": {
+          "FilePath": "%HALCONIMAGES%\\datacode\\qrcode\\qr_workpiece_01.png"
+        }
+      },
+      "Condition": null,
+      "Loop": null,
+      "Outputs": null,
+      "FlowOutputs": null,
+      "Children": null,
+      "IfBranch": null,
+      "ElseBranch": null
+    },
+    {
+      "FormatVersion": null,
+      "Id": "49429d76478a431e85565369a4698874",
+      "Kind": "Tool",
+      "Name": "\u6807\u51C6\u8BC6\u522B",
+      "Tool": {
+        "ToolId": "barcode1d",
+        "TypeName": "VisionFlow.Tools.Barcode1DTool, VisionFlow.Tools, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null",
+        "ModuleName": "\u6807\u51C6\u8BC6\u522B",
+        "Properties": {
+          "ImagePath": "\u8F7D\u5165\u4E8C\u7EF4\u7801\u56FE\u50CF.Image",
+          "RegionPath": null,
+          "CodeType": "auto",
+          "CodeKind": 1,
+          "DataCodeType": "QR Code",
+          "RecognitionLevel": "standard_recognition",
+          "MaxCodes": 0,
+          "GradeQuality": true,
+          "DataCodeModelData": null,
+          "FailWhenNotFound": true
+        }
+      },
+      "Condition": null,
+      "Loop": null,
+      "Outputs": null,
+      "FlowOutputs": null,
+      "Children": null,
+      "IfBranch": null,
+      "ElseBranch": null
+    },
+    {
+      "FormatVersion": null,
+      "Id": "751daba56bc64ab0b49e41f041228a79",
+      "Kind": "Tool",
+      "Name": "\u589E\u5F3A\u8BC6\u522B",
+      "Tool": {
+        "ToolId": "barcode1d",
+        "TypeName": "VisionFlow.Tools.Barcode1DTool, VisionFlow.Tools, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null",
+        "ModuleName": "\u589E\u5F3A\u8BC6\u522B",
+        "Properties": {
+          "ImagePath": "\u8F7D\u5165\u4E8C\u7EF4\u7801\u56FE\u50CF.Image",
+          "RegionPath": null,
+          "CodeType": "auto",
+          "CodeKind": 1,
+          "DataCodeType": "QR Code",
+          "RecognitionLevel": "enhanced_recognition",
+          "MaxCodes": 0,
+          "GradeQuality": true,
+          "DataCodeModelData": null,
+          "FailWhenNotFound": true
+        }
+      },
+      "Condition": null,
+      "Loop": null,
+      "Outputs": null,
+      "FlowOutputs": null,
+      "Children": null,
+      "IfBranch": null,
+      "ElseBranch": null
+    },
+    {
+      "FormatVersion": null,
+      "Id": "4773a42bddea46eca2d9cc2c7609a40f",
+      "Kind": "Tool",
+      "Name": "\u6700\u5927\u8BC6\u522B",
+      "Tool": {
+        "ToolId": "barcode1d",
+        "TypeName": "VisionFlow.Tools.Barcode1DTool, VisionFlow.Tools, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null",
+        "ModuleName": "\u6700\u5927\u8BC6\u522B",
+        "Properties": {
+          "ImagePath": "\u8F7D\u5165\u4E8C\u7EF4\u7801\u56FE\u50CF.Image",
+          "RegionPath": null,
+          "CodeType": "auto",
+          "CodeKind": 1,
+          "DataCodeType": "QR Code",
+          "RecognitionLevel": "maximum_recognition",
+          "MaxCodes": 0,
+          "GradeQuality": true,
+          "DataCodeModelData": null,
+          "FailWhenNotFound": true
+        }
+      },
+      "Condition": null,
+      "Loop": null,
+      "Outputs": null,
+      "FlowOutputs": null,
+      "Children": null,
+      "IfBranch": null,
+      "ElseBranch": null
+    },
+    {
+      "FormatVersion": null,
+      "Id": "2617779520cb4bf58d065fe1fda3e664",
+      "Kind": "FlowOutput",
+      "Name": "\u6D41\u7A0B\u8F93\u51FA1",
+      "Tool": null,
+      "Condition": null,
+      "Loop": null,
+      "Outputs": null,
+      "FlowOutputs": [
+        {
+          "Name": "ImagePath",
+          "Kind": "Single",
+          "Type": "String",
+          "ClrTypeName": null,
+          "Value": {
+            "IsConstant": true,
+            "Reference": null,
+            "Constant": "%HALCONIMAGES%\\datacode\\qrcode\\qr_workpiece_01.png"
+          }
+        },
+        {
+          "Name": "StandardCode",
+          "Kind": "Single",
+          "Type": "String",
+          "ClrTypeName": null,
+          "Value": {
+            "IsConstant": false,
+            "Reference": "\u6807\u51C6\u8BC6\u522B.FirstCode",
+            "Constant": null
+          }
+        },
+        {
+          "Name": "EnhancedCode",
+          "Kind": "Single",
+          "Type": "String",
+          "ClrTypeName": null,
+          "Value": {
+            "IsConstant": false,
+            "Reference": "\u589E\u5F3A\u8BC6\u522B.FirstCode",
+            "Constant": null
+          }
+        },
+        {
+          "Name": "MaximumCode",
+          "Kind": "Single",
+          "Type": "String",
+          "ClrTypeName": null,
+          "Value": {
+            "IsConstant": false,
+            "Reference": "\u6700\u5927\u8BC6\u522B.FirstCode",
+            "Constant": null
+          }
+        },
+        {
+          "Name": "StandardCount",
+          "Kind": "Single",
+          "Type": "Int",
+          "ClrTypeName": null,
+          "Value": {
+            "IsConstant": false,
+            "Reference": "\u6807\u51C6\u8BC6\u522B.Count",
+            "Constant": null
+          }
+        },
+        {
+          "Name": "EnhancedCount",
+          "Kind": "Single",
+          "Type": "Int",
+          "ClrTypeName": null,
+          "Value": {
+            "IsConstant": false,
+            "Reference": "\u589E\u5F3A\u8BC6\u522B.Count",
+            "Constant": null
+          }
+        },
+        {
+          "Name": "MaximumCount",
+          "Kind": "Single",
+          "Type": "Int",
+          "ClrTypeName": null,
+          "Value": {
+            "IsConstant": false,
+            "Reference": "\u6700\u5927\u8BC6\u522B.Count",
+            "Constant": null
+          }
+        },
+        {
+          "Name": "StandardGrade",
+          "Kind": "Single",
+          "Type": "Double",
+          "ClrTypeName": null,
+          "Value": {
+            "IsConstant": false,
+            "Reference": "\u6807\u51C6\u8BC6\u522B.FirstGrade",
+            "Constant": null
+          }
+        },
+        {
+          "Name": "EnhancedGrade",
+          "Kind": "Single",
+          "Type": "Double",
+          "ClrTypeName": null,
+          "Value": {
+            "IsConstant": false,
+            "Reference": "\u589E\u5F3A\u8BC6\u522B.FirstGrade",
+            "Constant": null
+          }
+        },
+        {
+          "Name": "MaximumGrade",
+          "Kind": "Single",
+          "Type": "Double",
+          "ClrTypeName": null,
+          "Value": {
+            "IsConstant": false,
+            "Reference": "\u6700\u5927\u8BC6\u522B.FirstGrade",
+            "Constant": null
+          }
+        }
+      ],
+      "Children": null,
+      "IfBranch": null,
+      "ElseBranch": null
+    }
+  ],
+  "IfBranch": null,
+  "ElseBranch": null
+}
