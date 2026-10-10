@@ -97,17 +97,13 @@
         </Grid>
 
         <Grid Grid.Row="1" Margin="12">
-            <Grid.RowDefinitions>
-                <RowDefinition Height="3*" />
-                <RowDefinition Height="2*" />
-            </Grid.RowDefinitions>
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="240" />
                 <ColumnDefinition Width="360" />
                 <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
 
-            <Border Grid.Row="0" Grid.Column="0" Margin="0,0,12,0" Style="{StaticResource PanelBorderStyle}">
+            <Border Grid.Column="0" Margin="0,0,12,0" Style="{StaticResource PanelBorderStyle}">
                 <DockPanel>
                     <TextBlock DockPanel.Dock="Top" Text="工具箱" Style="{StaticResource EditorSectionTitleStyle}" />
                     <TextBlock DockPanel.Dock="Bottom"
@@ -126,7 +122,7 @@
                 </DockPanel>
             </Border>
 
-            <Grid Grid.Row="0" Grid.Column="1" Margin="0,0,12,0">
+            <Grid Grid.Column="1" Margin="0,0,12,0">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="*" />
                     <RowDefinition Height="260" />
@@ -162,50 +158,57 @@
                 </Border>
             </Grid>
 
-            <Border Grid.Row="0" Grid.Column="2" Margin="0,0,0,12" Style="{StaticResource PanelBorderStyle}">
-                <DockPanel>
-                    <Grid DockPanel.Dock="Top" Margin="0,0,0,16">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
-                        <TextBlock Text="图像显示" Style="{StaticResource EditorSectionTitleStyle}" Margin="0" VerticalAlignment="Center" />
+            <Grid Grid.Column="2">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="3*" />
+                    <RowDefinition Height="2*" />
+                </Grid.RowDefinitions>
+
+                <Border Grid.Row="0" Margin="0,0,0,12" Style="{StaticResource PanelBorderStyle}">
+                    <DockPanel>
+                        <Grid DockPanel.Dock="Top" Margin="0,0,0,16">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="图像显示" Style="{StaticResource EditorSectionTitleStyle}" Margin="0" VerticalAlignment="Center" />
                         <ComboBox x:Name="OutputDisplayCombo"
                                   Grid.Column="1"
                                   MinWidth="260"
                                   Margin="16,0,8,0"
                                   SelectionChanged="OutputDisplayCombo_SelectionChanged"
                                   ToolTip="选择要显示的工具输出图像、区域或轮廓变量" />
-                        <Button Grid.Column="2" Content="显示输入" Click="ShowInputImage_Click" />
-                    </Grid>
-                    <Border Background="Black"
-                            BorderBrush="{DynamicResource ControlStrokeColorSecondaryBrush}"
-                            BorderThickness="1"
-                            CornerRadius="4"
-                            ClipToBounds="True">
-                        <wfi:WindowsFormsHost x:Name="ImageHost">
-                            <vfc:HalconImageView x:Name="ImageView" />
-                        </wfi:WindowsFormsHost>
-                    </Border>
-                </DockPanel>
-            </Border>
+                            <Button Grid.Column="2" Content="显示输入" Click="ShowInputImage_Click" />
+                        </Grid>
+                        <Border Background="Black"
+                                BorderBrush="{DynamicResource ControlStrokeColorSecondaryBrush}"
+                                BorderThickness="1"
+                                CornerRadius="4"
+                                ClipToBounds="True">
+                            <wfi:WindowsFormsHost x:Name="ImageHost">
+                                <vfc:HalconImageView x:Name="ImageView" />
+                            </wfi:WindowsFormsHost>
+                        </Border>
+                    </DockPanel>
+                </Border>
 
-            <Border Grid.Row="1" Grid.ColumnSpan="3" Margin="0,12,0,0" Style="{StaticResource PanelBorderStyle}">
-                <DockPanel>
-                    <TextBlock DockPanel.Dock="Top" Text="运行结果" Style="{StaticResource EditorSectionTitleStyle}" />
-                    <DataGrid x:Name="VariablesGrid"
-                              AutoGenerateColumns="False"
-                              IsReadOnly="True">
-                        <DataGrid.Columns>
-                            <DataGridTextColumn Header="路径" Binding="{Binding Path}" Width="2*" />
-                            <DataGridTextColumn Header="类型" Binding="{Binding Type}" Width="*" />
-                            <DataGridTextColumn Header="数量" Binding="{Binding Count}" Width="70" />
-                            <DataGridTextColumn Header="值" Binding="{Binding Value}" Width="4*" />
-                        </DataGrid.Columns>
-                    </DataGrid>
-                </DockPanel>
-            </Border>
+                <Border Grid.Row="1" Margin="0,12,0,0" Style="{StaticResource PanelBorderStyle}">
+                    <DockPanel>
+                        <TextBlock DockPanel.Dock="Top" Text="运行结果" Style="{StaticResource EditorSectionTitleStyle}" />
+                        <DataGrid x:Name="VariablesGrid"
+                                  AutoGenerateColumns="False"
+                                  IsReadOnly="True">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="路径" Binding="{Binding Path}" Width="2*" />
+                                <DataGridTextColumn Header="类型" Binding="{Binding Type}" Width="*" />
+                                <DataGridTextColumn Header="数量" Binding="{Binding Count}" Width="70" />
+                                <DataGridTextColumn Header="值" Binding="{Binding Value}" Width="2*" />
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </DockPanel>
+                </Border>
+            </Grid>
 
             <Button x:Name="LogDrawerToggle"
                     Grid.RowSpan="2"
