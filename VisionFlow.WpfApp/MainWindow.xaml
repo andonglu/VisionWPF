@@ -158,7 +158,7 @@
                 </Border>
             </Grid>
 
-            <Grid Grid.Column="2">
+            <Grid x:Name="RightColumnGrid" Grid.Column="2">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="3*" />
                     <RowDefinition Height="2*" />
@@ -208,57 +208,57 @@
                         </DataGrid>
                     </DockPanel>
                 </Border>
+
+                <Button x:Name="LogDrawerToggle"
+                        Grid.RowSpan="2"
+                        Panel.ZIndex="6"
+                        HorizontalAlignment="Right"
+                        VerticalAlignment="Center"
+                        Width="22"
+                        Height="84"
+                        Margin="0,0,-12,0"
+                        Click="LogDrawerToggle_Click"
+                        ToolTip="展开/收起日志"
+                        Background="{DynamicResource ControlFillColorDefaultBrush}"
+                        BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
+                        BorderThickness="1,1,0,1">
+                    <TextBlock Text="日 志" RenderTransformOrigin="0.5,0.5">
+                        <TextBlock.RenderTransform>
+                            <RotateTransform Angle="90" />
+                        </TextBlock.RenderTransform>
+                    </TextBlock>
+                </Button>
+
+                <Border x:Name="LogDrawer"
+                        Grid.RowSpan="2"
+                        Panel.ZIndex="5"
+                        HorizontalAlignment="Stretch"
+                        VerticalAlignment="Stretch"
+                        Width="0"
+                        Margin="0,12,0,0"
+                        ClipToBounds="True"
+                        Style="{StaticResource PanelBorderStyle}">
+                    <DockPanel>
+                        <Grid DockPanel.Dock="Top" Margin="0,0,0,12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="日志" Style="{StaticResource EditorSectionTitleStyle}" Margin="0" VerticalAlignment="Center" />
+                            <Button Grid.Column="1" Content="收起" Click="LogDrawerToggle_Click" />
+                        </Grid>
+                        <DataGrid x:Name="LogGrid"
+                                  AutoGenerateColumns="False"
+                                  IsReadOnly="True">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="级别" Binding="{Binding Level}" Width="70" />
+                                <DataGridTextColumn Header="节点" Binding="{Binding NodeName}" Width="*" />
+                                <DataGridTextColumn Header="消息" Binding="{Binding Message}" Width="3*" />
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </DockPanel>
+                </Border>
             </Grid>
-
-            <Button x:Name="LogDrawerToggle"
-                    Grid.RowSpan="2"
-                    Panel.ZIndex="6"
-                    HorizontalAlignment="Right"
-                    VerticalAlignment="Center"
-                    Width="22"
-                    Height="84"
-                    Margin="0,0,-12,0"
-                    Click="LogDrawerToggle_Click"
-                    ToolTip="展开/收起日志"
-                    Background="{DynamicResource ControlFillColorDefaultBrush}"
-                    BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
-                    BorderThickness="1,1,0,1">
-                <TextBlock Text="日 志" RenderTransformOrigin="0.5,0.5">
-                    <TextBlock.RenderTransform>
-                        <RotateTransform Angle="90" />
-                    </TextBlock.RenderTransform>
-                </TextBlock>
-            </Button>
-
-            <Border x:Name="LogDrawer"
-                    Grid.RowSpan="2"
-                    Panel.ZIndex="5"
-                    HorizontalAlignment="Right"
-                    VerticalAlignment="Stretch"
-                    Width="0"
-                    Margin="0,12,0,12"
-                    ClipToBounds="True"
-                    Style="{StaticResource PanelBorderStyle}">
-                <DockPanel>
-                    <Grid DockPanel.Dock="Top" Margin="0,0,0,12">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
-                        <TextBlock Text="日志" Style="{StaticResource EditorSectionTitleStyle}" Margin="0" VerticalAlignment="Center" />
-                        <Button Grid.Column="1" Content="收起" Click="LogDrawerToggle_Click" />
-                    </Grid>
-                    <DataGrid x:Name="LogGrid"
-                              AutoGenerateColumns="False"
-                              IsReadOnly="True">
-                        <DataGrid.Columns>
-                            <DataGridTextColumn Header="级别" Binding="{Binding Level}" Width="70" />
-                            <DataGridTextColumn Header="节点" Binding="{Binding NodeName}" Width="*" />
-                            <DataGridTextColumn Header="消息" Binding="{Binding Message}" Width="3*" />
-                        </DataGrid.Columns>
-                    </DataGrid>
-                </DockPanel>
-            </Border>
         </Grid>
 
         <DockPanel Grid.Row="2" Background="{DynamicResource SolidBackgroundFillColorSecondaryBrush}">

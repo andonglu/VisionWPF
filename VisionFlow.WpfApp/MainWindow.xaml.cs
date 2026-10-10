@@ -836,7 +836,7 @@ namespace VisionFlow.WpfApp
             _logDrawerOpen = !_logDrawerOpen;
             var animation = new System.Windows.Media.Animation.DoubleAnimation
             {
-                To = _logDrawerOpen ? 400 : 0,
+                To = _logDrawerOpen ? RightColumnGrid.ActualWidth : 0,
                 Duration = TimeSpan.FromMilliseconds(220),
             };
             LogDrawer.BeginAnimation(WidthProperty, animation);
