@@ -122,6 +122,26 @@
                                    Text="MaxCodes 为 0 表示读取全部。质量等级为 ISO/IEC 15416（一维码）/ 15415（二维码）总体等级 0~4（F~A），需勾选 GradeQuality。一维码码制可填 HALCON 条码类型名（auto 表示自动）。" />
                     </StackPanel>
                 </Border>
+
+                <Expander Header="高级" IsExpanded="False" Margin="0,12,0,0">
+                    <StackPanel Margin="0,8,0,0">
+                        <TextBlock Text="高级参数（模型参数）" Style="{StaticResource EditorFieldLabelStyle}" />
+                        <TextBox x:Name="ModelParamsText" AcceptsReturn="True" TextWrapping="Wrap"
+                                 VerticalScrollBarVisibility="Auto" MinHeight="90"
+                                 ToolTip="每行一条 名称=值，空行与 # 注释行跳过；按读码方式经 set_data_code_2d_param / set_bar_code_param 生效" />
+                        <TextBlock Margin="0,4,0,0" TextWrapping="Wrap" Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                   Text="每行一条 名称=值，留空表示不设置；按读码方式经 set_data_code_2d_param（二维码）/ set_bar_code_param（一维码）生效。示例：&#x0a;polarity=dark_on_light&#x0a;timeout=2000&#x0a;small_modules_robustness=high" />
+                        <TextBlock Margin="0,12,0,0" Text="训练图像（二维码）" Style="{StaticResource EditorFieldLabelStyle}" />
+                        <ListBox x:Name="TrainImageList" Height="110" SelectionMode="Single" />
+                        <WrapPanel Margin="0,4,0,0">
+                            <Button Content="添加当前图像" Margin="0,0,6,4" Click="AddCurrentImage_Click" />
+                            <Button Content="添加文件…（多选）" Margin="0,0,6,4" Click="AddFiles_Click" />
+                            <Button Content="移除" Margin="0,0,6,4" Click="RemoveTrainImage_Click" />
+                            <Button Content="清空" Margin="0,0,6,4" Click="ClearTrainImages_Click" />
+                            <Button Content="训练全部" Style="{StaticResource AccentButtonStyle}" Margin="0,0,0,4" Click="TrainAll_Click" />
+                        </WrapPanel>
+                    </StackPanel>
+                </Expander>
             </StackPanel>
         </ScrollViewer>
 

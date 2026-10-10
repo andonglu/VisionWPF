@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using HalconDotNet;
@@ -124,6 +126,7 @@ namespace VisionFlow.WpfToolEditors.Editors
             MaxCodesText.Text = _tool.MaxCodes.ToString(CultureInfo.InvariantCulture);
             GradeQualityCheck.IsChecked = _tool.GradeQuality;
             FailWhenNotFoundCheck.IsChecked = _tool.FailWhenNotFound;
+            ModelParamsText.Text = _tool.ModelParams ?? string.Empty;
             UpdateTrainInfo();
         }
 
@@ -165,6 +168,7 @@ namespace VisionFlow.WpfToolEditors.Editors
             target.MaxCodes = ParseInt(MaxCodesText, nameof(Barcode1DTool.MaxCodes));
             target.GradeQuality = GradeQualityCheck.IsChecked == true;
             target.FailWhenNotFound = FailWhenNotFoundCheck.IsChecked == true;
+            target.ModelParams = NullIfEmpty(ModelParamsText.Text);
             target.DataCodeModelData = _modelData;
         }
 
@@ -212,6 +216,122 @@ namespace VisionFlow.WpfToolEditors.Editors
         }
 
         // ======================= 训练 =======================
+
+        /// <summary>训练图像列表中“当前图像”条目的显示文本（训练时取预览图像）。</summary>
+        private const string CurrentImageMarker = "（当前图像）";
+
+        private void AddCurrentImage_Click(object sender, RoutedEventArgs e)
+        {
+            HObject image = ResolveSourceImage();
+            if (image == null || !image.IsInitialized())
+            {
+                ShowError("没有可用的当前图像：请先选择图像输入并运行一次流程。");
+                return;
+            }
+            if (!TrainImageList.Items.Contains(CurrentImageMarker))
+            {
+                TrainImageList.Items.Add(CurrentImageMarker);
+            }
+            SetStatus("已添加当前图像到训练列表。");
+        }
+
+        private void AddFiles_Click(object sender, RoutedEventArgs e)
+        {
+            var dialog = new Microsoft.Win32.OpenFileDialog
+            {
+                Title = "选择训练图像（可多选）",
+                Filter = "图像文件 (*.bmp;*.png;*.jpg;*.jpeg;*.tif;*.tiff)|*.bmp;*.png;*.jpg;*.jpeg;*.tif;*.tiff|所有文件 (*.*)|*.*",
+                Multiselect = true
+            };
+            if (dialog.ShowDialog(this) != true)
+            {
+                return;
+            }
+            int added = 0;
+            foreach (string file in dialog.FileNames)
+            {
+                if (!TrainImageList.Items.Contains(file))
+                {
+                    TrainImageList.Items.Add(file);
+                    added++;
+                }
+            }
+            SetStatus($"已添加 {added} 张文件图像到训练列表（重复项已跳过）。");
+        }
+
+        private void RemoveTrainImage_Click(object sender, RoutedEventArgs e)
+        {
+            if (TrainImageList.SelectedItem is string item)
+            {
+                TrainImageList.Items.Remove(item);
+            }
+        }
+
+        private void ClearTrainImages_Click(object sender, RoutedEventArgs e)
+        {
+            TrainImageList.Items.Clear();
+        }
+
+        /// <summary>按训练列表顺序逐张训练（当前图像项取预览图像，文件项临时读图），完成后把训练数据写回窗口字段（“确定”时随参数保存）。</summary>
+        private void TrainAll_Click(object sender, RoutedEventArgs e)
+        {
+            if (SelectedCodeKind != CodeKind.DataCode2D)
+            {
+                ShowError("训练只对二维码（DataCode2D）可用。");
+                return;
+            }
+            if (TrainImageList.Items.Count == 0)
+            {
+                ShowError("训练图像列表为空：请先“添加当前图像”或“添加文件…”。");
+                return;
+            }
+            var images = new List<HObject>();
+            var owned = new List<HObject>();
+            ToolBase copy = null;
+            try
+            {
+                foreach (string item in TrainImageList.Items.Cast<string>())
+                {
+                    if (item == CurrentImageMarker)
+                    {
+                        HObject image = ResolveSourceImage();
+                        if (image == null || !image.IsInitialized())
+                        {
+                            ShowError("训练列表中的“当前图像”不可用：请先选择图像输入并运行一次流程。");
+                            return;
+                        }
+                        images.Add(image);
+                    }
+                    else
+                    {
+                        HOperatorSet.ReadImage(out HObject fileImage, item);
+                        owned.Add(fileImage);
+                        images.Add(fileImage);
+                    }
+                }
+                copy = ToolEditTransaction.CopyConfiguration(_tool);
+                ApplyTo((Barcode1DTool)copy);
+                ((Barcode1DTool)copy).TrainDataCodeModel(null, images);
+                _modelData = ((Barcode1DTool)copy).DataCodeModelData;
+                UpdateTrainInfo();
+                SetStatus($"训练完成：共 {images.Count} 张图像，二维码模型数据 {_modelData.Length} 字节，已写入训练数据（“确定”后保存到工具）。");
+            }
+            catch (Exception ex) when (ex is HalconException || ex is InvalidOperationException || ex is ArgumentException || ex is System.IO.IOException)
+            {
+                ShowError("训练失败：" + ex.Message);
+            }
+            finally
+            {
+                if (copy != null)
+                {
+                    FlowResources.Release(copy);
+                }
+                foreach (HObject image in owned)
+                {
+                    image.Dispose();
+                }
+            }
+        }
 
         /// <summary>用当前图像训练二维码模型：在一次性副本上应用界面参数后训练，序列化数据写回窗口训练数据字段（“确定”时随参数保存）。</summary>
         private void Train_Click(object sender, RoutedEventArgs e)

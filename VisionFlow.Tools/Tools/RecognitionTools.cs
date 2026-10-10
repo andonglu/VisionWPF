@@ -60,6 +60,31 @@ namespace VisionFlow.Tools
 
         private static readonly string[] RecognitionLevels = { "standard_recognition", "enhanced_recognition", "maximum_recognition" };
 
+        /// <summary>
+        /// 高级模型参数（自由键值对，可空 = 不设置）：每行一条「名称=值」，空行与 # 开头注释行跳过。
+        /// 两种读码方式共用：Barcode → set_bar_code_param（每次运行新建模型后应用）；
+        /// DataCode2D → set_data_code_2d_param（模型创建/反序列化后、进缓存前应用，并纳入缓存键）。
+        /// 值类型自动推断：整数按 int、含小数点/e 按 double，其余按字符串。
+        /// </summary>
+        public string ModelParams { get; set; }
+
+        /// <summary>高级参数的一条解析结果。</summary>
+        private readonly struct ModelParamEntry
+        {
+            public readonly string Name;
+            public readonly HTuple Value;
+            public readonly string RawText;
+            public readonly int LineNumber;
+
+            public ModelParamEntry(string name, HTuple value, string rawText, int lineNumber)
+            {
+                Name = name;
+                Value = value;
+                RawText = rawText;
+                LineNumber = lineNumber;
+            }
+        }
+
         /// <summary>MaxCodes=0（读取全部）时传给 find_data_code_2d 的 stop_after_result_num 上限；查找会在搜完所有候选后自然结束。</summary>
         private const int AllCodesStopCount = 999;
 
@@ -115,14 +140,27 @@ namespace VisionFlow.Tools
             try
             {
                 HOperatorSet.CreateBarCodeModel(new HTuple(), new HTuple(), out handle);
-                if (GradeQuality)
+                try
                 {
-                    // 质量查询（quality_isoiec15416）需要模型保留结果
-                    HOperatorSet.SetBarCodeParam(handle, "persistence", 1);
+                    if (GradeQuality)
+                    {
+                        // 质量查询（quality_isoiec15416）需要模型保留结果
+                        HOperatorSet.SetBarCodeParam(handle, "persistence", 1);
+                    }
+                    if (MaxCodes > 0)
+                    {
+                        HOperatorSet.SetBarCodeParam(handle, "stop_after_result_num", MaxCodes);
+                    }
+                    // 高级参数最后应用，可覆盖内置参数（如 stop_after_result_num）
+                    ApplyBarcodeModelParams(handle);
                 }
-                if (MaxCodes > 0)
+                catch (HalconException ex)
                 {
-                    HOperatorSet.SetBarCodeParam(handle, "stop_after_result_num", MaxCodes);
+                    return NodeResult.Fail($"{ModuleName} 一维码参数设置失败：{ex.Message}");
+                }
+                catch (InvalidOperationException ex)
+                {
+                    return NodeResult.Fail($"{ModuleName} {ex.Message}");
                 }
                 HOperatorSet.FindBarCode(runImage, out HObject symbolRegions, handle, CodeType, out HTuple codes);
                 var strings = new List<string>();
@@ -324,21 +362,47 @@ namespace VisionFlow.Tools
             {
                 throw new ArgumentNullException(nameof(image));
             }
+            TrainDataCodeModel(ctx, new[] { image });
+        }
+
+        /// <summary>
+        /// 用多张图像依次训练二维码模型：在同一模型句柄上逐张 find('train','all') 累积训练，
+        /// 全部完成后只序列化一次并保存到 <see cref="DataCodeModelData"/>。
+        /// </summary>
+        public void TrainDataCodeModel(FlowContext ctx, IEnumerable<HObject> images)
+        {
+            if (images == null)
+            {
+                throw new ArgumentNullException(nameof(images));
+            }
             lock (_modelSync)
             {
                 HTuple model = EnsureCachedDataCodeModel(ctx);
-                HOperatorSet.FindDataCode2d(image, out HObject symbolXlds, model, "train", "all", out HTuple _, out HTuple _);
-                symbolXlds.Dispose();
+                int count = 0;
+                foreach (HObject image in images)
+                {
+                    if (image == null)
+                    {
+                        continue;
+                    }
+                    HOperatorSet.FindDataCode2d(image, out HObject symbolXlds, model, "train", "all", out HTuple _, out HTuple _);
+                    symbolXlds.Dispose();
+                    count++;
+                }
+                if (count == 0)
+                {
+                    throw new ArgumentException("训练图像列表为空", nameof(images));
+                }
                 DataCodeModelData = SerializeDataCode2dModel(model);
                 _cachedDataCodeModelKey = CurrentDataCodeModelKey;
                 ctx?.AddLog(FlowLogLevel.Info,
-                    $"[读码] 二维码模型已训练（{DataCodeType}），训练数据 {DataCodeModelData.Length} 字节；重新训练会替换现有训练数据");
+                    $"[读码] 二维码模型已用 {count} 张图像训练（{DataCodeType}），训练数据 {DataCodeModelData.Length} 字节；重新训练会替换现有训练数据");
             }
         }
 
         private object CurrentDataCodeModelKey
         {
-            get { return (DataCodeType ?? string.Empty, RecognitionLevel ?? string.Empty, DataCodeModelData); }
+            get { return (DataCodeType ?? string.Empty, RecognitionLevel ?? string.Empty, ModelParams ?? string.Empty, DataCodeModelData); }
         }
 
         /// <summary>
@@ -363,15 +427,29 @@ namespace VisionFlow.Tools
 
         private HTuple LoadDataCodeModel()
         {
+            HTuple handle;
             if (DataCodeModelData != null && DataCodeModelData.Length > 0)
             {
-                return DeserializeDataCode2dModel(DataCodeModelData);
+                handle = DeserializeDataCode2dModel(DataCodeModelData);
             }
-            HOperatorSet.CreateDataCode2dModel(
-                string.IsNullOrWhiteSpace(DataCodeType) ? "QR Code" : DataCodeType,
-                "default_parameters",
-                string.IsNullOrWhiteSpace(RecognitionLevel) ? "standard_recognition" : RecognitionLevel,
-                out HTuple handle);
+            else
+            {
+                HOperatorSet.CreateDataCode2dModel(
+                    string.IsNullOrWhiteSpace(DataCodeType) ? "QR Code" : DataCodeType,
+                    "default_parameters",
+                    string.IsNullOrWhiteSpace(RecognitionLevel) ? "standard_recognition" : RecognitionLevel,
+                    out handle);
+            }
+            // 高级参数统一在建模/反序列化后、进缓存前应用；句柄随缓存键隔离，失败时释放句柄再上抛
+            try
+            {
+                ApplyDataCodeModelParams(handle);
+            }
+            catch
+            {
+                HOperatorSet.ClearDataCode2dModel(handle);
+                throw;
+            }
             return handle;
         }
 
@@ -407,11 +485,129 @@ namespace VisionFlow.Tools
             }
         }
 
+        /// <summary>
+        /// 解析高级参数：每行一条「名称=值」（等号两侧去空白），空行与 # 开头注释行跳过。
+        /// 格式非法时 error 含行号与原始内容。值类型推断：整数 → int，含小数点/e → double，其余字符串。
+        /// </summary>
+        private bool TryParseModelParams(out List<ModelParamEntry> entries, out string error)
+        {
+            entries = new List<ModelParamEntry>();
+            error = null;
+            if (string.IsNullOrWhiteSpace(ModelParams))
+            {
+                return true;
+            }
+            string[] lines = ModelParams.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None);
+            for (int i = 0; i < lines.Length; i++)
+            {
+                string line = lines[i].Trim();
+                if (line.Length == 0 || line.StartsWith("#"))
+                {
+                    continue;
+                }
+                int eq = line.IndexOf('=');
+                if (eq < 0)
+                {
+                    error = $"高级参数第 {i + 1} 行「{line}」缺少等号：应为 名称=值";
+                    return false;
+                }
+                string name = line.Substring(0, eq).Trim();
+                string value = line.Substring(eq + 1).Trim();
+                if (name.Length == 0)
+                {
+                    error = $"高级参数第 {i + 1} 行「{line}」名称为空：应为 名称=值";
+                    return false;
+                }
+                entries.Add(new ModelParamEntry(name, InferParamValue(value), line, i + 1));
+            }
+            return true;
+        }
+
+        /// <summary>值类型推断：整数按 int，含小数点/e 的数值按 double，其余按字符串（探测：数值参数传字符串报 #1203）。</summary>
+        private static HTuple InferParamValue(string text)
+        {
+            if (int.TryParse(text, System.Globalization.NumberStyles.Integer,
+                    System.Globalization.CultureInfo.InvariantCulture, out int intValue))
+            {
+                return new HTuple(intValue);
+            }
+            if ((text.IndexOf('.') >= 0 || text.IndexOf('e') >= 0 || text.IndexOf('E') >= 0)
+                && double.TryParse(text, System.Globalization.NumberStyles.Float,
+                    System.Globalization.CultureInfo.InvariantCulture, out double doubleValue))
+            {
+                return new HTuple(doubleValue);
+            }
+            return new HTuple(text);
+        }
+
+        /// <summary>一维码高级参数：每次运行新建模型后应用（set_bar_code_param）。格式错误已在 CheckConfiguration 拦截，此处不再处理。</summary>
+        private void ApplyBarcodeModelParams(HTuple handle)
+        {
+            if (string.IsNullOrWhiteSpace(ModelParams))
+            {
+                return;
+            }
+            if (!TryParseModelParams(out List<ModelParamEntry> entries, out _))
+            {
+                return;
+            }
+            foreach (ModelParamEntry entry in entries)
+            {
+                try
+                {
+                    HOperatorSet.SetBarCodeParam(handle, entry.Name, entry.Value);
+                }
+                catch (HalconException ex)
+                {
+                    throw new InvalidOperationException(BuildModelParamError(entry, ex, "一维码"), ex);
+                }
+            }
+        }
+
+        /// <summary>二维码高级参数：模型创建/反序列化后应用（set_data_code_2d_param）。格式错误已在 CheckConfiguration 拦截，此处不再处理。</summary>
+        private void ApplyDataCodeModelParams(HTuple model)
+        {
+            if (string.IsNullOrWhiteSpace(ModelParams))
+            {
+                return;
+            }
+            if (!TryParseModelParams(out List<ModelParamEntry> entries, out _))
+            {
+                return;
+            }
+            foreach (ModelParamEntry entry in entries)
+            {
+                try
+                {
+                    HOperatorSet.SetDataCode2dParam(model, entry.Name, entry.Value);
+                }
+                catch (HalconException ex)
+                {
+                    throw new InvalidOperationException(BuildModelParamError(entry, ex, "二维码"), ex);
+                }
+            }
+        }
+
+        /// <summary>参数应用失败的中文错误：含行号、原文与 HALCON 错误码；#8831 为参数名不支持，#8835/#1203 为参数值非法。</summary>
+        private static string BuildModelParamError(ModelParamEntry entry, HalconException ex, string kind)
+        {
+            int code = ex.GetErrorCode();
+            string hint = code == 8831
+                ? "：该码制/模型不支持此参数名"
+                : code == 8835 || code == 1203 ? "：参数值非法" : string.Empty;
+            return $"高级参数第 {entry.LineNumber} 行「{entry.RawText}」设置失败（{kind}）：HALCON 错误 #{code}{hint}";
+        }
+
         public IEnumerable<ToolConfigurationIssue> CheckConfiguration()
         {
             if (MaxCodes < 0)
             {
                 yield return new ToolConfigurationIssue(nameof(MaxCodes), "读取数量不能小于 0（0 表示读取全部）");
+            }
+            if (!string.IsNullOrWhiteSpace(ModelParams)
+                && !TryParseModelParams(out _, out string modelParamsError))
+            {
+                yield return new ToolConfigurationIssue(nameof(ModelParams), modelParamsError);
             }
             if (CodeKind == CodeKind.DataCode2D)
             {

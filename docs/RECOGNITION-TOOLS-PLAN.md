@@ -259,3 +259,24 @@ HALCON 版本基线：20.11 及以上（Deep OCR 在 20.11 中可用）。
 - 4 个编辑窗口的 UI 交互（框选、叠加渲染、深/浅色主题观感）需人工验收，清单见提交说明。
 - Deep OCR 设备参数（GPU）在 HALCON 22.11 不可用：选 GPU 时预热报中文错误（实测路径有测试覆盖）。
 - 已新增 4 个识别示例流程：`datacode-default-settings.vflow.json`、`ocr-expiration-date.vflow.json`、`color-fuses-classify.vflow.json`、`color-pieces-mlp.vflow.json`；流程内置 `loadimage`，默认使用 `%HALCONIMAGES%` 路径，`图像加载` 编辑窗支持通过 `HALCON 示例` 打开按目录分组的示例图像浏览窗口并记录最近使用，主编辑窗顶部提供最近图像快捷入口，支持固定/取消固定与清空最近记录。
+
+
+## 14. 读码高级参数与多图训练（2026-10-10，分支 `main`）
+
+### 探测结论摘要（2026-10-10 实测 HALCON 22.11）
+
+- 2D 模型参数（`set_data_code_2d_param`，建模后设置）：可用清单按码制不同，经 `query_data_code_2d_params(model, 'set_model_params')` 可查（QR 29 个、DataMatrix 37 个）。共有常用项：`polarity`、`mirrored`、`strict_model`、`timeout`、`small_modules_robustness`、`module_size`/`module_size_min/max`、`symbol_size_min/max`、`contrast_min`、`string_encoding` 等。参数名非法报 #8831，值非法报 #8835（如 `module_size=small`）。
+- 2D find 参数在 22.11 不能枚举（`'set_find_params'` 查询报 #8831），已支持的 find 参数就是现有的 `stop_after_result_num` 与训练用 `train`，不再开放其它 find 参数。
+- 1D 模型参数（`set_bar_code_param`，每次运行新建模型后设置）：`query_bar_code_params(model, 'all')` 得 26 个（`element_size_min/max`、`meas_thresh`、`orientation`、`timeout`、`contrast_min`、`small_elements_robustness` 等）。**值类型敏感**：数值参数必须传数值，传字符串报 #1203——实现按值文本自动推断（整数 → int，含小数点/e → double，其余字符串）。
+- 训练：`find_data_code_2d` 的 `'train'='all'` 在同一句柄上逐张累积；ZXing 同尺寸合成图训练后序列化恒为 178 字节且内容一致（训练收敛值相同），不同模块尺寸样本训练内容不同。
+
+### 实现
+
+- `Barcode1DTool.ModelParams`（string，多行 `名称=值`，可空 = 不设置）：解析跳过空行与 # 注释行，非法行在 `CheckConfiguration` 给中文错误（行号 + 内容）。应用时机：2D 在 `LoadDataCodeModel` 创建/反序列化句柄后、进缓存前统一应用（句柄随缓存键隔离）；1D 在每次 `create_bar_code_model` 后应用。2D 缓存键加入 `ModelParams`（1D 模型每次新建无需入键）；清空 `ModelParams` → 键变化 → 重建默认模型。参数应用失败包装为中文错误："高级参数第 N 行「名称=值」设置失败：HALCON 错误 #code"（#8831 附"该码制/模型不支持此参数名"，#8835/#1203 附"参数值非法"）。
+- 多图训练 API：`TrainDataCodeModel(FlowContext, IEnumerable<HObject>)`，同一锁内逐张 `find('train','all')`，全部完成后序列化一次、更新键、日志记录图像数；原单图方法保留并转调多图版。
+- 编辑窗口（`WpfBarcodeToolEditWindow`）"高级"折叠区（默认折叠）：高级参数多行文本框（示例 `polarity=dark_on_light`、`timeout=2000`、`small_modules_robustness=high`）+ 训练图像列表（"（当前图像）"或文件路径；添加当前图像 / 添加文件…多选 / 移除 / 清空 / 训练全部）。训练全部在工作副本上按序调多图 API，完成后显示训练数据字节数；沿用窗口既有约定（训练产物窗口字段 + 确定时写回）。
+- 兼容性：旧流程无 `ModelParams` 属性 = 默认空，行为不变（序列化往返与历史文件缺省有测试覆盖）。
+
+### 验证（2026-10-10，本机 HALCON 22.11）
+
+- 构建 0 错误；`RecognitionToolsBatch*` 69 通过（新增 `RecognitionToolsBatch4Tests` 8 个：2D/1D 高级参数生效、#8831/#8835 中文错误、参数变化触发重建、多图训练一次性/分批、格式校验、序列化往返）。
