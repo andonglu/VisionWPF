@@ -24,6 +24,7 @@ public class RecognitionEditorUiTests
     {
         string icons = File.ReadAllText(RepoPaths.Find("VisionFlow.WpfApp/Themes/ToolIcons.xaml"));
         Assert.Contains($"x:Key=\"ToolIcon.{id}\"", icons);
+        AssertNoDuplicateIconKeys(icons);
 
         string router = File.ReadAllText(RepoPaths.Find("VisionFlow.WpfToolEditors/WpfToolEditorRouter.cs"));
         int previewStart = router.IndexOf("private static bool IsVisualPreviewTool", StringComparison.Ordinal);
@@ -70,5 +71,20 @@ public class RecognitionEditorUiTests
         {
             Assert.Contains($"x:Key=\"ToolIcon.{id}\"", icons);
         }
+    }
+
+    /// <summary>ToolIcons.xaml 中不允许重复的 x:Key：编译期不报错，但 App 启动合并资源字典时
+    /// 会因 duplicate key 抛 XamlParseException（DeferrableContent）导致整个应用起不来（2026-10-10 实例）。</summary>
+    private static void AssertNoDuplicateIconKeys(string iconsXaml)
+    {
+        var counts = new Dictionary<string, int>(StringComparer.Ordinal);
+        foreach (Match m in Regex.Matches(iconsXaml, "x:Key=\"([^\"]+)\""))
+        {
+            string key = m.Groups[1].Value;
+            counts.TryGetValue(key, out int n);
+            counts[key] = n + 1;
+        }
+        string[] duplicates = counts.Where(p => p.Value > 1).Select(p => p.Key).ToArray();
+        Assert.True(duplicates.Length == 0, "ToolIcons.xaml 存在重复 x:Key：" + string.Join(", ", duplicates));
     }
 }
