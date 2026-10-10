@@ -829,6 +829,19 @@ namespace VisionFlow.WpfApp
             window.ShowDialog();
         }
 
+        private bool _logDrawerOpen;
+
+        private void LogDrawerToggle_Click(object sender, RoutedEventArgs e)
+        {
+            _logDrawerOpen = !_logDrawerOpen;
+            var animation = new System.Windows.Media.Animation.DoubleAnimation
+            {
+                To = _logDrawerOpen ? 400 : 0,
+                Duration = TimeSpan.FromMilliseconds(220),
+            };
+            LogDrawer.BeginAnimation(WidthProperty, animation);
+        }
+
         private void DisplaySettings_Click(object sender, RoutedEventArgs e)
         {
             var drawMode = new ComboBox { IsEditable = false, Margin = new Thickness(0, 0, 0, 16) };
