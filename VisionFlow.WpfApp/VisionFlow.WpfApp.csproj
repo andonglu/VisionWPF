@@ -5,6 +5,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Resource Include="Resources\Fonts\fa-solid-900.ttf" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\VisionFlow.Base\VisionFlow.Base.csproj" />
     <ProjectReference Include="..\VisionFlow.EditorCore\VisionFlow.EditorCore.csproj" />
     <ProjectReference Include="..\VisionFlow.Tools\VisionFlow.Tools.csproj" />

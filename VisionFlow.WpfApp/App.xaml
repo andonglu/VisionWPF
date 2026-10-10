@@ -4,6 +4,7 @@
              StartupUri="MainWindow.xaml">
     <Application.Resources>
         <ResourceDictionary>
+            <FontFamily x:Key="FontAwesomeSolid">pack://application:,,,/VisionFlow.WpfApp;component/Resources/Fonts/fa-solid-900.ttf#Font Awesome 6 Free Solid</FontFamily>
             <ResourceDictionary.MergedDictionaries>
                 <ResourceDictionary Source="Themes/Tokens.xaml" />
                 <ResourceDictionary Source="Themes/ToolIcons.xaml" />

@@ -50,6 +50,7 @@
           "GradeQuality": true,
           "DataCodeModelData": null,
           "FailWhenNotFound": true,
+          "BarcodeParams": null,
           "DataCodeParams": null
         }
       },
@@ -79,9 +80,10 @@
           "RecognitionLevel": "enhanced_recognition",
           "MaxCodes": 0,
           "GradeQuality": true,
-          "DataCodeModelData": "aFVYaFh9EyIAAAAAAAAAokhEQ00BAgYMDeLSAAAAAgABAAEAAAAAAAAAAAAAAAUAAAAGAAAAAAAAAAAAAAAAAAAAAAAAAAAAv/AAAAAAAAAAAAABAAAADwAAAFIAAAAFAAAAPAAAAEYAAAADAAAAAwAAAADACSH7VEQtGEAJIftURC0YAAAAAAABAAEBAQEBAQEBAAABAAAAP\u002BmZmZmZmZoAAAAeAAAAKAAAAAcASERDTQ==",
+          "DataCodeModelData": "aFVYaFh9EyIAAAAAAAAAokhEQ00BAgYMDeLSAAAAAgABAAEAAAAAAAAAAAAAAAUAAAAGAAAAAAAAAAAAAAAAAAAAAAAAAAAAv/AAAAAAAAAAAAABAAAADwAAAB4AAAAKAAAAPAAAAEYAAAADAAAAAwAAAADACSH7VEQtGEAJIftURC0YAAAAAAABAAEBAQEBAQEBAAABAAAAP\u002BmZmZmZmZoAAAAeAAAAKAAAAAcASERDTQ==",
           "FailWhenNotFound": true,
-          "DataCodeParams": null
+          "BarcodeParams": null,
+          "DataCodeParams": "contrast_min=30\r\nstrict_model=yes"
         }
       },
       "Condition": null,
@@ -112,6 +114,7 @@
           "GradeQuality": true,
           "DataCodeModelData": null,
           "FailWhenNotFound": true,
+          "BarcodeParams": null,
           "DataCodeParams": "contrast_min=30\r\nstrict_model=yes"
         }
       },
