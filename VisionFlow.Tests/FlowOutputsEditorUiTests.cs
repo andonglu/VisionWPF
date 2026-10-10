@@ -87,6 +87,91 @@ public class FlowOutputsEditorUiTests
     }
 
     [Fact]
+    public void 流程输出_对象行_加载与写回保留ClrTypeName()
+    {
+        var node = new FlowOutputNode("流程输出");
+        node.Outputs.Add(new FlowOutputDef
+        {
+            Name = "Image",
+            Kind = VariableKind.Single,
+            Type = VariableType.Object,
+            ClrTypeName = typeof(HalconImage).AssemblyQualifiedName,
+            Value = Operand.Const(0)
+        });
+
+        FlowOutputsEditor editor = FlowOutputsEditor.For(node);
+
+        // 加载：对象行保留 Type=Object 与 ClrTypeName（深拷贝到草稿）
+        Assert.Equal(VariableType.Object, editor.Rows[0].Type);
+        Assert.Equal(typeof(HalconImage).AssemblyQualifiedName, editor.Rows[0].ClrTypeName);
+
+        // 编辑 ClrTypeName 后 Apply 写回 FlowOutputDef
+        editor.Rows[0].ClrTypeName = typeof(HalconRegion).AssemblyQualifiedName;
+        editor.Apply();
+
+        Assert.Equal(typeof(HalconRegion).AssemblyQualifiedName, node.Outputs[0].ClrTypeName);
+        Assert.Equal(VariableType.Object, node.Outputs[0].Type);
+        Assert.Equal(VariableKind.Single, node.Outputs[0].Kind);
+    }
+
+    [Fact]
+    public void 流程输出_校验_对象行缺ClrTypeName提示()
+    {
+        FlowOutputsEditor editor = FlowOutputsEditor.For(new FlowOutputNode("流程输出"));
+        editor.AddRow();
+        editor.Rows[0].Name = "Region";
+        editor.Rows[0].ValueText = "ref:分割1.Regions";
+        editor.Rows[0].Type = VariableType.Object;
+
+        IReadOnlyList<string> problems = editor.Validate();
+        Assert.Contains(problems, p => p.Contains("对象类型"));
+
+        editor.Rows[0].ClrTypeName = typeof(HalconRegion).AssemblyQualifiedName;
+        problems = editor.Validate();
+        Assert.DoesNotContain(problems, p => p.Contains("对象类型"));
+    }
+
+    [Fact]
+    public void 流程输出_候选保留类型与集合信息()
+    {
+        var root = new SequenceNode("主流程");
+        root.Children.Add(new ToolNode(new ColorSegmentTool("分割1")));
+        var outputNode = new FlowOutputNode("流程输出");
+        root.Children.Add(outputNode);
+
+        FlowOutputsEditor editor = FlowOutputsEditor.For(outputNode);
+        IReadOnlyList<RefCandidate> refs = editor.CandidateRefs(root);
+
+        RefCandidate regions = refs.Single(c => c.Path == "分割1.Regions");
+        Assert.Equal(typeof(HalconRegion), regions.ClrType);
+        Assert.False(regions.IsCollection);
+        RefCandidate areas = refs.Single(c => c.Path == "分割1.ClassAreas");
+        Assert.Equal(typeof(int), areas.ClrType);
+        Assert.True(areas.IsCollection);
+
+        // 字符串候选保持原格式 ref:模块.变量（OperandText 不变）
+        IReadOnlyList<string> strings = editor.Candidates(root);
+        Assert.Contains("ref:分割1.Regions", strings);
+    }
+
+    [Fact]
+    public void 流程输出_类型标签映射_常用与集合后缀()
+    {
+        Assert.Equal("图像", FlowOutputsEditor.TypeTagLabel(typeof(HalconImage), false));
+        Assert.Equal("区域", FlowOutputsEditor.TypeTagLabel(typeof(HalconRegion), false));
+        Assert.Equal("XLD", FlowOutputsEditor.TypeTagLabel(typeof(HalconXld), false));
+        Assert.Equal("整数", FlowOutputsEditor.TypeTagLabel(typeof(int), false));
+        Assert.Equal("小数", FlowOutputsEditor.TypeTagLabel(typeof(double), false));
+        Assert.Equal("文本", FlowOutputsEditor.TypeTagLabel(typeof(string), false));
+        Assert.Equal("布尔", FlowOutputsEditor.TypeTagLabel(typeof(bool), false));
+        Assert.Equal("区域·数组", FlowOutputsEditor.TypeTagLabel(typeof(HalconRegion), true));
+        Assert.Equal("整数·数组", FlowOutputsEditor.TypeTagLabel(typeof(int), true));
+        // 未映射类型取 CLR 短名
+        Assert.Equal("Version", FlowOutputsEditor.TypeTagLabel(typeof(Version), false));
+        Assert.Equal("对象", FlowOutputsEditor.TypeTagLabel(null, false));
+    }
+
+    [Fact]
     public void 流程输出编辑窗口_文件存在_构造约定为编辑模型加流程根()
     {
         string xaml = RepoPaths.Find(Path.Combine("VisionFlow.WpfToolEditors", "Editors", "WpfFlowOutputsEditWindow.xaml"));
@@ -98,6 +183,13 @@ public class FlowOutputsEditorUiTests
         Assert.Contains("public WpfFlowOutputsEditWindow(FlowOutputsEditor editor, FlowNode root)", codeText);
         // 校验写回：确定前阻止空名称 / 空取值（与 FlowOutputNode.OnExecute 的运行时失败条件一致）
         Assert.Contains("_editor.Validate()", codeText);
+        // 对象类型：类型下拉含“对象”，对象类型下拉（常用 CLR 类型 + 自定义…）写回 ClrTypeName
+        Assert.Contains("FlowObjectTypeOption", codeText);
+        Assert.Contains("自定义", codeText);
+        // 候选下拉两列：ref:路径 + 右侧类型标签（TypeTagLabel），选中后仍存纯 ref:路径
+        Assert.Contains("ItemTemplate", codeText);
+        Assert.Contains("TypeTagLabel", codeText);
+        Assert.Contains("CandidateItem", codeText);
     }
 
     [Fact]
