@@ -50,7 +50,7 @@
           "GradeQuality": true,
           "DataCodeModelData": null,
           "FailWhenNotFound": true,
-          "ModelParams": null
+          "DataCodeParams": null
         }
       },
       "Condition": null,
@@ -81,7 +81,7 @@
           "GradeQuality": true,
           "DataCodeModelData": "aFVYaFh9EyIAAAAAAAAAokhEQ00BAgYMDeLSAAAAAgABAAEAAAAAAAAAAAAAAAUAAAAGAAAAAAAAAAAAAAAAAAAAAAAAAAAAv/AAAAAAAAAAAAABAAAADwAAAFIAAAAFAAAAPAAAAEYAAAADAAAAAwAAAADACSH7VEQtGEAJIftURC0YAAAAAAABAAEBAQEBAQEBAAABAAAAP\u002BmZmZmZmZoAAAAeAAAAKAAAAAcASERDTQ==",
           "FailWhenNotFound": true,
-          "ModelParams": null
+          "DataCodeParams": null
         }
       },
       "Condition": null,
@@ -112,7 +112,7 @@
           "GradeQuality": true,
           "DataCodeModelData": null,
           "FailWhenNotFound": true,
-          "ModelParams": "contrast_min=30\r\nstrict_model=yes"
+          "DataCodeParams": "contrast_min=30\r\nstrict_model=yes"
         }
       },
       "Condition": null,

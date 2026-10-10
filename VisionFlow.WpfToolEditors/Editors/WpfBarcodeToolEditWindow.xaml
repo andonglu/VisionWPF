@@ -126,7 +126,7 @@
 
                 <Expander Header="高级" IsExpanded="False" Margin="0,12,0,0">
                     <StackPanel Margin="0,8,0,0">
-                        <TextBlock Text="模型参数列表" Style="{StaticResource EditorFieldLabelStyle}" />
+                        <TextBlock x:Name="ParamsListLabel" Text="模型参数列表" Style="{StaticResource EditorFieldLabelStyle}" />
                         <ListView x:Name="ParamsList" Height="150" Margin="0,0,0,4">
                             <ListView.View>
                                 <GridView>
@@ -147,7 +147,7 @@
                                                     ParameterAdded="ParamPicker_ParameterAdded" />
                         <TextBlock x:Name="PickerHintText" Margin="0,4,0,0" TextWrapping="Wrap"
                                    Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
-                        <TextBlock Margin="0,12,0,0" Text="高级参数（模型参数，与上方列表双向同步）" Style="{StaticResource EditorFieldLabelStyle}" />
+                        <TextBlock x:Name="ModelParamsLabel" Margin="0,12,0,0" Text="高级参数（模型参数，与上方列表双向同步）" Style="{StaticResource EditorFieldLabelStyle}" />
                         <TextBox x:Name="ModelParamsText" AcceptsReturn="True" TextWrapping="Wrap"
                                  VerticalScrollBarVisibility="Auto" MinHeight="90"
                                  TextChanged="ModelParamsText_TextChanged"

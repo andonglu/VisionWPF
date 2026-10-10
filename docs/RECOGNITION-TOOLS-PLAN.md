@@ -272,10 +272,10 @@ HALCON 版本基线：20.11 及以上（Deep OCR 在 20.11 中可用）。
 
 ### 实现
 
-- `Barcode1DTool.ModelParams`（string，多行 `名称=值`，可空 = 不设置）：解析跳过空行与 # 注释行，非法行在 `CheckConfiguration` 给中文错误（行号 + 内容）。应用时机：2D 在 `LoadDataCodeModel` 创建/反序列化句柄后、进缓存前统一应用（句柄随缓存键隔离）；1D 在每次 `create_bar_code_model` 后应用。2D 缓存键加入 `ModelParams`（1D 模型每次新建无需入键）；清空 `ModelParams` → 键变化 → 重建默认模型。参数应用失败包装为中文错误："高级参数第 N 行「名称=值」设置失败：HALCON 错误 #code"（#8831 附"该码制/模型不支持此参数名"，#8835/#1203 附"参数值非法"）。
+- `Barcode1DTool.BarcodeParams` / `Barcode1DTool.DataCodeParams`（各为 string，多行 `名称=值`，可空 = 不设置）：按读码方式分开保存的两个高级参数列表，解析跳过空行与 # 注释行，非法行在 `CheckConfiguration` 给中文错误（注明列表归属 + 行号 + 内容）。应用时机：2D `DataCodeParams` 在 `LoadDataCodeModel` 创建/反序列化句柄后、进缓存前统一应用（句柄随缓存键隔离）；1D `BarcodeParams` 在每次 `create_bar_code_model` 后应用——切读码方式只对应当前侧列表生效，对侧残留参数不会被应用。2D 缓存键加入 `DataCodeParams`（1D 模型每次新建无需入键）；清空 `DataCodeParams` → 键变化 → 重建默认模型。参数应用失败包装为中文错误："高级参数第 N 行「名称=值」设置失败：HALCON 错误 #code"（#8831 附"该码制/模型不支持此参数名"，#8835/#1203 附"参数值非法"）。旧字段 `ModelParams` 已删除（功能上线首日即拆分）：FlowSerializer 对未知字段忽略并给兼容性警告，不报错。
 - 多图训练 API：`TrainDataCodeModel(FlowContext, IEnumerable<HObject>)`，同一锁内逐张 `find('train','all')`，全部完成后序列化一次、更新键、日志记录图像数；原单图方法保留并转调多图版。
-- 编辑窗口（`WpfBarcodeToolEditWindow`）"高级"折叠区（默认折叠）：高级参数多行文本框（示例 `polarity=dark_on_light`、`timeout=2000`、`small_modules_robustness=high`）+ 训练图像列表（"（当前图像）"或文件路径；添加当前图像 / 添加文件…多选 / 移除 / 清空 / 训练全部）。训练全部在工作副本上按序调多图 API，完成后显示训练数据字节数；沿用窗口既有约定（训练产物窗口字段 + 确定时写回）。
-- 兼容性：旧流程无 `ModelParams` 属性 = 默认空，行为不变（序列化往返与历史文件缺省有测试覆盖）。
+- 编辑窗口（`WpfBarcodeToolEditWindow`）"高级"折叠区（默认折叠）：模型参数表格（名称/值/说明摘要/删除）+ `HalconParamPicker` 候选选择器（scope 随读码方式与二维码码制切换，数据源 `HalconParamCatalog`）+ 当前模式对应的多行文本框（与表格双向同步；切读码方式时两侧列表内容各自暂存、切回恢复）+ 训练图像列表（"（当前图像）"或文件路径；添加当前图像 / 添加文件…多选 / 移除 / 清空 / 训练全部）。训练全部在工作副本上按序调多图 API，完成后显示训练数据字节数；沿用窗口既有约定（训练产物窗口字段 + 确定时写回）。
+- 兼容性：旧流程无 `BarcodeParams` / `DataCodeParams` 属性 = 默认空，行为不变（序列化往返与历史文件缺省有测试覆盖）。
 
 ### 验证（2026-10-10，本机 HALCON 22.11）
 

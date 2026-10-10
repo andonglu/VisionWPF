@@ -135,7 +135,11 @@ namespace VisionFlow.WpfToolEditors.Editors
             MaxCodesText.Text = _tool.MaxCodes.ToString(CultureInfo.InvariantCulture);
             GradeQualityCheck.IsChecked = _tool.GradeQuality;
             FailWhenNotFoundCheck.IsChecked = _tool.FailWhenNotFound;
-            ModelParamsText.Text = _tool.ModelParams ?? string.Empty;
+            // 两个高级参数列表各自持有：只把当前读码方式的那份显示在表格/文本框中
+            _barcodeParamsText = _tool.BarcodeParams ?? string.Empty;
+            _dataCodeParamsText = _tool.DataCodeParams ?? string.Empty;
+            ModelParamsText.Text = ParamsTextFor(SelectedCodeKind);
+            _paramsLoaded = true;
             UpdateTrainInfo();
         }
 
@@ -156,6 +160,31 @@ namespace VisionFlow.WpfToolEditors.Editors
 
         private bool _syncingParams;
 
+        /// <summary>两侧高级参数列表的编辑内容：当前读码方式的显示在表格/文本框，另一侧暂存这里，切回时恢复。</summary>
+        private string _barcodeParamsText = string.Empty;
+        private string _dataCodeParamsText = string.Empty;
+        private bool _paramsLoaded;
+
+        private string ParamsTextFor(CodeKind kind) =>
+            kind == CodeKind.DataCode2D ? _dataCodeParamsText : _barcodeParamsText;
+
+        /// <summary>确定/测试/训练前把当前文本框内容写回当前模式对应的字段。</summary>
+        private void StashCurrentParamsText()
+        {
+            if (!_paramsLoaded)
+            {
+                return;
+            }
+            if (SelectedCodeKind == CodeKind.DataCode2D)
+            {
+                _dataCodeParamsText = ModelParamsText.Text ?? string.Empty;
+            }
+            else
+            {
+                _barcodeParamsText = ModelParamsText.Text ?? string.Empty;
+            }
+        }
+
         /// <summary>候选选择器数据源随读码方式 + 二维码码制切换；一维码给出每次运行生效提示。</summary>
         private void UpdatePickerScope()
         {
@@ -164,6 +193,10 @@ namespace VisionFlow.WpfToolEditors.Editors
                 ? "datacode2d:" + (NullIfEmpty(DataCodeTypeCombo.Text) ?? "QR Code")
                 : "barcode1d";
             ParamPicker.Scope = scope;
+            ParamsListLabel.Text = is2D ? "模型参数列表（二维码）" : "模型参数列表（一维码）";
+            ModelParamsLabel.Text = is2D
+                ? "高级参数（二维码，与上方列表双向同步）"
+                : "高级参数（一维码，与上方列表双向同步）";
             PickerHintText.Text = is2D
                 ? "二维码模型参数：从候选中选择添加，模型创建后生效。"
                 : "一维码模型参数（每次运行生效）：从候选中选择添加。";
@@ -279,7 +312,27 @@ namespace VisionFlow.WpfToolEditors.Editors
 
         private void CodeKindCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
+            CodeKind incoming = SelectedCodeKind;
             UpdateVisibility();
+            // 切换读码方式： outgoing 一侧的内容存回字段，载入 incoming 一侧（表格随文本解析刷新）
+            CodeKind? outgoing = null;
+            if (e.RemovedItems.Count > 0 && e.RemovedItems[0] is string prev && Enum.TryParse(prev, out CodeKind prevKind))
+            {
+                outgoing = prevKind;
+            }
+            if (_paramsLoaded && outgoing != null && outgoing.Value != incoming)
+            {
+                if (outgoing.Value == CodeKind.DataCode2D)
+                {
+                    _dataCodeParamsText = ModelParamsText.Text ?? string.Empty;
+                }
+                else
+                {
+                    _barcodeParamsText = ModelParamsText.Text ?? string.Empty;
+                }
+                // 载入 incoming 一侧内容，TextChanged 会刷新参数表格
+                ModelParamsText.Text = ParamsTextFor(incoming);
+            }
             UpdateTrainInfo();
         }
 
@@ -303,7 +356,9 @@ namespace VisionFlow.WpfToolEditors.Editors
             target.MaxCodes = ParseInt(MaxCodesText, nameof(Barcode1DTool.MaxCodes));
             target.GradeQuality = GradeQualityCheck.IsChecked == true;
             target.FailWhenNotFound = FailWhenNotFoundCheck.IsChecked == true;
-            target.ModelParams = NullIfEmpty(ModelParamsText.Text);
+            StashCurrentParamsText();
+            target.BarcodeParams = NullIfEmpty(_barcodeParamsText);
+            target.DataCodeParams = NullIfEmpty(_dataCodeParamsText);
             target.DataCodeModelData = _modelData;
         }
 

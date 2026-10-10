@@ -61,12 +61,18 @@ namespace VisionFlow.Tools
         private static readonly string[] RecognitionLevels = { "standard_recognition", "enhanced_recognition", "maximum_recognition" };
 
         /// <summary>
-        /// 高级模型参数（自由键值对，可空 = 不设置）：每行一条「名称=值」，空行与 # 开头注释行跳过。
-        /// 两种读码方式共用：Barcode → set_bar_code_param（每次运行新建模型后应用）；
-        /// DataCode2D → set_data_code_2d_param（模型创建/反序列化后、进缓存前应用，并纳入缓存键）。
+        /// 一维码高级模型参数（自由键值对，可空 = 不设置）：每行一条「名称=值」，空行与 # 开头注释行跳过。
+        /// 仅 CodeKind=Barcode 时应用：每次运行 create_bar_code_model 新建模型后经 set_bar_code_param 生效。
         /// 值类型自动推断：整数按 int、含小数点/e 按 double，其余按字符串。
         /// </summary>
-        public string ModelParams { get; set; }
+        public string BarcodeParams { get; set; }
+
+        /// <summary>
+        /// 二维码高级模型参数（格式同 <see cref="BarcodeParams"/>）：仅 CodeKind=DataCode2D 时应用——
+        /// 模型创建/反序列化后、进缓存前经 set_data_code_2d_param 生效，并纳入缓存键。
+        /// 与一维码参数拆开保存，避免切换读码方式后对侧参数被应用而报错。
+        /// </summary>
+        public string DataCodeParams { get; set; }
 
         /// <summary>高级参数的一条解析结果。</summary>
         private readonly struct ModelParamEntry
@@ -402,7 +408,7 @@ namespace VisionFlow.Tools
 
         private object CurrentDataCodeModelKey
         {
-            get { return (DataCodeType ?? string.Empty, RecognitionLevel ?? string.Empty, ModelParams ?? string.Empty, DataCodeModelData); }
+            get { return (DataCodeType ?? string.Empty, RecognitionLevel ?? string.Empty, DataCodeParams ?? string.Empty, DataCodeModelData); }
         }
 
         /// <summary>
@@ -487,17 +493,17 @@ namespace VisionFlow.Tools
 
         /// <summary>
         /// 解析高级参数：每行一条「名称=值」（等号两侧去空白），空行与 # 开头注释行跳过。
-        /// 格式非法时 error 含行号与原始内容。值类型推断：整数 → int，含小数点/e → double，其余字符串。
+        /// 格式非法时 error 含列表归属、行号与原始内容。值类型推断：整数 → int，含小数点/e → double，其余字符串。
         /// </summary>
-        private bool TryParseModelParams(out List<ModelParamEntry> entries, out string error)
+        private static bool TryParseModelParams(string text, string listLabel, out List<ModelParamEntry> entries, out string error)
         {
             entries = new List<ModelParamEntry>();
             error = null;
-            if (string.IsNullOrWhiteSpace(ModelParams))
+            if (string.IsNullOrWhiteSpace(text))
             {
                 return true;
             }
-            string[] lines = ModelParams.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None);
+            string[] lines = text.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None);
             for (int i = 0; i < lines.Length; i++)
             {
                 string line = lines[i].Trim();
@@ -508,14 +514,14 @@ namespace VisionFlow.Tools
                 int eq = line.IndexOf('=');
                 if (eq < 0)
                 {
-                    error = $"高级参数第 {i + 1} 行「{line}」缺少等号：应为 名称=值";
+                    error = $"{listLabel}第 {i + 1} 行「{line}」缺少等号：应为 名称=值";
                     return false;
                 }
                 string name = line.Substring(0, eq).Trim();
                 string value = line.Substring(eq + 1).Trim();
                 if (name.Length == 0)
                 {
-                    error = $"高级参数第 {i + 1} 行「{line}」名称为空：应为 名称=值";
+                    error = $"{listLabel}第 {i + 1} 行「{line}」名称为空：应为 名称=值";
                     return false;
                 }
                 entries.Add(new ModelParamEntry(name, InferParamValue(value), line, i + 1));
@@ -543,11 +549,11 @@ namespace VisionFlow.Tools
         /// <summary>一维码高级参数：每次运行新建模型后应用（set_bar_code_param）。格式错误已在 CheckConfiguration 拦截，此处不再处理。</summary>
         private void ApplyBarcodeModelParams(HTuple handle)
         {
-            if (string.IsNullOrWhiteSpace(ModelParams))
+            if (string.IsNullOrWhiteSpace(BarcodeParams))
             {
                 return;
             }
-            if (!TryParseModelParams(out List<ModelParamEntry> entries, out _))
+            if (!TryParseModelParams(BarcodeParams, BarcodeParamsLabel, out List<ModelParamEntry> entries, out _))
             {
                 return;
             }
@@ -567,11 +573,11 @@ namespace VisionFlow.Tools
         /// <summary>二维码高级参数：模型创建/反序列化后应用（set_data_code_2d_param）。格式错误已在 CheckConfiguration 拦截，此处不再处理。</summary>
         private void ApplyDataCodeModelParams(HTuple model)
         {
-            if (string.IsNullOrWhiteSpace(ModelParams))
+            if (string.IsNullOrWhiteSpace(DataCodeParams))
             {
                 return;
             }
-            if (!TryParseModelParams(out List<ModelParamEntry> entries, out _))
+            if (!TryParseModelParams(DataCodeParams, DataCodeParamsLabel, out List<ModelParamEntry> entries, out _))
             {
                 return;
             }
@@ -598,16 +604,24 @@ namespace VisionFlow.Tools
             return $"高级参数第 {entry.LineNumber} 行「{entry.RawText}」设置失败（{kind}）：HALCON 错误 #{code}{hint}";
         }
 
+        private const string BarcodeParamsLabel = "一维码参数";
+        private const string DataCodeParamsLabel = "二维码参数";
+
         public IEnumerable<ToolConfigurationIssue> CheckConfiguration()
         {
             if (MaxCodes < 0)
             {
                 yield return new ToolConfigurationIssue(nameof(MaxCodes), "读取数量不能小于 0（0 表示读取全部）");
             }
-            if (!string.IsNullOrWhiteSpace(ModelParams)
-                && !TryParseModelParams(out _, out string modelParamsError))
+            if (!string.IsNullOrWhiteSpace(BarcodeParams)
+                && !TryParseModelParams(BarcodeParams, BarcodeParamsLabel, out _, out string barcodeParamsError))
             {
-                yield return new ToolConfigurationIssue(nameof(ModelParams), modelParamsError);
+                yield return new ToolConfigurationIssue(nameof(BarcodeParams), barcodeParamsError);
+            }
+            if (!string.IsNullOrWhiteSpace(DataCodeParams)
+                && !TryParseModelParams(DataCodeParams, DataCodeParamsLabel, out _, out string dataCodeParamsError))
+            {
+                yield return new ToolConfigurationIssue(nameof(DataCodeParams), dataCodeParamsError);
             }
             if (CodeKind == CodeKind.DataCode2D)
             {
@@ -623,15 +637,17 @@ namespace VisionFlow.Tools
             }
         }
 
-        /// <summary>按读码方式显隐参数：一维码码制只在 Barcode 下显示，二维码码制/识别强度/训练数据只在 DataCode2D 下显示。</summary>
+        /// <summary>按读码方式显隐参数：一维码码制/一维码参数只在 Barcode 下显示，二维码码制/识别强度/二维码参数/训练数据只在 DataCode2D 下显示。</summary>
         public bool IsParameterVisible(string propertyName)
         {
             switch (propertyName)
             {
                 case nameof(CodeType):
+                case nameof(BarcodeParams):
                     return CodeKind == CodeKind.Barcode;
                 case nameof(DataCodeType):
                 case nameof(RecognitionLevel):
+                case nameof(DataCodeParams):
                 case nameof(DataCodeModelData):
                     return CodeKind == CodeKind.DataCode2D;
                 default:
