@@ -3,6 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:wfi="clr-namespace:System.Windows.Forms.Integration;assembly=WindowsFormsIntegration"
         xmlns:vfc="clr-namespace:VisionFlow.Controls;assembly=VisionFlow.Controls"
+        xmlns:controls="clr-namespace:VisionFlow.WpfToolEditors.Controls"
         Title="读码"
         Width="1280"
         Height="900"
@@ -110,7 +111,7 @@
                             <TextBlock x:Name="CodeTypeLabel" Grid.Row="1" Grid.Column="0" Text="一维码码制" Style="{StaticResource EditorFieldLabelStyle}" />
                             <ComboBox x:Name="CodeTypeCombo" Grid.Row="1" Grid.Column="1" IsEditable="True" Margin="0,0,0,8" />
                             <TextBlock x:Name="DataCodeTypeLabel" Grid.Row="2" Grid.Column="0" Text="二维码码制" Style="{StaticResource EditorFieldLabelStyle}" />
-                            <ComboBox x:Name="DataCodeTypeCombo" Grid.Row="2" Grid.Column="1" IsEditable="True" Margin="0,0,0,8" />
+                            <ComboBox x:Name="DataCodeTypeCombo" Grid.Row="2" Grid.Column="1" IsEditable="True" Margin="0,0,0,8" SelectionChanged="DataCodeTypeCombo_SelectionChanged" />
                             <TextBlock x:Name="RecognitionLevelLabel" Grid.Row="3" Grid.Column="0" Text="识别强度" Style="{StaticResource EditorFieldLabelStyle}" />
                             <ComboBox x:Name="RecognitionLevelCombo" Grid.Row="3" Grid.Column="1" IsEditable="True" Margin="0,0,0,8" />
                             <TextBlock Grid.Row="4" Grid.Column="0" Text="MaxCodes" Style="{StaticResource EditorFieldLabelStyle}" />
@@ -125,9 +126,31 @@
 
                 <Expander Header="高级" IsExpanded="False" Margin="0,12,0,0">
                     <StackPanel Margin="0,8,0,0">
-                        <TextBlock Text="高级参数（模型参数）" Style="{StaticResource EditorFieldLabelStyle}" />
+                        <TextBlock Text="模型参数列表" Style="{StaticResource EditorFieldLabelStyle}" />
+                        <ListView x:Name="ParamsList" Height="150" Margin="0,0,0,4">
+                            <ListView.View>
+                                <GridView>
+                                    <GridViewColumn Header="名称" DisplayMemberBinding="{Binding Name}" Width="110" />
+                                    <GridViewColumn Header="值" DisplayMemberBinding="{Binding Value}" Width="90" />
+                                    <GridViewColumn Header="说明" DisplayMemberBinding="{Binding Summary}" Width="120" />
+                                    <GridViewColumn Header="" Width="44">
+                                        <GridViewColumn.CellTemplate>
+                                            <DataTemplate>
+                                                <Button Content="删除" Padding="4,0" Click="RemoveParam_Click" />
+                                            </DataTemplate>
+                                        </GridViewColumn.CellTemplate>
+                                    </GridViewColumn>
+                                </GridView>
+                            </ListView.View>
+                        </ListView>
+                        <controls:HalconParamPicker x:Name="ParamPicker" Margin="0,8,0,0"
+                                                    ParameterAdded="ParamPicker_ParameterAdded" />
+                        <TextBlock x:Name="PickerHintText" Margin="0,4,0,0" TextWrapping="Wrap"
+                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                        <TextBlock Margin="0,12,0,0" Text="高级参数（模型参数，与上方列表双向同步）" Style="{StaticResource EditorFieldLabelStyle}" />
                         <TextBox x:Name="ModelParamsText" AcceptsReturn="True" TextWrapping="Wrap"
                                  VerticalScrollBarVisibility="Auto" MinHeight="90"
+                                 TextChanged="ModelParamsText_TextChanged"
                                  ToolTip="每行一条 名称=值，空行与 # 注释行跳过；按读码方式经 set_data_code_2d_param / set_bar_code_param 生效" />
                         <TextBlock Margin="0,4,0,0" TextWrapping="Wrap" Foreground="{DynamicResource TextFillColorSecondaryBrush}"
                                    Text="每行一条 名称=值，留空表示不设置；按读码方式经 set_data_code_2d_param（二维码）/ set_bar_code_param（一维码）生效。示例：&#x0a;polarity=dark_on_light&#x0a;timeout=2000&#x0a;small_modules_robustness=high" />

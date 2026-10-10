@@ -49,7 +49,8 @@
           "MaxCodes": 0,
           "GradeQuality": true,
           "DataCodeModelData": null,
-          "FailWhenNotFound": true
+          "FailWhenNotFound": true,
+          "ModelParams": null
         }
       },
       "Condition": null,
@@ -79,7 +80,8 @@
           "MaxCodes": 0,
           "GradeQuality": true,
           "DataCodeModelData": "aFVYaFh9EyIAAAAAAAAAokhEQ00BAgYMDeLSAAAAAgABAAEAAAAAAAAAAAAAAAUAAAAGAAAAAAAAAAAAAAAAAAAAAAAAAAAAv/AAAAAAAAAAAAABAAAADwAAAFIAAAAFAAAAPAAAAEYAAAADAAAAAwAAAADACSH7VEQtGEAJIftURC0YAAAAAAABAAEBAQEBAQEBAAABAAAAP\u002BmZmZmZmZoAAAAeAAAAKAAAAAcASERDTQ==",
-          "FailWhenNotFound": true
+          "FailWhenNotFound": true,
+          "ModelParams": null
         }
       },
       "Condition": null,
@@ -109,7 +111,8 @@
           "MaxCodes": 0,
           "GradeQuality": true,
           "DataCodeModelData": null,
-          "FailWhenNotFound": true
+          "FailWhenNotFound": true,
+          "ModelParams": "contrast_min=30\r\nstrict_model=yes"
         }
       },
       "Condition": null,
@@ -237,6 +240,17 @@
           "Value": {
             "IsConstant": false,
             "Reference": "\u6700\u5927\u8BC6\u522B.FirstGrade",
+            "Constant": null
+          }
+        },
+        {
+          "Name": "contour11",
+          "Kind": "Single",
+          "Type": "Object",
+          "ClrTypeName": "VisionFlow.Variables.HalconXld, VisionFlow.Base, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null",
+          "Value": {
+            "IsConstant": false,
+            "Reference": "\u6700\u5927\u8BC6\u522B.SymbolContours",
             "Constant": null
           }
         }

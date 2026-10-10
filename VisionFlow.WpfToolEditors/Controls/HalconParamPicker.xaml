@@ -1,0 +1,21 @@
+<UserControl x:Class="VisionFlow.WpfToolEditors.Controls.HalconParamPicker"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <StackPanel>
+        <TextBlock Text="添加模型参数" Style="{StaticResource EditorFieldLabelStyle}" />
+        <ComboBox x:Name="ParamNameCombo" IsEditable="False" DisplayMemberPath="Display"
+                  SelectionChanged="ParamNameCombo_SelectionChanged" />
+        <TextBlock x:Name="DescriptionText" Margin="0,4,0,0" TextWrapping="Wrap"
+                   Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+        <Grid Margin="0,4,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <ComboBox x:Name="ValueCombo" Grid.Column="0" IsEditable="False" Visibility="Collapsed" />
+            <TextBox x:Name="ValueText" Grid.Column="0" Visibility="Collapsed"
+                     ToolTip="自由数值：直接输入后点“添加”" />
+            <Button Grid.Column="1" Content="添加" MinWidth="64" Margin="8,0,0,0" Click="Add_Click" />
+        </Grid>
+    </StackPanel>
+</UserControl>

@@ -9,6 +9,7 @@ using VisionFlow.Core;
 using VisionFlow.Editing;
 using VisionFlow.Runtime;
 using VisionFlow.Tools;
+using VisionFlow.Tools.Halcon;
 using VisionFlow.Ui;
 using VisionFlow.Variables;
 
@@ -28,6 +29,14 @@ namespace VisionFlow.WpfToolEditors.Editors
             public string Content { get; set; }
             public string CodeType { get; set; }
             public string Grade { get; set; }
+        }
+
+        /// <summary>高级参数表格行：名称 / 值 / 说明摘要（与 ModelParams 文本双向同步）。</summary>
+        private sealed class ParamRow
+        {
+            public string Name { get; set; }
+            public string Value { get; set; }
+            public string Summary { get; set; }
         }
 
         private static readonly string[] OneDCodeTypes =
@@ -140,6 +149,132 @@ namespace VisionFlow.WpfToolEditors.Editors
             RecognitionLevelLabel.Visibility = DataCodeTypeLabel.Visibility;
             RecognitionLevelCombo.Visibility = DataCodeTypeLabel.Visibility;
             TrainButton.IsEnabled = is2D;
+            UpdatePickerScope();
+        }
+
+        // ======================= 高级参数列表与候选选择器 =======================
+
+        private bool _syncingParams;
+
+        /// <summary>候选选择器数据源随读码方式 + 二维码码制切换；一维码给出每次运行生效提示。</summary>
+        private void UpdatePickerScope()
+        {
+            bool is2D = SelectedCodeKind == CodeKind.DataCode2D;
+            string scope = is2D
+                ? "datacode2d:" + (NullIfEmpty(DataCodeTypeCombo.Text) ?? "QR Code")
+                : "barcode1d";
+            ParamPicker.Scope = scope;
+            PickerHintText.Text = is2D
+                ? "二维码模型参数：从候选中选择添加，模型创建后生效。"
+                : "一维码模型参数（每次运行生效）：从候选中选择添加。";
+        }
+
+        private void DataCodeTypeCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            UpdatePickerScope();
+        }
+
+        private string LookupParamSummary(string name)
+        {
+            HalconParamEntry entry = HalconParamCatalog.GetEntries(ParamPicker.Scope)
+                .FirstOrDefault(e => e.Name == name);
+            if (entry == null)
+            {
+                return string.Empty;
+            }
+            string description = entry.Description ?? string.Empty;
+            int cut = description.IndexOfAny(new[] { '。', '；', ';', ':' });
+            if (cut > 0)
+            {
+                description = description.Substring(0, cut);
+            }
+            return description.Length > 40 ? description.Substring(0, 40) + "…" : description;
+        }
+
+        /// <summary>文本框 → 表格：解析每行 名称=值（跳过空行与 # 注释），刷新表格。</summary>
+        private void ModelParamsText_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            if (_syncingParams)
+            {
+                return;
+            }
+            _syncingParams = true;
+            try
+            {
+                ParamsList.Items.Clear();
+                string[] lines = (ModelParamsText.Text ?? string.Empty).Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+                foreach (string raw in lines)
+                {
+                    string line = raw.Trim();
+                    if (line.Length == 0 || line.StartsWith("#", StringComparison.Ordinal))
+                    {
+                        continue;
+                    }
+                    int eq = line.IndexOf('=');
+                    if (eq <= 0)
+                    {
+                        continue;
+                    }
+                    string name = line.Substring(0, eq).Trim();
+                    string value = line.Substring(eq + 1).Trim();
+                    if (name.Length == 0)
+                    {
+                        continue;
+                    }
+                    ParamsList.Items.Add(new ParamRow { Name = name, Value = value, Summary = LookupParamSummary(name) });
+                }
+            }
+            finally
+            {
+                _syncingParams = false;
+            }
+        }
+
+        /// <summary>表格 → 文本框：仅列表中的参数会写入 ModelParams。</summary>
+        private void SyncParamTextFromTable()
+        {
+            _syncingParams = true;
+            try
+            {
+                ModelParamsText.Text = string.Join("\r\n",
+                    ParamsList.Items.Cast<ParamRow>().Select(r => r.Name + "=" + r.Value));
+            }
+            finally
+            {
+                _syncingParams = false;
+            }
+        }
+
+        private void ParamPicker_ParameterAdded(string nameValue)
+        {
+            int eq = nameValue.IndexOf('=');
+            if (eq <= 0)
+            {
+                return;
+            }
+            string name = nameValue.Substring(0, eq);
+            string value = nameValue.Substring(eq + 1);
+            ParamRow existing = ParamsList.Items.Cast<ParamRow>().FirstOrDefault(r => r.Name == name);
+            if (existing != null)
+            {
+                existing.Value = value;
+                ParamsList.Items.Refresh();
+            }
+            else
+            {
+                ParamsList.Items.Add(new ParamRow { Name = name, Value = value, Summary = LookupParamSummary(name) });
+            }
+            SyncParamTextFromTable();
+            SetStatus($"已添加模型参数 {nameValue}。");
+        }
+
+        private void RemoveParam_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is FrameworkElement element && element.DataContext is ParamRow row)
+            {
+                ParamsList.Items.Remove(row);
+                SyncParamTextFromTable();
+            }
         }
 
         private void CodeKindCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
