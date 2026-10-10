@@ -112,16 +112,7 @@ namespace VisionFlow.WpfApp.Ui
             }
             else if (node is FlowOutputNode outputNode)
             {
-                AddInfo("流程输出节点的复杂输出表仍复用 WinForms 编辑页；可保存后继续用原编辑器精细配置。");
-                AddButtonRow("快速添加默认输出", () =>
-                {
-                    if (outputNode.Outputs.Count == 0)
-                    {
-                        outputNode.Outputs.Add(new FlowOutputDef { Name = "Ok", Kind = VariableKind.Single, Type = VariableType.Bool, Value = Operand.Const(true) });
-                        outputNode.Outputs.Add(new FlowOutputDef { Name = "Code", Kind = VariableKind.Single, Type = VariableType.Int, Value = Operand.Const(0) });
-                        outputNode.Outputs.Add(new FlowOutputDef { Name = "Message", Kind = VariableKind.Single, Type = VariableType.String, Value = Operand.Const("OK") });
-                    }
-                });
+                BuildFlowOutputParameterPanel(outputNode);
             }
         }
 
@@ -265,7 +256,7 @@ namespace VisionFlow.WpfApp.Ui
             AddButtonRow("打开子流程编辑窗口...", () => OpenSubFlowEditor(node), marksDirty: false);
         }
 
-        /// <summary>主窗口双击等入口打开节点的专用编辑窗口；目前只有子流程节点有，返回是否已处理。</summary>
+        /// <summary>主窗口双击等入口打开节点的专用编辑窗口；子流程与流程输出节点有，返回是否已处理。</summary>
         public bool OpenNodeEditor(FlowNode node)
         {
             if (node is SubFlowNode subFlow)
@@ -273,7 +264,52 @@ namespace VisionFlow.WpfApp.Ui
                 OpenSubFlowEditor(subFlow);
                 return true;
             }
+            if (node is FlowOutputNode flowOutput)
+            {
+                OpenFlowOutputsEditor(flowOutput);
+                return true;
+            }
             return false;
+        }
+
+        private void BuildFlowOutputParameterPanel(FlowOutputNode node)
+        {
+            AddSection("流程输出");
+            if (node.Outputs.Count == 0)
+            {
+                AddInfo("还没有流程输出。流程运行结束时会按此表把常量或上游变量汇总为最终结果。");
+            }
+            foreach (FlowOutputDef output in node.Outputs)
+            {
+                AddInfo($"{output.Name}（{SharedOutputType.Find(output.Kind, output.Type)}）");
+            }
+            AddButtonRow("编辑输出...", () => OpenFlowOutputsEditor(node), marksDirty: false);
+            AddButtonRow("添加默认输出 Ok/Code/Message", () =>
+            {
+                if (node.Outputs.Count == 0)
+                {
+                    node.Outputs.Add(new FlowOutputDef { Name = "Ok", Kind = VariableKind.Single, Type = VariableType.Bool, Value = Operand.Const(true) });
+                    node.Outputs.Add(new FlowOutputDef { Name = "Code", Kind = VariableKind.Single, Type = VariableType.Int, Value = Operand.Const(0) });
+                    node.Outputs.Add(new FlowOutputDef { Name = "Message", Kind = VariableKind.Single, Type = VariableType.String, Value = Operand.Const("OK") });
+                }
+                _refreshFlowTree();
+                Build(node);
+            });
+        }
+
+        private void OpenFlowOutputsEditor(FlowOutputNode node)
+        {
+            FlowOutputsEditor editor = FlowOutputsEditor.For(node);
+            var window = new WpfFlowOutputsEditWindow(editor, _flowRoot()) { Owner = Window.GetWindow(_panel) };
+            if (window.ShowDialog() != true)
+            {
+                return;
+            }
+            editor.Apply();
+            _markDirty();
+            _refreshFlowTree();
+            _setStatus("流程输出已更新");
+            Build(node);
         }
 
         private void OpenSubFlowEditor(SubFlowNode node)

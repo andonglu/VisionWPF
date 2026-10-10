@@ -1,0 +1,40 @@
+<Window x:Class="VisionFlow.WpfToolEditors.Editors.WpfFlowOutputsEditWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="流程输出"
+        Width="920"
+        Height="600"
+        MinWidth="720"
+        MinHeight="420"
+        WindowStartupLocation="CenterOwner">
+    <Grid Margin="24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <Border Grid.Row="0" Style="{StaticResource EditorCardStyle}">
+            <StackPanel>
+                <TextBlock x:Name="HeaderText" Style="{StaticResource EditorSectionTitleStyle}" />
+                <TextBlock TextWrapping="Wrap" Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                           Text="流程运行结束时按此表汇总最终结果：每行一个输出，取值为引用时写 ref:模块.变量，常量直接写数字、true/false 或文本。候选引用来自流程树中本节点之前的工具输出。" />
+            </StackPanel>
+        </Border>
+
+        <Grid x:Name="HeaderGrid" Grid.Row="1" Margin="0,16,0,6" />
+
+        <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto">
+            <StackPanel x:Name="RowsPanel" />
+        </ScrollViewer>
+
+        <DockPanel Grid.Row="3" LastChildFill="False" Margin="0,16,0,0">
+            <Button Content="添加输出" MinWidth="96" Click="Add_Click" />
+            <TextBlock x:Name="StatusText" Margin="16,0,0,0" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" MaxWidth="420"
+                       Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+            <Button DockPanel.Dock="Right" Content="取消" MinWidth="96" Margin="8,0,0,0" Click="Cancel_Click" />
+            <Button DockPanel.Dock="Right" Content="确定" MinWidth="96" Style="{StaticResource AccentButtonStyle}" Click="Ok_Click" />
+        </DockPanel>
+    </Grid>
+</Window>

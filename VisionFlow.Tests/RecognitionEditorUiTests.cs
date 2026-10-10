@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using VisionFlow.Editing;
 using VisionFlow.Tools;
 using Xunit;
