@@ -10,7 +10,7 @@
         MinWidth="1080"
         MinHeight="760"
         WindowStartupLocation="CenterOwner">
-    <Grid Margin="24">
+    <Grid Margin="12">
         <Grid.RowDefinitions>
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
@@ -20,12 +20,12 @@
             <ColumnDefinition Width="420" />
         </Grid.ColumnDefinitions>
 
-        <Grid Grid.Row="0" Grid.Column="0" Margin="0,0,24,0">
+        <Grid Grid.Row="0" Grid.Column="0" Margin="0,0,12,0">
             <Grid.RowDefinitions>
                 <RowDefinition Height="3*" />
                 <RowDefinition Height="2*" />
             </Grid.RowDefinitions>
-            <Border Grid.Row="0" Style="{StaticResource PanelBorderStyle}" Margin="0,0,0,16">
+            <Border Grid.Row="0" Style="{StaticResource PanelBorderStyle}" Margin="0,0,0,12">
                 <DockPanel>
                     <Grid DockPanel.Dock="Top" Margin="0,0,0,8">
                         <Grid.ColumnDefinitions>
@@ -168,7 +168,7 @@
             </StackPanel>
         </ScrollViewer>
 
-        <DockPanel Grid.Row="1" Grid.ColumnSpan="2" LastChildFill="False" Margin="0,24,0,0">
+        <DockPanel Grid.Row="1" Grid.ColumnSpan="2" LastChildFill="False" Margin="0,12,0,0">
             <TextBlock x:Name="StatusText" VerticalAlignment="Center" TextWrapping="Wrap" MaxWidth="900"
                        Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
             <Button DockPanel.Dock="Right" Content="取消" MinWidth="96" Margin="8,0,0,0" Click="Cancel_Click" />

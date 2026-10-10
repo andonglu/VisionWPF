@@ -7,7 +7,7 @@
         MinWidth="1000"
         MinHeight="640"
         WindowStartupLocation="CenterOwner">
-    <Grid Margin="24">
+    <Grid Margin="12">
         <Grid.RowDefinitions>
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
@@ -80,7 +80,7 @@
             </Border>
         </Grid>
 
-        <DockPanel Grid.Row="1" Grid.ColumnSpan="2" LastChildFill="False" Margin="0,24,0,0">
+        <DockPanel Grid.Row="1" Grid.ColumnSpan="2" LastChildFill="False" Margin="0,12,0,0">
             <TextBlock x:Name="StatusText" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" MaxWidth="760"
                        Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
             <Button DockPanel.Dock="Right" Content="取消" MinWidth="96" Margin="8,0,0,0" Click="Cancel_Click" />

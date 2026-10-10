@@ -9,7 +9,7 @@
         MinWidth="920"
         MinHeight="620"
         WindowStartupLocation="CenterOwner">
-    <Grid Margin="20">
+    <Grid Margin="12">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
@@ -26,19 +26,19 @@
                 <TextBlock Grid.Column="0" Text="HALCON 示例图像" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center" />
                 <TextBlock x:Name="RootPathText"
                            Grid.Column="1"
-                           Margin="16,0,0,0"
+                           Margin="12,0,0,0"
                            VerticalAlignment="Center"
                            TextTrimming="CharacterEllipsis"
                            Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
                 <TextBox x:Name="SearchText"
                          Grid.Column="2"
-                         Margin="16,0,0,16"
+                         Margin="12,0,0,12"
                          VerticalContentAlignment="Center"
                          TextChanged="SearchText_TextChanged" />
             </Grid>
         </Border>
 
-        <Grid Grid.Row="1" Margin="0,16,0,0">
+        <Grid Grid.Row="1" Margin="0,12,0,0">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="220" />
                 <ColumnDefinition Width="300" />
@@ -98,7 +98,7 @@
             </Grid>
         </Grid>
 
-        <DockPanel Grid.Row="2" Margin="0,16,0,0" LastChildFill="False">
+        <DockPanel Grid.Row="2" Margin="0,12,0,0" LastChildFill="False">
             <TextBlock x:Name="StatusText"
                        VerticalAlignment="Center"
                        Foreground="{DynamicResource TextFillColorSecondaryBrush}" />

@@ -8,7 +8,7 @@
         MinWidth="1040"
         MinHeight="680"
         WindowStartupLocation="CenterOwner">
-    <Grid Margin="24">
+    <Grid Margin="12">
         <Grid.RowDefinitions>
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
@@ -22,7 +22,7 @@
             <controls:WpfRoiEditorControl x:Name="TeachRoiEditor" />
         </Border>
 
-        <ScrollViewer Grid.Row="0" Grid.Column="1" Margin="24,0,0,0" VerticalScrollBarVisibility="Auto">
+        <ScrollViewer Grid.Row="0" Grid.Column="1" Margin="12,0,0,0" VerticalScrollBarVisibility="Auto">
             <StackPanel>
                 <Border Style="{StaticResource EditorCardStyle}">
                     <StackPanel>
@@ -107,13 +107,13 @@
                         <ComboBox x:Name="ScoreTypeCombo" />
                         <CheckBox x:Name="FailWhenNotFoundCheck" Margin="0,12,0,0" Content="未匹配到目标时失败（取消后输出 Found=false 并继续）" />
                         <CheckBox x:Name="UseModelFileCacheCheck" Margin="0,8,0,0" Content="使用本机模型缓存" />
-                        <Button x:Name="TestMatchButton" Content="在当前图像上测试匹配" Margin="0,16,0,0" Click="TestMatch_Click" />
+                        <Button x:Name="TestMatchButton" Content="在当前图像上测试匹配" Margin="0,12,0,0" Click="TestMatch_Click" />
                     </StackPanel>
                 </Border>
             </StackPanel>
         </ScrollViewer>
 
-        <DockPanel Grid.Row="1" Grid.ColumnSpan="2" LastChildFill="False" Margin="0,24,0,0">
+        <DockPanel Grid.Row="1" Grid.ColumnSpan="2" LastChildFill="False" Margin="0,12,0,0">
             <TextBlock x:Name="StatusText" VerticalAlignment="Center" TextWrapping="Wrap" MaxWidth="820"
                        Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
             <Button DockPanel.Dock="Right" Content="取消" MinWidth="96" Margin="8,0,0,0" Click="Cancel_Click" />

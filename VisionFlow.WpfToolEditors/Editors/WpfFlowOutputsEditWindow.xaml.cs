@@ -206,7 +206,7 @@ namespace VisionFlow.WpfToolEditors.Editors
                 Owner = owner,
                 ResizeMode = ResizeMode.NoResize
             };
-            var grid = new Grid { Margin = new Thickness(16) };
+            var grid = new Grid { Margin = new Thickness(12) };
             grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
             grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(10) });
             grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });

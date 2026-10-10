@@ -8,7 +8,7 @@
         MinWidth="560"
         MinHeight="560"
         WindowStartupLocation="CenterOwner">
-    <Grid Margin="24">
+    <Grid Margin="12">
         <Grid.RowDefinitions>
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
@@ -68,7 +68,7 @@
                 </Grid>
             </Border>
         </ScrollViewer>
-        <DockPanel Grid.Row="1" LastChildFill="False" Margin="0,24,0,0">
+        <DockPanel Grid.Row="1" LastChildFill="False" Margin="0,12,0,0">
             <TextBlock x:Name="StatusText" VerticalAlignment="Center" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
             <Button DockPanel.Dock="Right" Content="取消" MinWidth="96" Margin="8,0,0,0" Click="Cancel_Click" />
             <Button DockPanel.Dock="Right" Content="确定" MinWidth="96" Style="{StaticResource AccentButtonStyle}" Click="Ok_Click" />

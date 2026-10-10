@@ -10,7 +10,7 @@
         MinWidth="1180"
         MinHeight="760"
         WindowStartupLocation="CenterOwner">
-    <Grid Margin="24">
+    <Grid Margin="12">
         <Grid.RowDefinitions>
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
@@ -18,13 +18,13 @@
 
         <TabControl Grid.Row="0" TabStripPlacement="Right">
             <TabItem Header="示教建模">
-                <Grid Margin="0,16,0,0">
+                <Grid Margin="0,12,0,0">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="380" />
                     </Grid.ColumnDefinitions>
 
-                    <Border Grid.Column="0" Style="{StaticResource PanelBorderStyle}" Margin="0,0,24,0">
+                    <Border Grid.Column="0" Style="{StaticResource PanelBorderStyle}" Margin="0,0,12,0">
                         <DockPanel>
                             <TextBlock DockPanel.Dock="Top" Text="ROI 示教区域" Style="{StaticResource EditorSectionTitleStyle}" />
                             <editorControls:WpfRoiEditorControl x:Name="TeachRoiEditor" />
@@ -109,7 +109,7 @@
                                         <TextBlock Grid.Row="7" Grid.Column="0" Text="极性" Style="{StaticResource EditorFieldLabelStyle}" />
                                         <ComboBox x:Name="TeachMetricCombo" Grid.Row="7" Grid.Column="1" />
                                     </Grid>
-                                    <StackPanel x:Name="ScaledShapePanel" Margin="0,16,0,0">
+                                    <StackPanel x:Name="ScaledShapePanel" Margin="0,12,0,0">
                                         <TextBlock Text="缩放形状参数" Style="{StaticResource EditorFieldLabelStyle}" />
                                         <Grid>
                                             <Grid.ColumnDefinitions>
@@ -129,7 +129,7 @@
                                             <ComboBox x:Name="ScaleStepText" Grid.Row="2" Grid.Column="1" IsEditable="True" />
                                         </Grid>
                                     </StackPanel>
-                                    <StackPanel x:Name="DeformablePanel" Margin="0,16,0,0">
+                                    <StackPanel x:Name="DeformablePanel" Margin="0,12,0,0">
                                         <TextBlock Text="局部变形参数" Style="{StaticResource EditorFieldLabelStyle}" />
                                         <Grid>
                                             <Grid.ColumnDefinitions>
@@ -161,7 +161,7 @@
                                             <ComboBox x:Name="DeformationSmoothnessText" Grid.Row="6" Grid.Column="1" IsEditable="True" />
                                         </Grid>
                                     </StackPanel>
-                                    <Button Content="创建模板" Margin="0,16,0,0" HorizontalAlignment="Right" Click="CreateTemplate_Click" />
+                                    <Button Content="创建模板" Margin="0,12,0,0" HorizontalAlignment="Right" Click="CreateTemplate_Click" />
                                 </StackPanel>
                             </Border>
 
@@ -239,13 +239,13 @@
             </TabItem>
 
             <TabItem Header="运行参数">
-                <Grid Margin="0,16,0,0">
+                <Grid Margin="0,12,0,0">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="380" />
                     </Grid.ColumnDefinitions>
 
-                    <Border Grid.Column="0" Style="{StaticResource PanelBorderStyle}" Margin="0,0,24,0">
+                    <Border Grid.Column="0" Style="{StaticResource PanelBorderStyle}" Margin="0,0,12,0">
                         <DockPanel>
                             <TextBlock DockPanel.Dock="Top" Text="运行预览" Style="{StaticResource EditorSectionTitleStyle}" />
                             <wfi:WindowsFormsHost>
@@ -340,7 +340,7 @@
                                                    Foreground="{DynamicResource TextFillColorSecondaryBrush}"
                                                    Text="排序只改变结果数组（Items / Scores / HomMats / Contours）的顺序；最佳结果与 Row / Column / Angle / Score 始终取得分最高的一项。" />
                                     </Grid>
-                                    <Button Content="执行测试" Margin="0,16,0,0" HorizontalAlignment="Right" Click="TestRun_Click" />
+                                    <Button Content="执行测试" Margin="0,12,0,0" HorizontalAlignment="Right" Click="TestRun_Click" />
                                 </StackPanel>
                             </Border>
 
@@ -365,7 +365,7 @@
             </TabItem>
         </TabControl>
 
-        <DockPanel Grid.Row="1" LastChildFill="False" Margin="0,24,0,0">
+        <DockPanel Grid.Row="1" LastChildFill="False" Margin="0,12,0,0">
             <TextBlock x:Name="StatusText" VerticalAlignment="Center" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
             <Button DockPanel.Dock="Right" Content="取消" MinWidth="96" Margin="8,0,0,0" Click="Cancel_Click" />
             <Button DockPanel.Dock="Right" Content="确定" MinWidth="96" Style="{StaticResource AccentButtonStyle}" Click="Ok_Click" />

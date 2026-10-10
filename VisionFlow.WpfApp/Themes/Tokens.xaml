@@ -10,6 +10,8 @@
     <Thickness x:Key="SpaceLG">24</Thickness>
     <Thickness x:Key="SpaceXL">32</Thickness>
     <Thickness x:Key="SpaceXXL">48</Thickness>
+    <!-- 卡片/区块/页面边距的统一间距（水平垂直方向全站一致，基准 12px） -->
+    <Thickness x:Key="CardGap">12</Thickness>
 
     <Color x:Key="PrimaryColor">#3366CC</Color>
     <Color x:Key="PrimaryLightColor">#5F94FF</Color>
@@ -93,7 +95,7 @@
         <Setter Property="BorderThickness" Value="1" />
         <Setter Property="CornerRadius" Value="10" />
         <Setter Property="Padding" Value="16" />
-        <Setter Property="Margin" Value="0,0,0,24" />
+        <Setter Property="Margin" Value="0,0,0,12" />
         <Setter Property="Effect">
             <Setter.Value>
                 <DropShadowEffect BlurRadius="8" Direction="270" ShadowDepth="2" Opacity="0.18" Color="#00133B" />
@@ -105,14 +107,14 @@
         <Setter Property="FontWeight" Value="SemiBold" />
         <Setter Property="FontSize" Value="16" />
         <Setter Property="LineHeight" Value="24" />
-        <Setter Property="Margin" Value="0,0,0,16" />
+        <Setter Property="Margin" Value="0,0,0,12" />
         <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
     </Style>
 
     <Style x:Key="EditorFieldLabelStyle" TargetType="{x:Type TextBlock}">
         <Setter Property="VerticalAlignment" Value="Center" />
         <Setter Property="Foreground" Value="{DynamicResource TextFillColorSecondaryBrush}" />
-        <Setter Property="Margin" Value="0,0,8,16" />
+        <Setter Property="Margin" Value="0,0,8,12" />
     </Style>
 
     <Style x:Key="AccentButtonStyle" TargetType="{x:Type Button}">

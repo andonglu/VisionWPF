@@ -10,7 +10,7 @@
         MinWidth="1180"
         MinHeight="760"
         WindowStartupLocation="CenterOwner">
-    <Grid Margin="24">
+    <Grid Margin="12">
         <Grid.RowDefinitions>
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
@@ -18,13 +18,13 @@
 
         <TabControl Grid.Row="0" TabStripPlacement="Right">
             <TabItem Header="示教建模">
-                <Grid Margin="0,16,0,0">
+                <Grid Margin="0,12,0,0">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="400" />
                     </Grid.ColumnDefinitions>
 
-                    <Border Grid.Column="0" Style="{StaticResource PanelBorderStyle}" Margin="0,0,24,0">
+                    <Border Grid.Column="0" Style="{StaticResource PanelBorderStyle}" Margin="0,0,12,0">
                         <DockPanel>
                             <TextBlock DockPanel.Dock="Top" Text="ROI 示教区域（模板区域 / 杂乱区域）" Style="{StaticResource EditorSectionTitleStyle}" />
                             <editorControls:WpfRoiEditorControl x:Name="TeachRoiEditor" />
@@ -264,13 +264,13 @@
             </TabItem>
 
             <TabItem Header="运行参数">
-                <Grid Margin="0,16,0,0">
+                <Grid Margin="0,12,0,0">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="400" />
                     </Grid.ColumnDefinitions>
 
-                    <Border Grid.Column="0" Style="{StaticResource PanelBorderStyle}" Margin="0,0,24,0">
+                    <Border Grid.Column="0" Style="{StaticResource PanelBorderStyle}" Margin="0,0,12,0">
                         <DockPanel>
                             <TextBlock DockPanel.Dock="Top" Text="运行预览" Style="{StaticResource EditorSectionTitleStyle}" />
                             <wfi:WindowsFormsHost>
@@ -374,7 +374,7 @@
                                         <TextBlock x:Name="RowToleranceLabel" Grid.Row="3" Grid.Column="0" Text="行容差" Style="{StaticResource EditorFieldLabelStyle}" />
                                         <TextBox x:Name="RowToleranceText" Grid.Row="3" Grid.Column="1" />
                                     </Grid>
-                                    <Button Content="执行测试" Margin="0,16,0,0" HorizontalAlignment="Right" Click="TestRun_Click" />
+                                    <Button Content="执行测试" Margin="0,12,0,0" HorizontalAlignment="Right" Click="TestRun_Click" />
                                 </StackPanel>
                             </Border>
 
@@ -401,7 +401,7 @@
             </TabItem>
         </TabControl>
 
-        <DockPanel Grid.Row="1" LastChildFill="False" Margin="0,24,0,0">
+        <DockPanel Grid.Row="1" LastChildFill="False" Margin="0,12,0,0">
             <TextBlock x:Name="StatusText" VerticalAlignment="Center" TextWrapping="Wrap" MaxWidth="900"
                        Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
             <Button DockPanel.Dock="Right" Content="取消" MinWidth="96" Margin="8,0,0,0" Click="Cancel_Click" />

@@ -8,7 +8,7 @@
         MinWidth="1040"
         MinHeight="680"
         WindowStartupLocation="CenterOwner">
-    <Grid Margin="24">
+    <Grid Margin="12">
         <Grid.RowDefinitions>
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
@@ -18,26 +18,26 @@
             <ColumnDefinition Width="*" />
         </Grid.ColumnDefinitions>
 
-        <Border Grid.Row="0" Grid.Column="0" Style="{StaticResource EditorCardStyle}" Margin="0,0,24,0">
+        <Border Grid.Row="0" Grid.Column="0" Style="{StaticResource EditorCardStyle}" Margin="0,0,12,0">
             <StackPanel>
                 <TextBlock Text="基础" Style="{StaticResource EditorSectionTitleStyle}" />
 
                 <TextBlock Text="模块名" Style="{StaticResource EditorFieldLabelStyle}" />
-                <TextBox x:Name="ModuleNameText" Margin="0,0,0,16" />
+                <TextBox x:Name="ModuleNameText" Margin="0,0,0,12" />
 
                 <TextBlock Text="输出模式" Style="{StaticResource EditorFieldLabelStyle}" />
-                <ComboBox x:Name="OutputModeCombo" Margin="0,0,0,16" />
+                <ComboBox x:Name="OutputModeCombo" Margin="0,0,0,12" />
 
                 <TextBlock Text="运行跟随矩阵（可选）" Style="{StaticResource EditorFieldLabelStyle}" />
-                <ComboBox x:Name="MatrixPathCombo" IsEditable="True" Margin="0,0,0,16" />
+                <ComboBox x:Name="MatrixPathCombo" IsEditable="True" Margin="0,0,0,12" />
 
                 <TextBlock Text="示教模式" Style="{StaticResource EditorFieldLabelStyle}" />
                 <ComboBox x:Name="TeachModeCombo" Margin="0,0,0,8" SelectionChanged="TeachMode_Changed" />
                 <TextBlock Text="当前姿态" Style="{StaticResource EditorFieldLabelStyle}" />
-                <ComboBox x:Name="TeachPosePathCombo" IsEditable="True" Margin="0,0,0,16"
+                <ComboBox x:Name="TeachPosePathCombo" IsEditable="True" Margin="0,0,0,12"
                           SelectionChanged="TeachMode_Changed" LostFocus="TeachPose_LostFocus" />
 
-                <Button Content="预览 Region" Margin="0,0,0,16" Click="PreviewRegion_Click" />
+                <Button Content="预览 Region" Margin="0,0,0,12" Click="PreviewRegion_Click" />
 
                 <TextBlock Text="阵列生成" Style="{StaticResource EditorSectionTitleStyle}" />
                 <Grid Margin="0,0,0,8">
@@ -67,7 +67,7 @@
                         <controls:NumericInputControl x:Name="ArrayColumnPitchText" Minimum="-10000" Maximum="10000" Increment="1" DecimalPlaces="2" Value="0" />
                     </StackPanel>
                 </Grid>
-                <Button Content="按选中 ROI 生成阵列" Margin="0,0,0,16" Click="GenerateArray_Click" />
+                <Button Content="按选中 ROI 生成阵列" Margin="0,0,0,12" Click="GenerateArray_Click" />
 
                 <TextBlock TextWrapping="Wrap"
                            Foreground="{DynamicResource TextFillColorSecondaryBrush}"
@@ -79,7 +79,7 @@
             <controls:WpfRoiEditorControl x:Name="RoiEditor" />
         </Border>
 
-        <DockPanel Grid.Row="1" Grid.ColumnSpan="2" LastChildFill="False" Margin="0,24,0,0">
+        <DockPanel Grid.Row="1" Grid.ColumnSpan="2" LastChildFill="False" Margin="0,12,0,0">
             <TextBlock x:Name="StatusText" VerticalAlignment="Center" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
             <Button DockPanel.Dock="Right" Content="取消" MinWidth="96" Margin="8,0,0,0" Click="Cancel_Click" />
             <Button DockPanel.Dock="Right" Content="确定" MinWidth="96" Style="{StaticResource AccentButtonStyle}" Click="Ok_Click" />

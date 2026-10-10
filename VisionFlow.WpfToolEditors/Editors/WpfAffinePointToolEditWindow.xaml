@@ -9,7 +9,7 @@
         MinWidth="1180"
         MinHeight="760"
         WindowStartupLocation="CenterOwner">
-    <Grid Margin="24">
+    <Grid Margin="12">
         <Grid.RowDefinitions>
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
@@ -17,13 +17,13 @@
 
         <TabControl x:Name="MainTabs" Grid.Row="0">
             <TabItem x:Name="RunTab" Header="运行参数">
-                <Grid Margin="0,16,0,0">
+                <Grid Margin="0,12,0,0">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="420" />
                     </Grid.ColumnDefinitions>
 
-                    <Border Grid.Column="0" Style="{StaticResource PanelBorderStyle}" Margin="0,0,24,0">
+                    <Border Grid.Column="0" Style="{StaticResource PanelBorderStyle}" Margin="0,0,12,0">
                         <DockPanel>
                             <TextBlock DockPanel.Dock="Top" Text="测试结果" Style="{StaticResource EditorSectionTitleStyle}" />
                             <TextBlock x:Name="RunSummaryText" DockPanel.Dock="Top" Margin="0,0,0,8" TextWrapping="Wrap" FontWeight="SemiBold" />
@@ -123,7 +123,7 @@
                                         <TextBlock Grid.Row="1" Grid.Column="0" Text="OriginColumn" Style="{StaticResource EditorFieldLabelStyle}" />
                                         <TextBox x:Name="OriginColumnText" Grid.Row="1" Grid.Column="1" />
                                     </Grid>
-                                    <Button Content="执行测试" Margin="0,16,0,0" HorizontalAlignment="Right" Click="TestRun_Click" />
+                                    <Button Content="执行测试" Margin="0,12,0,0" HorizontalAlignment="Right" Click="TestRun_Click" />
                                 </StackPanel>
                             </Border>
                         </StackPanel>
@@ -132,13 +132,13 @@
             </TabItem>
 
             <TabItem x:Name="AssistantTab" Header="N 点标定">
-                <Grid Margin="0,16,0,0">
+                <Grid Margin="0,12,0,0">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="540" />
                     </Grid.ColumnDefinitions>
 
-                    <Border Grid.Column="0" Style="{StaticResource PanelBorderStyle}" Margin="0,0,24,0">
+                    <Border Grid.Column="0" Style="{StaticResource PanelBorderStyle}" Margin="0,0,12,0">
                         <DockPanel>
                             <Grid DockPanel.Dock="Top" Margin="0,0,0,8">
                                 <Grid.ColumnDefinitions>
@@ -309,13 +309,13 @@
             </TabItem>
 
             <TabItem x:Name="RotationTab" Header="旋转中心">
-                <Grid Margin="0,16,0,0">
+                <Grid Margin="0,12,0,0">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="540" />
                     </Grid.ColumnDefinitions>
 
-                    <Border Grid.Column="0" Style="{StaticResource PanelBorderStyle}" Margin="0,0,24,0">
+                    <Border Grid.Column="0" Style="{StaticResource PanelBorderStyle}" Margin="0,0,12,0">
                         <DockPanel>
                             <Grid DockPanel.Dock="Top" Margin="0,0,0,8">
                                 <Grid.ColumnDefinitions>
@@ -425,13 +425,13 @@
             </TabItem>
 
             <TabItem x:Name="CameraTab" Header="相机标定">
-                <Grid Margin="0,16,0,0">
+                <Grid Margin="0,12,0,0">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="540" />
                     </Grid.ColumnDefinitions>
 
-                    <Border Grid.Column="0" Style="{StaticResource PanelBorderStyle}" Margin="0,0,24,0">
+                    <Border Grid.Column="0" Style="{StaticResource PanelBorderStyle}" Margin="0,0,12,0">
                         <DockPanel>
                             <TextBlock DockPanel.Dock="Top" Text="标定板图像（选中列表中的一张查看）" Style="{StaticResource EditorSectionTitleStyle}" />
                             <TextBlock DockPanel.Dock="Bottom" Margin="0,8,0,0" TextWrapping="Wrap"
@@ -549,7 +549,7 @@
             </TabItem>
         </TabControl>
 
-        <DockPanel Grid.Row="1" LastChildFill="False" Margin="0,24,0,0">
+        <DockPanel Grid.Row="1" LastChildFill="False" Margin="0,12,0,0">
             <TextBlock x:Name="StatusText" VerticalAlignment="Center" TextWrapping="Wrap" MaxWidth="900"
                        Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
             <Button x:Name="CancelButton" DockPanel.Dock="Right" Content="取消" MinWidth="96" Margin="8,0,0,0" Click="Cancel_Click" />

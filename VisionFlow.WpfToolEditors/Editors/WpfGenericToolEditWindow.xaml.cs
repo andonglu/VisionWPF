@@ -177,7 +177,7 @@ namespace VisionFlow.WpfToolEditors.Editors
                 {
                     Content = property.Name,
                     IsChecked = (bool)property.GetValue(_tool),
-                    Margin = new Thickness(0, 0, 0, 16)
+                    Margin = new Thickness(0, 0, 0, 12)
                 };
                 ScalarPanel.Children.Add(check);
                 _bindings.Add(new FieldBinding { Property = property, Editor = check, PropertyType = type });
@@ -217,7 +217,7 @@ namespace VisionFlow.WpfToolEditors.Editors
                 var button = new Button
                 {
                     Content = "使用当前输入 Region 设为基准",
-                    Margin = new Thickness(0, 0, 0, 16)
+                    Margin = new Thickness(0, 0, 0, 12)
                 };
                 button.Click += SetRegionPoseBase_Click;
                 ScalarPanel.Children.Add(button);
@@ -227,7 +227,7 @@ namespace VisionFlow.WpfToolEditors.Editors
         private void AddFilePathField(PropertyInfo property)
         {
             AddLabel(property.Name, ScalarPanel);
-            var grid = new Grid { Margin = new Thickness(0, 0, 0, 16) };
+            var grid = new Grid { Margin = new Thickness(0, 0, 0, 12) };
             grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(40) });
             var text = new TextBox { Text = property.GetValue(_tool) as string ?? string.Empty, Margin = new Thickness(0) };
@@ -269,7 +269,7 @@ namespace VisionFlow.WpfToolEditors.Editors
             {
                 Text = text,
                 TextWrapping = TextWrapping.Wrap,
-                Margin = new Thickness(0, 0, 0, 16)
+                Margin = new Thickness(0, 0, 0, 12)
             };
         }
 

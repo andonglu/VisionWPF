@@ -7,7 +7,7 @@
         MinWidth="1040"
         MinHeight="680"
         WindowStartupLocation="CenterOwner">
-    <Grid Margin="24">
+    <Grid Margin="12">
         <Grid.RowDefinitions>
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
@@ -139,7 +139,7 @@
                 </Grid.RowDefinitions>
                 <TextBlock Grid.Row="0" Text="可用变量（双击插入）" Style="{StaticResource EditorSectionTitleStyle}" />
                 <ListBox x:Name="ReferenceList" Grid.Row="1" MouseDoubleClick="ReferenceList_MouseDoubleClick" />
-                <TextBlock Grid.Row="2" Text="函数（双击插入）" Style="{StaticResource EditorSectionTitleStyle}" Margin="0,16,0,8" />
+                <TextBlock Grid.Row="2" Text="函数（双击插入）" Style="{StaticResource EditorSectionTitleStyle}" Margin="0,12,0,8" />
                 <ListBox x:Name="FunctionList" Grid.Row="3" MouseDoubleClick="FunctionList_MouseDoubleClick">
                     <ListBox.ItemTemplate>
                         <DataTemplate>
@@ -157,7 +157,7 @@
             </Grid>
         </Border>
 
-        <DockPanel Grid.Row="1" Grid.ColumnSpan="2" LastChildFill="False" Margin="0,24,0,0">
+        <DockPanel Grid.Row="1" Grid.ColumnSpan="2" LastChildFill="False" Margin="0,12,0,0">
             <TextBlock x:Name="StatusText" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" MaxWidth="700"
                        Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
             <Button DockPanel.Dock="Right" Content="取消" MinWidth="96" Margin="8,0,0,0" Click="Cancel_Click" />

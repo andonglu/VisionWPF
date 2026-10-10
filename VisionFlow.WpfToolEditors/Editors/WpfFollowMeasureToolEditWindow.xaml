@@ -8,7 +8,7 @@
         MinWidth="980"
         MinHeight="640"
         WindowStartupLocation="CenterOwner">
-    <Grid Margin="24">
+    <Grid Margin="12">
         <Grid.RowDefinitions>
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
@@ -24,7 +24,7 @@
                     <Border Grid.Column="0" Style="{StaticResource EditorCardStyle}">
                         <controls:WpfRoiEditorControl x:Name="TeachRoiEditor" />
                     </Border>
-                    <ScrollViewer Grid.Column="1" Margin="24,0,0,0" VerticalScrollBarVisibility="Auto">
+                    <ScrollViewer Grid.Column="1" Margin="12,0,0,0" VerticalScrollBarVisibility="Auto">
                         <StackPanel>
                             <Border Style="{StaticResource EditorCardStyle}">
                                 <StackPanel>
@@ -37,10 +37,10 @@
                                     <ComboBox x:Name="TeachModeCombo" SelectionChanged="TeachModeCombo_SelectionChanged" />
                                     <TextBlock Text="当前姿态" Style="{StaticResource EditorFieldLabelStyle}" />
                                     <ComboBox x:Name="TeachPosePathCombo" IsEditable="True" SelectionChanged="TeachPosePathCombo_SelectionChanged" />
-                                    <Button x:Name="DrawRoiButton" Margin="0,8,0,16" Click="DrawRoi_Click" />
+                                    <Button x:Name="DrawRoiButton" Margin="0,8,0,12" Click="DrawRoi_Click" />
                                     <Button Content="保存示教基准" Style="{StaticResource AccentButtonStyle}" Click="SaveTeach_Click" />
                                     <TextBlock Text="基准图像示教会直接保存 ROI；当前图像示教会使用当前姿态的逆矩阵反算回基准 ROI。"
-                                               Margin="0,16,0,0"
+                                               Margin="0,12,0,0"
                                                Foreground="{DynamicResource TextFillColorSecondaryBrush}"
                                                TextWrapping="Wrap" />
                                 </StackPanel>
@@ -87,7 +87,7 @@
                                     <StackPanel x:Name="ArcSettingsPanel" />
                                     <CheckBox x:Name="FailWhenNotFoundCheck" Margin="0,12,0,0"
                                               Content="未找到边缘时失败（取消后输出 Found=false 并继续）" />
-                                    <Button Content="执行测试" Style="{StaticResource AccentButtonStyle}" Margin="0,16,0,0" Click="RunTest_Click" />
+                                    <Button Content="执行测试" Style="{StaticResource AccentButtonStyle}" Margin="0,12,0,0" Click="RunTest_Click" />
                                 </StackPanel>
                             </Border>
                         </StackPanel>
@@ -107,7 +107,7 @@
             </TabItem>
         </TabControl>
 
-        <DockPanel Grid.Row="1" LastChildFill="False" Margin="0,24,0,0">
+        <DockPanel Grid.Row="1" LastChildFill="False" Margin="0,12,0,0">
             <TextBlock x:Name="StatusText" VerticalAlignment="Center" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
             <Button DockPanel.Dock="Right" Content="取消" MinWidth="96" Margin="8,0,0,0" Click="Cancel_Click" />
             <Button DockPanel.Dock="Right" Content="确定" MinWidth="96" Style="{StaticResource AccentButtonStyle}" Click="Ok_Click" />

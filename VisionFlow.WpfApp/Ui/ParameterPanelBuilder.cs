@@ -407,7 +407,7 @@ namespace VisionFlow.WpfApp.Ui
             {
                 Content = "先执行一次再判断条件（条件可引用循环体的输出）",
                 IsChecked = node.TestAfterBody,
-                Margin = new Thickness(0, 0, 0, 16)
+                Margin = new Thickness(0, 0, 0, 12)
             };
             RoutedEventHandler toggle = (s, e) =>
             {
@@ -787,7 +787,7 @@ namespace VisionFlow.WpfApp.Ui
                 {
                     Content = property.Name,
                     IsChecked = (bool)property.GetValue(tool),
-                    Margin = new Thickness(0, 0, 0, 16)
+                    Margin = new Thickness(0, 0, 0, 12)
                 };
                 check.Checked += (s, e) =>
                 {
@@ -846,7 +846,7 @@ namespace VisionFlow.WpfApp.Ui
                 Maximum = 1000000,
                 Increment = Math.Abs(value) >= 10 ? 1 : 0.1,
                 DecimalPlaces = Math.Abs(value - Math.Round(value)) < 1e-9 ? 0 : 3,
-                Margin = new Thickness(0, 0, 0, 16)
+                Margin = new Thickness(0, 0, 0, 12)
             };
             double committedValue = input.Value;
             input.ValueChanged += (s, e) =>
@@ -880,7 +880,7 @@ namespace VisionFlow.WpfApp.Ui
             {
                 Text = text,
                 FontWeight = FontWeights.SemiBold,
-                Margin = new Thickness(0, 16, 0, 8)
+                Margin = new Thickness(0, 12, 0, 8)
             });
         }
 
@@ -891,14 +891,14 @@ namespace VisionFlow.WpfApp.Ui
                 Text = text,
                 TextWrapping = TextWrapping.Wrap,
                 Foreground = (System.Windows.Media.Brush)Application.Current.FindResource("TextFillColorSecondaryBrush"),
-                Margin = new Thickness(0, 0, 0, 16)
+                Margin = new Thickness(0, 0, 0, 12)
             });
         }
 
         private TextBox AddTextRow(string label, string value, Action<string> commit)
         {
             AddLabel(label);
-            var textBox = new TextBox { Text = value ?? string.Empty, Margin = new Thickness(0, 0, 0, 16) };
+            var textBox = new TextBox { Text = value ?? string.Empty, Margin = new Thickness(0, 0, 0, 12) };
             if (commit != null)
             {
                 string committedText = textBox.Text;
@@ -931,7 +931,7 @@ namespace VisionFlow.WpfApp.Ui
             var combo = new ComboBox
             {
                 IsEditable = true,
-                Margin = new Thickness(0, 0, 0, 16)
+                Margin = new Thickness(0, 0, 0, 12)
             };
             foreach (string value in values ?? Enumerable.Empty<string>())
             {
@@ -978,7 +978,7 @@ namespace VisionFlow.WpfApp.Ui
             {
                 Content = text,
                 HorizontalAlignment = HorizontalAlignment.Left,
-                Margin = new Thickness(0, 16, 0, 0)
+                Margin = new Thickness(0, 12, 0, 0)
             };
             button.Click += (s, e) =>
             {
