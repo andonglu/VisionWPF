@@ -653,3 +653,106 @@ Region 形状转换、Region Union1、形态学（`MorphologyTool`）、区域�
 - D5：3 个示例流程（loadimage + 官方模型，打开即跑）+ 文档/README 双同步。
 
 验证：全量 1405 通过 / 0 失败。遗留（不阻塞）：四工具装载逻辑重复（改共享池键规则时下沉重构）；共享池 static 计数依赖测试顺序隔离。详见方案 §15 与开发计划状态行。
+
+
+## 2026-10-10 界面打磨批次（人工验收已确认）
+
+10-09 识别线与深度学习线合并后，10-10 追加一批以界面为主的改动。此前未在本文档登记，本次补记。
+
+### 主工具栏图标
+
+- `b132d5d`：主工具栏改用 Font Awesome 6 Free 字体图标，新增 `VisionFlow.WpfApp\Resources\Fonts\fa-solid-900.ttf` 与 `NOTICE.txt`（csproj 登记为资源，`App.xaml` 合并字体资源），删除原有手绘图标数据。
+- `99586d9`：工具栏按钮按功能分组并加分隔线，修正偏斜图标的居中。
+- `d32dfff`：按包围盒归一化居中图标字形（此前不同字形的视觉重心不一致）。
+
+### 布局与日志
+
+- `b33ff71`：主窗口卡片间距由 24px 收紧为 12px。
+- `10649b3`：**全部编辑窗口与面板的间距统一为 12px**，共 34 个文件——主窗口 `Themes\Tokens.xaml`、`Ui\ParameterPanelBuilder.cs`、两个控件模板（`NumericInputControl` / `WpfRoiEditorControl`）以及 31 个 WPF 编辑窗口。
+- `6e21b43`：运行日志改为可滑出的抽屉，结果条改为整宽。
+- `e2b1392`：结果条限定在图像显示区下方。
+- `e3fd88a`：日志抽屉锚定到右上，宽度与图像列一致。
+
+### 同批次其他改动（未展开）
+
+10-10 同日还提交了读码高级模型参数与多图训练（`a03f2fe`）、HALCON 参数目录与选择器（`d43dd11`）、按模式拆分 `BarcodeParams` / `DataCodeParams`（`8845a2d`）、修复 `ToolIcon.barcode1d` 重复键导致的启动崩溃（`4c54d90`）、流程输出节点的 WPF 编辑器（`6c7d8cd` / `d802d87`）；这些属识别线补充，本文档未逐条展开。
+
+### 验收
+
+- 自动：全量 `dotnet test --filter "Category!=Soak"` **1442 通过 / 0 失败 / 0 跳过**（2026-10-12 复跑）。
+- **人工验收：已确认**（使用方 2026-10-12 确认）。该批次此前仅通过自动测试，界面观感与交互未人工确认，现已确认。
+
+
+## 2026-10-12 剩余评审项登记（`main` @ `10649b3` 只读盘点）
+
+2026-10-12 对当前 `main` 做了一次只读盘点，以下为尚未登记或未处理的剩余项。
+
+### 待完善（影响交付质量，建议优先）
+
+| 项 | 现状 | 说明 |
+|---|---|---|
+| 测试工程编译警告 | **已清零**（2026-10-12，见下节） | 58 个识别线/深度学习线警告全部修复，并顺手修复既有的 1 个 xUnit2000；解决方案构建 0 警告 |
+| 已删工程残留目录 | **已删除**（2026-10-12，见下节） | `VisionFlow.App` / `VisionFlow.ToolEditors` / `VisionFlow.LDWeldingPlugins` 的残留 `bin` / `obj` / `.csproj.user` 已清理，均未受 git 跟踪 |
+| 深度学习装载逻辑重复 | 四工具装载逻辑重复；共享池 static 计数依赖测试执行顺序隔离 | 已记于 2026-10-09 条目，未处理 |
+| VF-11 现场验收 | 部分完成 | 缺现场样本与真值、业务精度、真实旧插件弹窗与长期稳定性，见 `docs\VF11-ACCEPTANCE.md` |
+
+测试工程警告明细（`VisionFlow.Tests`，均为识别线与深度学习线引入；**2026-10-12 已全部修复，明细保留备查**）：
+
+| 文件 | 警告 |
+|---|---|
+| `RecognitionToolsBatch3Tests.cs` | 28×CA1416（System.Drawing 仅 Windows）、6×CS8600 |
+| `DeepLearningSegmentationToolTests.cs` | 10×CS8600 |
+| `SharedDlModelCacheTests.cs` | 4×CS8625、2×CS8618 |
+| `DeepLearningDetectionToolTests.cs` | 4×CS8625 |
+| `FlowOwnerTokenTests.cs` | 2×CS8618 |
+| `ParamCatalogTests.cs` | 2×CS8600 |
+
+### 按需排期（现场需求驱动，非功能缺口）
+
+- 匹配测量线剩余：MT-04 透视变形、MT-05 组件匹配、MS-03 沿圆弧、MS-04 模糊测量（见 `MATCH-MEASURE-TOOLS-PLAN.md`）。
+- 各线暂缓项：3D 匹配、频域 / 纹理滤波、OCV、脚本（C#）、三维手眼标定、多相机拼接标定等（见各计划「暂缓」节）。
+- README「暂不包含」：大规模工具回归测试、完整用户手册、更完整的生产运行界面、系统化的部署和发布包。
+
+
+## 2026-10-12 待完善项处理：测试工程警告清零与残留目录清理
+
+处理上文「剩余评审项登记」中"待完善"表的两项可本地完成的条目；深度学习装载重构与 VF-11 现场验收保持原状。
+
+### 已删工程残留目录清理
+
+- 删除 `VisionFlow.App`、`VisionFlow.ToolEditors`、`VisionFlow.LDWeldingPlugins` 三个残留目录。删除前经
+  `git ls-files` 与 `git status --porcelain` 双重确认：三个目录均无任何受 git 跟踪的文件，内容仅为
+  `bin` / `obj` / `.csproj.user` 构建残留，删除不影响版本历史与构建。
+
+### 测试工程编译警告清零（58 个 + 既有 1 个 xUnit2000）
+
+全部改动仅限 `VisionFlow.Tests`，未触碰生产代码；改动均为空值标注与平台标注，不改变任何用例语义：
+
+- `RecognitionToolsBatch3Tests.cs`（28×CA1416 + 3×CS8600）
+  - CA1416：合成色块图使用 System.Drawing（仅 Windows）。测试类加 `[SupportedOSPlatform("windows")]`
+    （本仓库测试本就只在 Windows 上运行，且这些用例同时受 HALCON 门禁约束）。
+  - CS8600：`ChannelMeans` 中 `converted1/2/3` 改为 `HObject?` 声明（out 赋值后流分析仍为非空，无下游告警）。
+- `DeepLearningSegmentationToolTests.cs`（5×CS8600）：`union` / `overlap` / `expectedRejected` / `leaked`
+  四处 `= null` 预声明改为 `HObject?`。
+- `SharedDlModelCacheTests.cs`（1×CS8618 + 2×CS8625）：`FakeToolHolder._held` 改为 `DlModelCacheEntry?`，
+  `Factory` 的 `onClear` 参数改为 `Action?`。`SharedDlModelCache.Release` 本身显式容忍 null（入口判空直接返回），
+  可空标注与运行时行为一致。
+- `DeepLearningDetectionToolTests.cs`（2×CS8625）：`CreateTool` 的 `regionPath`、`ContextWith` 的 `roi`
+  默认值参数改为可空类型。
+- `FlowOwnerTokenTests.cs`（1×CS8618）：`AnchorRecordingTool.ObservedAnchor` 改为 `object?`
+  （用例本就断言其可为 null）。
+- `ParamCatalogTests.cs`（1×CS8600）：`常用参数中文说明非空` 的 `FirstOrDefault` 接收变量改为可空类型，
+  `Assert.NotNull`（xUnit 2.9 带 `[NotNull]` 流分析标注）后使用无新增告警。
+- `MatchMeasureBatch4Tests.cs`（1×xUnit2000，既有遗留）：`找角_跟随矩阵_交点随定位结果移动_多矩阵逐个记录`
+  中 `Assert.Equal` 的 expected/actual 实参按分析器提示交换顺序，断言含义不变。
+
+### 验证（2026-10-12）
+
+- `dotnet build VisionFlow.slnx -t:Rebuild`：全解决方案 **0 警告、0 错误**（此前测试工程 59 个警告含既有 xUnit2000）。
+- `dotnet test --filter "Category!=Soak"`：**1442 通过 / 0 失败 / 0 跳过**，与 2026-10-12 复跑基线（1442）持平，
+  无新增/减少用例。本机装有 HALCON 22.11，门禁用例实际运行。
+
+### 剩余项状态
+
+- 深度学习装载逻辑重复（共享池键规则重构）：未处理，仍登记在"待完善"。
+- VF-11 现场验收：仍"部分完成"，缺现场环境证据，见 `docs\VF11-ACCEPTANCE.md`。

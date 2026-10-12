@@ -1,6 +1,7 @@
 using System.Drawing;
 using System.Drawing.Imaging;
 using System.Runtime.InteropServices;
+using System.Runtime.Versioning;
 using System.Text.Json.Nodes;
 using HalconDotNet;
 using VisionFlow.Core;
@@ -19,6 +20,7 @@ namespace VisionFlow.Tests;
 /// D：add_samples_image_class_* 区域对象数必须等于类数（#1502），Regions 顺序 = 训练类序，
 /// RejectedRegion = 图像定义域 − union1(类区域)，拒识阈值 [0,1) 越大越严格。
 /// </summary>
+[SupportedOSPlatform("windows")] // 合成图依赖 System.Drawing，仅 Windows 可用；测试本身也只跑在 Windows
 public class RecognitionToolsBatch3Tests
 {
     // ======================= 合成色块图 =======================
@@ -153,9 +155,9 @@ public class RecognitionToolsBatch3Tests
     private static double[] ChannelMeans(HObject image, HObject region, string colorSpace)
     {
         HOperatorSet.Decompose3(image, out HObject r, out HObject g, out HObject b);
-        HObject converted1 = null;
-        HObject converted2 = null;
-        HObject converted3 = null;
+        HObject? converted1 = null;
+        HObject? converted2 = null;
+        HObject? converted3 = null;
         try
         {
             HObject channel1 = r;

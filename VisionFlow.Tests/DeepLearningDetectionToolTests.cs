@@ -46,7 +46,7 @@ public class DeepLearningDetectionToolTests
         return path;
     }
 
-    private static DlDetectTool CreateTool(string regionPath = null)
+    private static DlDetectTool CreateTool(string? regionPath = null)
     {
         return new DlDetectTool(Module)
         {
@@ -59,7 +59,7 @@ public class DeepLearningDetectionToolTests
         };
     }
 
-    private static FlowContext ContextWith(HObject image, HObject roi = null)
+    private static FlowContext ContextWith(HObject image, HObject? roi = null)
     {
         var ctx = new FlowContext();
         ctx.SetVariable(Variable.Object("图像1", "Image", new HalconImage(image), 1));

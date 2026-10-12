@@ -16,7 +16,7 @@ public class FlowOwnerTokenTests
 {
     private sealed class AnchorRecordingTool : ToolBase, IToolResourceLifecycle
     {
-        public object ObservedAnchor { get; private set; }
+        public object? ObservedAnchor { get; private set; }
         public bool ThrowOnPrepare { get; set; }
 
         public AnchorRecordingTool(string moduleName) : base(moduleName)

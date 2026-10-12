@@ -39,7 +39,7 @@ public class ParamCatalogTests
     [InlineData("orientation")]
     public void 常用参数中文说明非空(string name)
     {
-        HalconParamEntry entry = HalconParamCatalog.GetEntries("barcode1d")
+        HalconParamEntry? entry = HalconParamCatalog.GetEntries("barcode1d")
             .Concat(Symbologies2D.SelectMany(s => HalconParamCatalog.GetEntries("datacode2d:" + s)))
             .FirstOrDefault(e => e.Name == name);
         Assert.NotNull(entry);

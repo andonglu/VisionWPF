@@ -140,7 +140,7 @@ public class MatchMeasureBatch4Tests
         Assert.InRange(results[0].CornerColumn, 169.3, 169.7);
         Assert.True(results[0].Followed);
         Assert.InRange((int)ctx.GetVariable("找角1", "FailedCount").Value, 0, 1);
-        Assert.Equal(results.Count + (int)ctx.GetVariable("找角1", "FailedCount").Value, 2);
+        Assert.Equal(2, results.Count + (int)ctx.GetVariable("找角1", "FailedCount").Value);
     }
 
     [Fact]

@@ -207,8 +207,8 @@ public class DeepLearningSegmentationToolTests
                 // RejectedRegion：与 ColorSegmentTool 语义一致——整图定义域 − union1(类区域)，两者交集必为空。
                 HObject rejected = ((HalconRegion)ctx.GetVariable(Module, "RejectedRegion").Value).Object;
                 HOperatorSet.GetDomain(image, out HObject domain);
-                HObject union = null;
-                HObject overlap = null;
+                HObject? union = null;
+                HObject? overlap = null;
                 try
                 {
                     HOperatorSet.Union1(regions, out union);
@@ -469,8 +469,8 @@ public class DeepLearningSegmentationToolTests
                 HObject regions = ((HalconRegion)ctx.GetVariable(Module, "Regions").Value).Object;
                 HObject rejected = ((HalconRegion)ctx.GetVariable(Module, "RejectedRegion").Value).Object;
                 HOperatorSet.GetDomain(image, out HObject domain);
-                HObject union = null;
-                HObject expectedRejected = null;
+                HObject? union = null;
+                HObject? expectedRejected = null;
                 try
                 {
                     HOperatorSet.Union1(regions, out union);
@@ -583,7 +583,7 @@ public class DeepLearningSegmentationToolTests
                     // 所有类区域 ⊆ ROI 矩形（映射回了原图坐标系，而不是停留在裁剪图坐标系）。
                     HOperatorSet.Union1(regions, out HObject union);
                     HOperatorSet.Complement(roi, out HObject outsideRoi);
-                    HObject leaked = null;
+                    HObject? leaked = null;
                     try
                     {
                         HOperatorSet.Intersection(union, outsideRoi, out leaked);

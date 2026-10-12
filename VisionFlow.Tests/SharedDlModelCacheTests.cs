@@ -12,7 +12,7 @@ public class SharedDlModelCacheTests
     /// <summary>模拟工具实例的持有语义：同键复用不重复 Acquire，键变先还后取，ReleaseResources 只还一份。</summary>
     private sealed class FakeToolHolder
     {
-        private DlModelCacheEntry _held;
+        private DlModelCacheEntry? _held;
 
         public DlModelCacheEntry Ensure(DlModelPoolKey key, Func<DlModelCacheEntry> factory)
         {
@@ -39,7 +39,7 @@ public class SharedDlModelCacheTests
             DeepLearningDevicePreference.Auto, batchSize, optimize);
     }
 
-    private static Func<DlModelCacheEntry> Factory(DlModelPoolKey key, Action onClear = null)
+    private static Func<DlModelCacheEntry> Factory(DlModelPoolKey key, Action? onClear = null)
     {
         return () => new DlModelCacheEntry
         {
