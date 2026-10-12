@@ -693,7 +693,7 @@ Region 形状转换、Region Union1、形态学（`MorphologyTool`）、区域�
 |---|---|---|
 | 测试工程编译警告 | **已清零**（2026-10-12，见下节） | 58 个识别线/深度学习线警告全部修复，并顺手修复既有的 1 个 xUnit2000；解决方案构建 0 警告 |
 | 已删工程残留目录 | **已删除**（2026-10-12，见下节） | `VisionFlow.App` / `VisionFlow.ToolEditors` / `VisionFlow.LDWeldingPlugins` 的残留 `bin` / `obj` / `.csproj.user` 已清理，均未受 git 跟踪 |
-| 深度学习装载逻辑重复 | 四工具装载逻辑重复；共享池 static 计数依赖测试执行顺序隔离 | 已记于 2026-10-09 条目，未处理 |
+| 深度学习装载逻辑重复 | **装载重复已下沉**（2026-10-12，见下节） | 四工具装载样板统一为 `DlModelLoader`，净减约 721 行；共享池 static 计数仍依赖测试按增量断言，保留观察 |
 | VF-11 现场验收 | 部分完成 | 缺现场样本与真值、业务精度、真实旧插件弹窗与长期稳定性，见 `docs\VF11-ACCEPTANCE.md` |
 
 测试工程警告明细（`VisionFlow.Tests`，均为识别线与深度学习线引入；**2026-10-12 已全部修复，明细保留备查**）：
@@ -756,3 +756,43 @@ Region 形状转换、Region Union1、形态学（`MorphologyTool`）、区域�
 
 - 深度学习装载逻辑重复（共享池键规则重构）：未处理，仍登记在"待完善"。
 - VF-11 现场验收：仍"部分完成"，缺现场环境证据，见 `docs\VF11-ACCEPTANCE.md`。
+
+
+## 2026-10-12 深度学习装载逻辑下沉重构（"待完善"第三项）
+
+背景：2026-10-09 条目遗留"四工具装载逻辑重复（改共享池键规则时下沉重构）"。四个深度学习工具
+（`DeepLearningInferenceTool` / `DlDetectTool` / `DlClassifyTool` / `DlSegmentTool`，同在
+`VisionFlow.Tools/Tools/DeepLearningTools.cs`）各自重复实现了一整套"三模式模型缓存 + 生命周期"样板。
+OCR 的 Deep OCR 路径（`RecognitionTools.cs` 的 `OcrTool`）经查不引用共享池，不在本次范围内。
+
+改动内容：
+
+- 新增 `VisionFlow.Tools/Tools/DlModelLoader.cs`（353 行）：internal `DlModelLoader` 统一持有
+  `_sync` / `_cached` / `_poolEntry`，对外 `Ensure(ctx, request)` / `Prepare(request)` / `Release()`
+  （内部自行加锁）与统一 `CachedModel` / `LoadedModel` 类型；`CheckModelConfiguration` 静态方法承载
+  模型路径校验段（空路径 / .hdl 扩展名 / BatchSize / 文件不存在），工具特有校验按原 yield 顺序注入。
+  请求参数快照 `DlModelLoadRequest` 按调用时组装（ModuleName 可变），类型校验错误与 Flow 无锚点回退日志
+  经消息工厂注入，保留各工具确切措辞。
+- 四个工具删除各自重复的嵌套 CachedModel、三字段、Ensure*/LoadSharedEntry/EnsureInstanceCachedModel/
+  LoadModel/ToCachedModel、CheckConfiguration 路径段、Prepare/ReleaseResources 体，改为持有
+  `private readonly DlModelLoader _loader` 并委托；`DeepLearningTools.cs` 2532 → 1458 行
+  （净删 1074 行，计入新文件后全工程净减约 721 行）。
+- `DeepLearningInferenceTool` 的私有 helper 副本（ConfigureDevice / SetModelDevice /
+  ResolveExistingModelPath / EnumerateModelPathCandidates / NormalizeModelType / Read*Param 等约 190 行）
+  一并删除，改用 `DeepLearningToolShared` 的既有实现。
+- `SharedDlModelCache.cs` 公共 API 未动；未改任何测试断言、csproj 或序列化格式。
+- 措辞核对：脚本比对新旧代码全部中文字符串字面量，运行时错误/日志消息逐字一致。
+
+行为差异（有意，仅此一处）：`DlSegmentTool` 的 Instance 装载路径补上与 Detect/Classify 一致的
+try/catch 句柄兜底清理（原遗漏，仅失败路径可达，无测试钉住该泄漏行为）。
+
+验证（2026-10-12，HALCON 22.11 门禁用例真实运行）：
+
+- `dotnet build VisionFlow.slnx`：0 警告、0 错误。
+- `dotnet test --filter "Category!=Soak"`：**1442 通过 / 0 失败 / 0 跳过**，与基线持平。
+  重点覆盖 `SharedDlModelCacheTests`（池语义）、`SharedDlModelCacheHalconTests`（三模式 + mtime 换键）、
+  三个 DL 工具测试（校验措辞 / 默认值 / 序列化 / 类型不匹配中文错误 / 真实推理对照）、
+  `DeepLearningInferenceToolTests`、`FlowOwnerTokenTests`、`FlowResourcesTests`、`DeepLearningExampleFlowTests`。
+
+遗留观察（不阻塞）：共享池 `DebugTotalLoadCount` / `DebugAliveEntryCount` 为 static 累计值，
+测试均以"运行前快照取增量"方式断言，对执行顺序的依赖保留原状。

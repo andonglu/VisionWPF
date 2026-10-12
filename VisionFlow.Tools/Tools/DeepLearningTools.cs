@@ -1,11 +1,11 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
-using System.IO;
 using System.Linq;
 using HalconDotNet;
 using VisionFlow.Core;
 using VisionFlow.Variables;
+using CachedModel = VisionFlow.Tools.DlModelLoader.CachedModel;
 
 namespace VisionFlow.Tools
 {
@@ -76,29 +76,6 @@ namespace VisionFlow.Tools
     [ToolOutput("Info", VariableKind.Object, VariableType.Object, ElementClrType = typeof(DeepLearningInferenceInfo))]
     public sealed class DeepLearningInferenceTool : ToolBase, IToolResourceLifecycle, IToolConfigurationCheck
     {
-        private sealed class CachedModel
-        {
-            public object Key { get; init; }
-
-            public HTuple Handle { get; init; }
-
-            public string ResolvedPath { get; init; }
-
-            public string ModelType { get; init; }
-
-            public string DeviceUsed { get; init; }
-
-            public int ImageWidth { get; init; }
-
-            public int ImageHeight { get; init; }
-
-            public string[] ClassNames { get; init; } = Array.Empty<string>();
-
-            public int[] ClassIds { get; init; } = Array.Empty<int>();
-
-            public string ModelSummary { get; init; } = string.Empty;
-        }
-
         /// <summary>.hdl 模型文件路径；支持环境变量、绝对路径、相对当前工作目录或应用目录的相对路径。</summary>
         public string ModelFilePath { get; set; }
 
@@ -119,9 +96,7 @@ namespace VisionFlow.Tools
         /// </summary>
         public ModelCacheMode ModelCacheMode { get; set; } = ModelCacheMode.Instance;
 
-        private readonly object _sync = new object();
-        private CachedModel _cached;
-        private DlModelCacheEntry _poolEntry;
+        private readonly DlModelLoader _loader = new DlModelLoader();
 
         public DeepLearningInferenceTool(string moduleName) : base(moduleName)
         {
@@ -138,26 +113,23 @@ namespace VisionFlow.Tools
             DeepLearningInferenceInfo info;
             try
             {
-                lock (_sync)
+                CachedModel model = _loader.Ensure(ctx, BuildRequest());
+                info = new DeepLearningInferenceInfo
                 {
-                    CachedModel model = EnsureCachedModel(ctx);
-                    info = new DeepLearningInferenceInfo
-                    {
-                        RequestedModelKind = ModelKind.ToString(),
-                        ModelKind = model.ModelType,
-                        RequestedDevice = Device.ToString(),
-                        DeviceUsed = model.DeviceUsed,
-                        ModelFilePath = ModelFilePath ?? string.Empty,
-                        ResolvedModelPath = model.ResolvedPath,
-                        BatchSize = BatchSize,
-                        ImageWidth = model.ImageWidth,
-                        ImageHeight = model.ImageHeight,
-                        OptimizedForInference = OptimizeForInference,
-                        ClassNames = model.ClassNames,
-                        ClassIds = model.ClassIds,
-                        ModelSummary = model.ModelSummary
-                    };
-                }
+                    RequestedModelKind = ModelKind.ToString(),
+                    ModelKind = model.ModelType,
+                    RequestedDevice = Device.ToString(),
+                    DeviceUsed = model.DeviceUsed,
+                    ModelFilePath = ModelFilePath ?? string.Empty,
+                    ResolvedModelPath = model.ResolvedPath,
+                    BatchSize = BatchSize,
+                    ImageWidth = model.ImageWidth,
+                    ImageHeight = model.ImageHeight,
+                    OptimizedForInference = OptimizeForInference,
+                    ClassNames = model.ClassNames,
+                    ClassIds = model.ClassIds,
+                    ModelSummary = model.ModelSummary
+                };
             }
             catch (InvalidOperationException ex)
             {
@@ -174,342 +146,27 @@ namespace VisionFlow.Tools
             return NodeResult.Ok;
         }
 
-        private CachedModel EnsureCachedModel(FlowContext ctx)
+        // ======================= 模型加载（委托 DlModelLoader 三模式，§5.4） =======================
+
+        /// <summary>组装一次模型装载请求：ModuleName 可变，按调用时快照当前配置；类型校验与回退日志措辞保持本工具原文。</summary>
+        private DlModelLoadRequest BuildRequest()
         {
-            string resolvedPath = ResolveExistingModelPath(ModelFilePath);
-            if (ModelCacheMode != ModelCacheMode.Instance)
+            return new DlModelLoadRequest
             {
-                // 共享模式（Flow / Project，§5.4）：锚点缺失时 EnsureSharedCachedModel 返回 null 回退 Instance。
-                CachedModel shared = EnsureSharedCachedModel(ctx, resolvedPath);
-                if (shared != null)
-                {
-                    return shared;
-                }
-            }
-            return EnsureInstanceCachedModel(resolvedPath);
-        }
-
-        private CachedModel EnsureSharedCachedModel(FlowContext ctx, string resolvedPath)
-        {
-            object anchor = DlModelCachePolicy.ResolveAnchor(ctx);
-            if (!DlModelCachePolicy.TryResolveSharedScope(ModelCacheMode, anchor, out object scopeToken))
-            {
-                // Flow 模式但无法确定流程根锚点（Prepare(IEnumerable<ToolNode>) 快照预热入口）。
-                // 退化发生在 Prepare 阶段、无 FlowContext 可写日志，按评审结论简单跳过该工具的
-                // 共享加载并回退 Instance，日志推迟到工具下一次 Run 时补记。
-                if (ctx != null)
-                {
-                    ctx.AddLog(FlowLogLevel.Warning,
-                        $"[深度学习推理] {ModuleName} ModelCacheMode=Flow 但本次入口无流程根锚点（可能经快照预热），已回退为 Instance 模式加载");
-                }
-                return null;
-            }
-
-            DlModelPoolKey key = DlModelCachePolicy.BuildKey(scopeToken, resolvedPath,
-                File.GetLastWriteTimeUtc(resolvedPath).Ticks, ModelKind, Device, BatchSize, OptimizeForInference);
-            if (_poolEntry != null && _poolEntry.Key.Equals(key) && SharedDlModelCache.IsUsable(_poolEntry))
-            {
-                // 引用计数按"实例持有"：键不变复用已持有条目，不重复 Acquire。
-                return _cached;
-            }
-
-            // 键变化（或已失效）：先归还旧键引用（或旧实例句柄），再 Acquire 新键。
-            ReleaseResources();
-            DlModelCacheEntry entry = SharedDlModelCache.Acquire(key, () => LoadSharedEntry(key));
-            _poolEntry = entry;
-            _cached = new CachedModel
-            {
-                Key = key,
-                Handle = entry.Handle,
-                ResolvedPath = entry.ResolvedPath,
-                ModelType = entry.ModelType,
-                DeviceUsed = entry.DeviceUsed,
-                ImageWidth = entry.ImageWidth,
-                ImageHeight = entry.ImageHeight,
-                ClassNames = entry.ClassNames,
-                ClassIds = entry.ClassIds,
-                ModelSummary = entry.ModelSummary
+                ModuleName = ModuleName,
+                ModelFilePath = ModelFilePath,
+                Device = Device,
+                BatchSize = BatchSize,
+                OptimizeForInference = OptimizeForInference,
+                ModelCacheMode = ModelCacheMode,
+                ModelKind = ModelKind,
+                ValidateModelType = actualType => ModelKind != DeepLearningModelKind.Auto
+                    && !string.Equals(actualType, DeepLearningToolShared.NormalizeModelType(ModelKind.ToString()), StringComparison.OrdinalIgnoreCase)
+                    ? $"{ModuleName} 深度学习模型类型不匹配：配置为 {ModelKind}，实际模型为 {actualType}"
+                    : null,
+                BuildNoAnchorFallbackLog = moduleName =>
+                    $"[深度学习推理] {moduleName} ModelCacheMode=Flow 但本次入口无流程根锚点（可能经快照预热），已回退为 Instance 模式加载"
             };
-            return _cached;
-        }
-
-        private DlModelCacheEntry LoadSharedEntry(DlModelPoolKey key)
-        {
-            HTuple modelHandle = null;
-            try
-            {
-                HOperatorSet.ReadDlModel(key.ResolvedPath, out modelHandle);
-                string actualType = NormalizeModelType(ReadStringParam(modelHandle, "type", "generic"));
-                if (ModelKind != DeepLearningModelKind.Auto && !string.Equals(actualType, NormalizeModelType(ModelKind.ToString()), StringComparison.OrdinalIgnoreCase))
-                {
-                    throw new InvalidOperationException(
-                        $"{ModuleName} 深度学习模型类型不匹配：配置为 {ModelKind}，实际模型为 {actualType}");
-                }
-
-                if (BatchSize > 0)
-                {
-                    HOperatorSet.SetDlModelParam(modelHandle, "batch_size", BatchSize);
-                }
-                if (OptimizeForInference)
-                {
-                    HOperatorSet.SetDlModelParam(modelHandle, "optimize_for_inference", "true");
-                }
-
-                string deviceUsed = ConfigureDevice(modelHandle, Device);
-                HTuple handle = modelHandle;
-                return new DlModelCacheEntry
-                {
-                    Key = key,
-                    Handle = modelHandle,
-                    ResolvedPath = key.ResolvedPath,
-                    ModelType = actualType,
-                    DeviceUsed = deviceUsed,
-                    ImageWidth = ReadIntParam(modelHandle, "image_width", fallback: 0),
-                    ImageHeight = ReadIntParam(modelHandle, "image_height", fallback: 0),
-                    ClassNames = ReadStringArrayParam(modelHandle, "class_names"),
-                    ClassIds = ReadIntArrayParam(modelHandle, "class_ids"),
-                    ModelSummary = ReadStringParam(modelHandle, "summary", string.Empty),
-                    ClearAction = () => TryClearDlModel(handle)
-                };
-            }
-            catch
-            {
-                if (modelHandle != null)
-                {
-                    TryClearDlModel(modelHandle);
-                }
-                throw;
-            }
-        }
-
-        private CachedModel EnsureInstanceCachedModel(string resolvedPath)
-        {
-            object key = (resolvedPath.ToUpperInvariant(), File.GetLastWriteTimeUtc(resolvedPath).Ticks, ModelKind, Device, BatchSize, OptimizeForInference);
-            if (_cached != null && Equals(_cached.Key, key))
-            {
-                return _cached;
-            }
-
-            ReleaseResources();
-            HTuple modelHandle = null;
-            try
-            {
-                HOperatorSet.ReadDlModel(resolvedPath, out modelHandle);
-                string actualType = NormalizeModelType(ReadStringParam(modelHandle, "type", "generic"));
-                if (ModelKind != DeepLearningModelKind.Auto && !string.Equals(actualType, NormalizeModelType(ModelKind.ToString()), StringComparison.OrdinalIgnoreCase))
-                {
-                    throw new InvalidOperationException(
-                        $"{ModuleName} 深度学习模型类型不匹配：配置为 {ModelKind}，实际模型为 {actualType}");
-                }
-
-                if (BatchSize > 0)
-                {
-                    HOperatorSet.SetDlModelParam(modelHandle, "batch_size", BatchSize);
-                }
-                if (OptimizeForInference)
-                {
-                    HOperatorSet.SetDlModelParam(modelHandle, "optimize_for_inference", "true");
-                }
-
-                string deviceUsed = ConfigureDevice(modelHandle, Device);
-                var cached = new CachedModel
-                {
-                    Key = key,
-                    Handle = modelHandle,
-                    ResolvedPath = resolvedPath,
-                    ModelType = actualType,
-                    DeviceUsed = deviceUsed,
-                    ImageWidth = ReadIntParam(modelHandle, "image_width", fallback: 0),
-                    ImageHeight = ReadIntParam(modelHandle, "image_height", fallback: 0),
-                    ClassNames = ReadStringArrayParam(modelHandle, "class_names"),
-                    ClassIds = ReadIntArrayParam(modelHandle, "class_ids"),
-                    ModelSummary = ReadStringParam(modelHandle, "summary", string.Empty)
-                };
-                _cached = cached;
-                return cached;
-            }
-            catch
-            {
-                if (modelHandle != null)
-                {
-                    TryClearDlModel(modelHandle);
-                }
-                throw;
-            }
-        }
-
-        private static string ConfigureDevice(HTuple modelHandle, DeepLearningDevicePreference preference)
-        {
-            if (preference == DeepLearningDevicePreference.Cpu)
-            {
-                return SetModelDevice(modelHandle, "cpu");
-            }
-            if (preference == DeepLearningDevicePreference.Gpu)
-            {
-                return SetModelDevice(modelHandle, "gpu");
-            }
-
-            try
-            {
-                return SetModelDevice(modelHandle, "gpu");
-            }
-            catch (InvalidOperationException)
-            {
-                return SetModelDevice(modelHandle, "cpu");
-            }
-        }
-
-        private static string SetModelDevice(HTuple modelHandle, string deviceType)
-        {
-            HTuple queryKinds = new HTuple("runtime");
-            HTuple queryTypes = new HTuple(deviceType);
-            HOperatorSet.QueryAvailableDlDevices(queryKinds, queryTypes, out HTuple devices);
-            if (devices == null || devices.Length <= 0)
-            {
-                throw new InvalidOperationException($"未找到可用的深度学习 {deviceType.ToUpperInvariant()} 运行设备");
-            }
-
-            HTuple selected = devices[0];
-            HOperatorSet.SetDlModelParam(modelHandle, "device", selected);
-            HOperatorSet.GetDlDeviceParam(selected, "type", out HTuple actualType);
-            return actualType.Length > 0 ? actualType[0].S : deviceType;
-        }
-
-        private static string ResolveExistingModelPath(string path)
-        {
-            foreach (string candidate in EnumerateModelPathCandidates(path))
-            {
-                if (File.Exists(candidate))
-                {
-                    return candidate;
-                }
-            }
-
-            throw new InvalidOperationException($"深度学习模型文件不存在：{path}");
-        }
-
-        private static IEnumerable<string> EnumerateModelPathCandidates(string path)
-        {
-            string text = Environment.ExpandEnvironmentVariables((path ?? string.Empty).Trim().Trim('"'));
-            if (text.Length == 0)
-            {
-                yield break;
-            }
-
-            if (Path.IsPathRooted(text))
-            {
-                yield return Path.GetFullPath(text);
-                yield break;
-            }
-
-            yield return Path.GetFullPath(text, Environment.CurrentDirectory);
-            yield return Path.GetFullPath(text, AppContext.BaseDirectory);
-        }
-
-        private static string NormalizeModelType(string modelType)
-        {
-            string text = (modelType ?? string.Empty).Trim();
-            if (text.Equals("classification", StringComparison.OrdinalIgnoreCase))
-            {
-                return "classification";
-            }
-            if (text.Equals("detection", StringComparison.OrdinalIgnoreCase) || text.Equals("object_detection", StringComparison.OrdinalIgnoreCase))
-            {
-                return "detection";
-            }
-            if (text.Equals("segmentation", StringComparison.OrdinalIgnoreCase))
-            {
-                return "segmentation";
-            }
-            return text.Length == 0 ? "generic" : text;
-        }
-
-        private static string ReadStringParam(HTuple modelHandle, string key, string fallback)
-        {
-            try
-            {
-                HOperatorSet.GetDlModelParam(modelHandle, key, out HTuple value);
-                return value.Length > 0 ? value[0].S : fallback;
-            }
-            catch (HalconException)
-            {
-                return fallback;
-            }
-        }
-
-        private static int ReadIntParam(HTuple modelHandle, string key, int fallback)
-        {
-            try
-            {
-                HOperatorSet.GetDlModelParam(modelHandle, key, out HTuple value);
-                return value.Length > 0 ? value[0].I : fallback;
-            }
-            catch (HalconException)
-            {
-                return fallback;
-            }
-        }
-
-        private static string[] ReadStringArrayParam(HTuple modelHandle, string key)
-        {
-            try
-            {
-                HOperatorSet.GetDlModelParam(modelHandle, key, out HTuple value);
-                return TupleToStrings(value);
-            }
-            catch (HalconException)
-            {
-                return Array.Empty<string>();
-            }
-        }
-
-        private static int[] ReadIntArrayParam(HTuple modelHandle, string key)
-        {
-            try
-            {
-                HOperatorSet.GetDlModelParam(modelHandle, key, out HTuple value);
-                if (value == null || value.Length == 0)
-                {
-                    return Array.Empty<int>();
-                }
-
-                var result = new int[value.Length];
-                for (int i = 0; i < value.Length; i++)
-                {
-                    result[i] = value[i].I;
-                }
-                return result;
-            }
-            catch (HalconException)
-            {
-                return Array.Empty<int>();
-            }
-        }
-
-        private static string[] TupleToStrings(HTuple tuple)
-        {
-            if (tuple == null || tuple.Length == 0)
-            {
-                return Array.Empty<string>();
-            }
-
-            var result = new string[tuple.Length];
-            for (int i = 0; i < tuple.Length; i++)
-            {
-                result[i] = tuple[i].S ?? string.Empty;
-            }
-            return result;
-        }
-
-        private static void TryClearDlModel(HTuple modelHandle)
-        {
-            try
-            {
-                HOperatorSet.ClearDlModel(modelHandle);
-            }
-            catch (HalconException)
-            {
-            }
         }
 
         private void WriteOutputs(FlowContext ctx, DeepLearningInferenceInfo info)
@@ -530,55 +187,18 @@ namespace VisionFlow.Tools
 
         public IEnumerable<ToolConfigurationIssue> CheckConfiguration()
         {
-            if (string.IsNullOrWhiteSpace(ModelFilePath))
-            {
-                yield return new ToolConfigurationIssue(nameof(ModelFilePath), "请先指定 .hdl 模型文件");
-                yield break;
-            }
-
-            string expanded = Environment.ExpandEnvironmentVariables(ModelFilePath.Trim());
-            if (Path.GetExtension(expanded).Length > 0 && !string.Equals(Path.GetExtension(expanded), ".hdl", StringComparison.OrdinalIgnoreCase))
-            {
-                yield return new ToolConfigurationIssue(nameof(ModelFilePath), "模型文件应为 .hdl");
-            }
-            if (BatchSize <= 0)
-            {
-                yield return new ToolConfigurationIssue(nameof(BatchSize), "BatchSize 必须大于 0");
-            }
-
-            string path = EnumerateModelPathCandidates(ModelFilePath).FirstOrDefault(File.Exists);
-            if (path == null)
-            {
-                yield return new ToolConfigurationIssue(nameof(ModelFilePath), "模型文件不存在");
-            }
+            return DlModelLoader.CheckModelConfiguration(ModelFilePath, BatchSize,
+                nameof(ModelFilePath), nameof(BatchSize), Enumerable.Empty<ToolConfigurationIssue>());
         }
 
         public void Prepare()
         {
-            lock (_sync)
-            {
-                EnsureCachedModel(null);
-            }
+            _loader.Prepare(BuildRequest());
         }
 
         public void ReleaseResources()
         {
-            lock (_sync)
-            {
-                if (_poolEntry != null)
-                {
-                    // 只归还本实例持有的那一份；句柄由池在引用归零时统一处置。
-                    SharedDlModelCache.Release(_poolEntry);
-                    _poolEntry = null;
-                    _cached = null;
-                    return;
-                }
-                if (_cached != null)
-                {
-                    TryClearDlModel(_cached.Handle);
-                    _cached = null;
-                }
-            }
+            _loader.Release();
         }
     }
 
@@ -635,41 +255,6 @@ namespace VisionFlow.Tools
     [ToolOutput("BestScore", VariableKind.Single, VariableType.Double)]
     public sealed class DlDetectTool : ToolBase, INotFoundPolicy, IToolResourceLifecycle, IToolConfigurationCheck
     {
-        private sealed class LoadedModel
-        {
-            public HTuple Handle { get; init; }
-            public string ModelType { get; init; }
-            public string DeviceUsed { get; init; }
-            public int ImageWidth { get; init; }
-            public int ImageHeight { get; init; }
-            public int ImageNumChannels { get; init; }
-            public double RangeMin { get; init; }
-            public double RangeMax { get; init; }
-            public string[] ClassNames { get; init; } = Array.Empty<string>();
-            public int[] ClassIds { get; init; } = Array.Empty<int>();
-            public string ModelSummary { get; init; } = string.Empty;
-        }
-
-        private sealed class CachedModel
-        {
-            public object Key { get; init; }
-            public HTuple Handle { get; init; }
-            public string ResolvedPath { get; init; }
-            public string ModelType { get; init; }
-            public string DeviceUsed { get; init; }
-            public int ImageWidth { get; init; }
-            public int ImageHeight { get; init; }
-            public int ImageNumChannels { get; init; }
-            public double RangeMin { get; init; }
-            public double RangeMax { get; init; }
-            public string[] ClassNames { get; init; } = Array.Empty<string>();
-            public int[] ClassIds { get; init; } = Array.Empty<int>();
-            public string ModelSummary { get; init; } = string.Empty;
-
-            /// <summary>共享池条目；Instance 模式下为 null（句柄由本实例直接持有）。</summary>
-            public DlModelCacheEntry PoolEntry { get; init; }
-        }
-
         private sealed class DetectionResult
         {
             public List<DlDetectBox> Boxes { get; init; }
@@ -711,9 +296,7 @@ namespace VisionFlow.Tools
         /// <summary>未检出目标时是否失败（默认 true）；关闭后输出 Found=false、Count=0 并继续。</summary>
         public bool FailWhenNotFound { get; set; } = true;
 
-        private readonly object _sync = new object();
-        private CachedModel _cached;
-        private DlModelCacheEntry _poolEntry;
+        private readonly DlModelLoader _loader = new DlModelLoader();
 
         public DlDetectTool(string moduleName) : base(moduleName)
         {
@@ -736,11 +319,7 @@ namespace VisionFlow.Tools
 
             try
             {
-                CachedModel model;
-                lock (_sync)
-                {
-                    model = EnsureCachedModel(ctx);
-                }
+                CachedModel model = _loader.Ensure(ctx, BuildRequest());
 
                 // ROI（§14.3）：reduce_domain 对 DL 推理无效，先裁剪后推理；
                 // 裁剪原点取 ROI 最小外接矩形左上角，推理后框坐标加该偏移回原图。
@@ -771,7 +350,7 @@ namespace VisionFlow.Tools
                     HOperatorSet.CountChannels(runImage, out HTuple channels);
 
                     // 共享句柄上的推理在条目 Gate 上串行（§5.4：省显存、牺牲并发）。
-                    object gate = model.PoolEntry != null ? model.PoolEntry.Gate : _sync;
+                    object gate = model.PoolEntry != null ? model.PoolEntry.Gate : _loader.Sync;
                     DetectionResult detection;
                     lock (gate)
                     {
@@ -923,193 +502,25 @@ namespace VisionFlow.Tools
             }
         }
 
-        // ======================= 模型加载（DlModelCachePolicy 三模式，§5.4） =======================
+        // ======================= 模型加载（委托 DlModelLoader 三模式，§5.4） =======================
 
-        private CachedModel EnsureCachedModel(FlowContext ctx)
+        /// <summary>组装一次模型装载请求：ModuleName 可变，按调用时快照当前配置；类型校验与回退日志措辞保持本工具原文。</summary>
+        private DlModelLoadRequest BuildRequest()
         {
-            string resolvedPath = DeepLearningToolShared.ResolveExistingModelPath(ModelFilePath);
-            if (ModelCacheMode != ModelCacheMode.Instance)
+            return new DlModelLoadRequest
             {
-                // 共享模式（Flow / Project，§5.4）：锚点缺失时 EnsureSharedCachedModel 返回 null 回退 Instance。
-                CachedModel shared = EnsureSharedCachedModel(ctx, resolvedPath);
-                if (shared != null)
-                {
-                    return shared;
-                }
-            }
-            return EnsureInstanceCachedModel(resolvedPath);
-        }
-
-        private CachedModel EnsureSharedCachedModel(FlowContext ctx, string resolvedPath)
-        {
-            object anchor = DlModelCachePolicy.ResolveAnchor(ctx);
-            if (!DlModelCachePolicy.TryResolveSharedScope(ModelCacheMode, anchor, out object scopeToken))
-            {
-                // Flow 模式但无法确定流程根锚点（Prepare(IEnumerable<ToolNode>) 快照预热入口），回退 Instance 并补记日志。
-                ctx?.AddLog(FlowLogLevel.Warning,
-                    $"[深度学习检测] {ModuleName} ModelCacheMode=Flow 但本次入口无流程根锚点（可能经快照预热），已回退为 Instance 模式加载");
-                return null;
-            }
-
-            DlModelPoolKey key = DlModelCachePolicy.BuildKey(scopeToken, resolvedPath,
-                File.GetLastWriteTimeUtc(resolvedPath).Ticks, DeepLearningModelKind.Detection, Device, BatchSize, OptimizeForInference);
-            if (_poolEntry != null && _poolEntry.Key.Equals(key) && SharedDlModelCache.IsUsable(_poolEntry))
-            {
-                // 引用计数按"实例持有"：键不变复用已持有条目，不重复 Acquire。
-                return _cached;
-            }
-
-            // 键变化（或已失效）：先归还旧键引用（或旧实例句柄），再 Acquire 新键。
-            ReleaseResources();
-            DlModelCacheEntry entry = SharedDlModelCache.Acquire(key, () => LoadSharedEntry(key));
-            _poolEntry = entry;
-            _cached = ToCachedModel(entry, key);
-            return _cached;
-        }
-
-        private DlModelCacheEntry LoadSharedEntry(DlModelPoolKey key)
-        {
-            HTuple modelHandle = null;
-            try
-            {
-                LoadedModel loaded = LoadModel(key.ResolvedPath);
-                modelHandle = loaded.Handle;
-                HTuple handle = loaded.Handle;
-                return new DlModelCacheEntry
-                {
-                    Key = key,
-                    Handle = loaded.Handle,
-                    ResolvedPath = key.ResolvedPath,
-                    ModelType = loaded.ModelType,
-                    DeviceUsed = loaded.DeviceUsed,
-                    ImageWidth = loaded.ImageWidth,
-                    ImageHeight = loaded.ImageHeight,
-                    ClassNames = loaded.ClassNames,
-                    ClassIds = loaded.ClassIds,
-                    ModelSummary = loaded.ModelSummary,
-                    ClearAction = () => DeepLearningToolShared.TryClearDlModel(handle)
-                };
-            }
-            catch
-            {
-                if (modelHandle != null)
-                {
-                    DeepLearningToolShared.TryClearDlModel(modelHandle);
-                }
-                throw;
-            }
-        }
-
-        private CachedModel EnsureInstanceCachedModel(string resolvedPath)
-        {
-            object key = (resolvedPath.ToUpperInvariant(), File.GetLastWriteTimeUtc(resolvedPath).Ticks,
-                DeepLearningModelKind.Detection, Device, BatchSize, OptimizeForInference);
-            if (_cached != null && Equals(_cached.Key, key))
-            {
-                return _cached;
-            }
-
-            ReleaseResources();
-            LoadedModel loaded = LoadModel(resolvedPath);
-            try
-            {
-                _cached = ToCachedModel(loaded, key, resolvedPath);
-                return _cached;
-            }
-            catch
-            {
-                DeepLearningToolShared.TryClearDlModel(loaded.Handle);
-                throw;
-            }
-        }
-
-        /// <summary>读取检测模型并校验类型（固定 detection，不匹配抛中文错误）、设置 batch/optimize 与设备。</summary>
-        private LoadedModel LoadModel(string resolvedPath)
-        {
-            HOperatorSet.ReadDlModel(resolvedPath, out HTuple modelHandle);
-            try
-            {
-                string actualType = DeepLearningToolShared.NormalizeModelType(
-                    DeepLearningToolShared.ReadStringParam(modelHandle, "type", "generic"));
-                if (!string.Equals(actualType, "detection", StringComparison.OrdinalIgnoreCase))
-                {
-                    throw new InvalidOperationException(
-                        $"{ModuleName} 深度学习模型类型不匹配：检测工具需要 detection 类型模型，实际模型为 {actualType}");
-                }
-
-                if (BatchSize > 0)
-                {
-                    HOperatorSet.SetDlModelParam(modelHandle, "batch_size", BatchSize);
-                }
-                if (OptimizeForInference)
-                {
-                    HOperatorSet.SetDlModelParam(modelHandle, "optimize_for_inference", "true");
-                }
-
-                string deviceUsed = DeepLearningToolShared.ConfigureDevice(modelHandle, Device);
-                return new LoadedModel
-                {
-                    Handle = modelHandle,
-                    ModelType = actualType,
-                    DeviceUsed = deviceUsed,
-                    ImageWidth = DeepLearningToolShared.ReadIntParam(modelHandle, "image_width", fallback: 0),
-                    ImageHeight = DeepLearningToolShared.ReadIntParam(modelHandle, "image_height", fallback: 0),
-                    ImageNumChannels = DeepLearningToolShared.ReadIntParam(modelHandle, "image_num_channels", fallback: 0),
-                    RangeMin = DeepLearningToolShared.ReadDoubleParam(modelHandle, "image_range_min", fallback: 0),
-                    RangeMax = DeepLearningToolShared.ReadDoubleParam(modelHandle, "image_range_max", fallback: 255),
-                    ClassNames = DeepLearningToolShared.ReadStringArrayParam(modelHandle, "class_names"),
-                    ClassIds = DeepLearningToolShared.ReadIntArrayParam(modelHandle, "class_ids"),
-                    ModelSummary = DeepLearningToolShared.ReadStringParam(modelHandle, "summary", string.Empty)
-                };
-            }
-            catch
-            {
-                DeepLearningToolShared.TryClearDlModel(modelHandle);
-                throw;
-            }
-        }
-
-        private CachedModel ToCachedModel(DlModelCacheEntry entry, object key)
-        {
-            // 预处理参数（range/通道数）不进入池键（模型身份的一部分），随句柄每次读取。
-            HTuple handle = entry.Handle;
-            return new CachedModel
-            {
-                Key = key,
-                Handle = entry.Handle,
-                ResolvedPath = entry.ResolvedPath,
-                ModelType = entry.ModelType,
-                DeviceUsed = entry.DeviceUsed,
-                ImageWidth = entry.ImageWidth,
-                ImageHeight = entry.ImageHeight,
-                ImageNumChannels = DeepLearningToolShared.ReadIntParam(handle, "image_num_channels", fallback: 0),
-                RangeMin = DeepLearningToolShared.ReadDoubleParam(handle, "image_range_min", fallback: 0),
-                RangeMax = DeepLearningToolShared.ReadDoubleParam(handle, "image_range_max", fallback: 255),
-                ClassNames = entry.ClassNames,
-                ClassIds = entry.ClassIds,
-                ModelSummary = entry.ModelSummary,
-                PoolEntry = entry
-            };
-        }
-
-        private CachedModel ToCachedModel(LoadedModel loaded, object key, string resolvedPath)
-        {
-            return new CachedModel
-            {
-                Key = key,
-                Handle = loaded.Handle,
-                ResolvedPath = resolvedPath,
-                ModelType = loaded.ModelType,
-                DeviceUsed = loaded.DeviceUsed,
-                ImageWidth = loaded.ImageWidth,
-                ImageHeight = loaded.ImageHeight,
-                ImageNumChannels = loaded.ImageNumChannels,
-                RangeMin = loaded.RangeMin,
-                RangeMax = loaded.RangeMax,
-                ClassNames = loaded.ClassNames,
-                ClassIds = loaded.ClassIds,
-                ModelSummary = loaded.ModelSummary,
-                PoolEntry = null
+                ModuleName = ModuleName,
+                ModelFilePath = ModelFilePath,
+                Device = Device,
+                BatchSize = BatchSize,
+                OptimizeForInference = OptimizeForInference,
+                ModelCacheMode = ModelCacheMode,
+                ModelKind = DeepLearningModelKind.Detection,
+                ValidateModelType = actualType => string.Equals(actualType, "detection", StringComparison.OrdinalIgnoreCase)
+                    ? null
+                    : $"{ModuleName} 深度学习模型类型不匹配：检测工具需要 detection 类型模型，实际模型为 {actualType}",
+                BuildNoAnchorFallbackLog = moduleName =>
+                    $"[深度学习检测] {moduleName} ModelCacheMode=Flow 但本次入口无流程根锚点（可能经快照预热），已回退为 Instance 模式加载"
             };
         }
 
@@ -1168,21 +579,12 @@ namespace VisionFlow.Tools
 
         public IEnumerable<ToolConfigurationIssue> CheckConfiguration()
         {
-            if (string.IsNullOrWhiteSpace(ModelFilePath))
-            {
-                yield return new ToolConfigurationIssue(nameof(ModelFilePath), "请先指定 .hdl 模型文件");
-                yield break;
-            }
+            return DlModelLoader.CheckModelConfiguration(ModelFilePath, BatchSize,
+                nameof(ModelFilePath), nameof(BatchSize), CheckToolSpecificConfiguration());
+        }
 
-            string expanded = Environment.ExpandEnvironmentVariables(ModelFilePath.Trim());
-            if (Path.GetExtension(expanded).Length > 0 && !string.Equals(Path.GetExtension(expanded), ".hdl", StringComparison.OrdinalIgnoreCase))
-            {
-                yield return new ToolConfigurationIssue(nameof(ModelFilePath), "模型文件应为 .hdl");
-            }
-            if (BatchSize <= 0)
-            {
-                yield return new ToolConfigurationIssue(nameof(BatchSize), "BatchSize 必须大于 0");
-            }
+        private IEnumerable<ToolConfigurationIssue> CheckToolSpecificConfiguration()
+        {
             if (MinScore < 0 || MinScore > 1)
             {
                 yield return new ToolConfigurationIssue(nameof(MinScore), "MinScore 必须在 0~1 之间");
@@ -1191,40 +593,16 @@ namespace VisionFlow.Tools
             {
                 yield return new ToolConfigurationIssue(nameof(MaxDetections), "MaxDetections 不能小于 0（0 表示全部）");
             }
-
-            string path = DeepLearningToolShared.EnumerateModelPathCandidates(ModelFilePath).FirstOrDefault(File.Exists);
-            if (path == null)
-            {
-                yield return new ToolConfigurationIssue(nameof(ModelFilePath), "模型文件不存在");
-            }
         }
 
         public void Prepare()
         {
-            lock (_sync)
-            {
-                EnsureCachedModel(null);
-            }
+            _loader.Prepare(BuildRequest());
         }
 
         public void ReleaseResources()
         {
-            lock (_sync)
-            {
-                if (_poolEntry != null)
-                {
-                    // 只归还本实例持有的那一份；句柄由池在引用归零时统一处置。
-                    SharedDlModelCache.Release(_poolEntry);
-                    _poolEntry = null;
-                    _cached = null;
-                    return;
-                }
-                if (_cached != null)
-                {
-                    DeepLearningToolShared.TryClearDlModel(_cached.Handle);
-                    _cached = null;
-                }
-            }
+            _loader.Release();
         }
     }
 
@@ -1315,29 +693,7 @@ namespace VisionFlow.Tools
         /// <summary>无有效分类结果（全部被 MinScore 过滤）时是否失败（默认 true）；关闭后输出 Found=false 并继续。</summary>
         public bool FailWhenNotFound { get; set; } = true;
 
-        private sealed class CachedModel
-        {
-            public object Key { get; init; }
-            public HTuple Handle { get; init; }
-            public string ResolvedPath { get; init; }
-            public string ModelType { get; init; }
-            public string DeviceUsed { get; init; }
-            public int ImageWidth { get; init; }
-            public int ImageHeight { get; init; }
-            public int ImageNumChannels { get; init; }
-            public double RangeMin { get; init; }
-            public double RangeMax { get; init; }
-            public string[] ClassNames { get; init; } = Array.Empty<string>();
-            public int[] ClassIds { get; init; } = Array.Empty<int>();
-            public string ModelSummary { get; init; } = string.Empty;
-
-            /// <summary>共享池条目；Instance 模式下为 null（句柄由本实例直接持有）。</summary>
-            public DlModelCacheEntry PoolEntry { get; init; }
-        }
-
-        private readonly object _sync = new object();
-        private CachedModel _cached;
-        private DlModelCacheEntry _poolEntry;
+        private readonly DlModelLoader _loader = new DlModelLoader();
 
         public DlClassifyTool(string moduleName) : base(moduleName)
         {
@@ -1360,11 +716,7 @@ namespace VisionFlow.Tools
 
             try
             {
-                CachedModel model;
-                lock (_sync)
-                {
-                    model = EnsureCachedModel(ctx);
-                }
+                CachedModel model = _loader.Ensure(ctx, BuildRequest());
 
                 // ROI（§14.3）：reduce_domain 对 DL 推理无效，先裁剪后推理；
                 // 分类结果与坐标无关，裁剪只改变分类对象（喂给网络的图像内容）。
@@ -1389,7 +741,7 @@ namespace VisionFlow.Tools
                     HOperatorSet.CountChannels(runImage, out HTuple channels);
 
                     // 共享句柄上的推理在条目 Gate 上串行（§5.4：省显存、牺牲并发）。
-                    object gate = model.PoolEntry != null ? model.PoolEntry.Gate : _sync;
+                    object gate = model.PoolEntry != null ? model.PoolEntry.Gate : _loader.Sync;
                     ClassificationResult classification;
                     lock (gate)
                     {
@@ -1507,196 +859,25 @@ namespace VisionFlow.Tools
             return false;
         }
 
-        // ======================= 模型加载（DlModelCachePolicy 三模式，§5.4） =======================
+        // ======================= 模型加载（委托 DlModelLoader 三模式，§5.4） =======================
 
-        private CachedModel EnsureCachedModel(FlowContext ctx)
+        /// <summary>组装一次模型装载请求：ModuleName 可变，按调用时快照当前配置；类型校验与回退日志措辞保持本工具原文。</summary>
+        private DlModelLoadRequest BuildRequest()
         {
-            string resolvedPath = DeepLearningToolShared.ResolveExistingModelPath(ModelFilePath);
-            if (ModelCacheMode != ModelCacheMode.Instance)
+            return new DlModelLoadRequest
             {
-                // 共享模式（Flow / Project，§5.4）：锚点缺失时 EnsureSharedCachedModel 返回 null 回退 Instance。
-                CachedModel shared = EnsureSharedCachedModel(ctx, resolvedPath);
-                if (shared != null)
-                {
-                    return shared;
-                }
-            }
-            return EnsureInstanceCachedModel(resolvedPath);
-        }
-
-        private CachedModel EnsureSharedCachedModel(FlowContext ctx, string resolvedPath)
-        {
-            object anchor = DlModelCachePolicy.ResolveAnchor(ctx);
-            if (!DlModelCachePolicy.TryResolveSharedScope(ModelCacheMode, anchor, out object scopeToken))
-            {
-                // Flow 模式但无法确定流程根锚点（Prepare(IEnumerable<ToolNode>) 快照预热入口），回退 Instance 并补记日志。
-                ctx?.AddLog(FlowLogLevel.Warning,
-                    $"[深度学习分类] {ModuleName} ModelCacheMode=Flow 但本次入口无流程根锚点（可能经快照预热），已回退为 Instance 模式加载");
-                return null;
-            }
-
-            DlModelPoolKey key = DlModelCachePolicy.BuildKey(scopeToken, resolvedPath,
-                File.GetLastWriteTimeUtc(resolvedPath).Ticks, DeepLearningModelKind.Classification, Device, BatchSize, OptimizeForInference);
-            if (_poolEntry != null && _poolEntry.Key.Equals(key) && SharedDlModelCache.IsUsable(_poolEntry))
-            {
-                // 引用计数按"实例持有"：键不变复用已持有条目，不重复 Acquire。
-                return _cached;
-            }
-
-            // 键变化（或已失效）：先归还旧键引用（或旧实例句柄），再 Acquire 新键。
-            ReleaseResources();
-            DlModelCacheEntry entry = SharedDlModelCache.Acquire(key, () => LoadSharedEntry(key));
-            _poolEntry = entry;
-            _cached = ToCachedModel(entry, key);
-            return _cached;
-        }
-
-        private DlModelCacheEntry LoadSharedEntry(DlModelPoolKey key)
-        {
-            HTuple modelHandle = null;
-            try
-            {
-                CachedModel loaded = LoadModel(key.ResolvedPath);
-                modelHandle = loaded.Handle;
-                HTuple handle = loaded.Handle;
-                return new DlModelCacheEntry
-                {
-                    Key = key,
-                    Handle = loaded.Handle,
-                    ResolvedPath = key.ResolvedPath,
-                    ModelType = loaded.ModelType,
-                    DeviceUsed = loaded.DeviceUsed,
-                    ImageWidth = loaded.ImageWidth,
-                    ImageHeight = loaded.ImageHeight,
-                    ClassNames = loaded.ClassNames,
-                    ClassIds = loaded.ClassIds,
-                    ModelSummary = loaded.ModelSummary,
-                    ClearAction = () => DeepLearningToolShared.TryClearDlModel(handle)
-                };
-            }
-            catch
-            {
-                if (modelHandle != null)
-                {
-                    DeepLearningToolShared.TryClearDlModel(modelHandle);
-                }
-                throw;
-            }
-        }
-
-        private CachedModel EnsureInstanceCachedModel(string resolvedPath)
-        {
-            object key = (resolvedPath.ToUpperInvariant(), File.GetLastWriteTimeUtc(resolvedPath).Ticks,
-                DeepLearningModelKind.Classification, Device, BatchSize, OptimizeForInference);
-            if (_cached != null && Equals(_cached.Key, key))
-            {
-                return _cached;
-            }
-
-            ReleaseResources();
-            CachedModel loaded = LoadModel(resolvedPath);
-            try
-            {
-                _cached = ToCachedModel(loaded, key, resolvedPath);
-                return _cached;
-            }
-            catch
-            {
-                DeepLearningToolShared.TryClearDlModel(loaded.Handle);
-                throw;
-            }
-        }
-
-        /// <summary>读取分类模型并校验类型（固定 classification，不匹配抛中文错误）、设置 batch/optimize 与设备。</summary>
-        private CachedModel LoadModel(string resolvedPath)
-        {
-            HOperatorSet.ReadDlModel(resolvedPath, out HTuple modelHandle);
-            try
-            {
-                string actualType = DeepLearningToolShared.NormalizeModelType(
-                    DeepLearningToolShared.ReadStringParam(modelHandle, "type", "generic"));
-                if (!string.Equals(actualType, "classification", StringComparison.OrdinalIgnoreCase))
-                {
-                    throw new InvalidOperationException(
-                        $"{ModuleName} 深度学习模型类型不匹配：分类工具需要 classification 类型模型，实际模型为 {actualType}");
-                }
-
-                if (BatchSize > 0)
-                {
-                    HOperatorSet.SetDlModelParam(modelHandle, "batch_size", BatchSize);
-                }
-                if (OptimizeForInference)
-                {
-                    HOperatorSet.SetDlModelParam(modelHandle, "optimize_for_inference", "true");
-                }
-
-                string deviceUsed = DeepLearningToolShared.ConfigureDevice(modelHandle, Device);
-                return new CachedModel
-                {
-                    Key = null,
-                    Handle = modelHandle,
-                    ResolvedPath = resolvedPath,
-                    ModelType = actualType,
-                    DeviceUsed = deviceUsed,
-                    ImageWidth = DeepLearningToolShared.ReadIntParam(modelHandle, "image_width", fallback: 0),
-                    ImageHeight = DeepLearningToolShared.ReadIntParam(modelHandle, "image_height", fallback: 0),
-                    ImageNumChannels = DeepLearningToolShared.ReadIntParam(modelHandle, "image_num_channels", fallback: 0),
-                    RangeMin = DeepLearningToolShared.ReadDoubleParam(modelHandle, "image_range_min", fallback: 0),
-                    RangeMax = DeepLearningToolShared.ReadDoubleParam(modelHandle, "image_range_max", fallback: 255),
-                    ClassNames = DeepLearningToolShared.ReadStringArrayParam(modelHandle, "class_names"),
-                    ClassIds = DeepLearningToolShared.ReadIntArrayParam(modelHandle, "class_ids"),
-                    ModelSummary = DeepLearningToolShared.ReadStringParam(modelHandle, "summary", string.Empty),
-                    PoolEntry = null
-                };
-            }
-            catch
-            {
-                DeepLearningToolShared.TryClearDlModel(modelHandle);
-                throw;
-            }
-        }
-
-        private CachedModel ToCachedModel(DlModelCacheEntry entry, object key)
-        {
-            // 预处理参数（range/通道数）不进入池键（模型身份的一部分），随句柄每次读取。
-            HTuple handle = entry.Handle;
-            return new CachedModel
-            {
-                Key = key,
-                Handle = entry.Handle,
-                ResolvedPath = entry.ResolvedPath,
-                ModelType = entry.ModelType,
-                DeviceUsed = entry.DeviceUsed,
-                ImageWidth = entry.ImageWidth,
-                ImageHeight = entry.ImageHeight,
-                ImageNumChannels = DeepLearningToolShared.ReadIntParam(handle, "image_num_channels", fallback: 0),
-                RangeMin = DeepLearningToolShared.ReadDoubleParam(handle, "image_range_min", fallback: 0),
-                RangeMax = DeepLearningToolShared.ReadDoubleParam(handle, "image_range_max", fallback: 255),
-                ClassNames = entry.ClassNames,
-                ClassIds = entry.ClassIds,
-                ModelSummary = entry.ModelSummary,
-                PoolEntry = entry
-            };
-        }
-
-        private CachedModel ToCachedModel(CachedModel loaded, object key, string resolvedPath)
-        {
-            return new CachedModel
-            {
-                Key = key,
-                Handle = loaded.Handle,
-                ResolvedPath = resolvedPath,
-                ModelType = loaded.ModelType,
-                DeviceUsed = loaded.DeviceUsed,
-                ImageWidth = loaded.ImageWidth,
-                ImageHeight = loaded.ImageHeight,
-                ImageNumChannels = loaded.ImageNumChannels,
-                RangeMin = loaded.RangeMin,
-                RangeMax = loaded.RangeMax,
-                ClassNames = loaded.ClassNames,
-                ClassIds = loaded.ClassIds,
-                ModelSummary = loaded.ModelSummary,
-                PoolEntry = null
+                ModuleName = ModuleName,
+                ModelFilePath = ModelFilePath,
+                Device = Device,
+                BatchSize = BatchSize,
+                OptimizeForInference = OptimizeForInference,
+                ModelCacheMode = ModelCacheMode,
+                ModelKind = DeepLearningModelKind.Classification,
+                ValidateModelType = actualType => string.Equals(actualType, "classification", StringComparison.OrdinalIgnoreCase)
+                    ? null
+                    : $"{ModuleName} 深度学习模型类型不匹配：分类工具需要 classification 类型模型，实际模型为 {actualType}",
+                BuildNoAnchorFallbackLog = moduleName =>
+                    $"[深度学习分类] {moduleName} ModelCacheMode=Flow 但本次入口无流程根锚点（可能经快照预热），已回退为 Instance 模式加载"
             };
         }
 
@@ -1757,21 +938,12 @@ namespace VisionFlow.Tools
 
         public IEnumerable<ToolConfigurationIssue> CheckConfiguration()
         {
-            if (string.IsNullOrWhiteSpace(ModelFilePath))
-            {
-                yield return new ToolConfigurationIssue(nameof(ModelFilePath), "请先指定 .hdl 模型文件");
-                yield break;
-            }
+            return DlModelLoader.CheckModelConfiguration(ModelFilePath, BatchSize,
+                nameof(ModelFilePath), nameof(BatchSize), CheckToolSpecificConfiguration());
+        }
 
-            string expanded = Environment.ExpandEnvironmentVariables(ModelFilePath.Trim());
-            if (Path.GetExtension(expanded).Length > 0 && !string.Equals(Path.GetExtension(expanded), ".hdl", StringComparison.OrdinalIgnoreCase))
-            {
-                yield return new ToolConfigurationIssue(nameof(ModelFilePath), "模型文件应为 .hdl");
-            }
-            if (BatchSize <= 0)
-            {
-                yield return new ToolConfigurationIssue(nameof(BatchSize), "BatchSize 必须大于 0");
-            }
+        private IEnumerable<ToolConfigurationIssue> CheckToolSpecificConfiguration()
+        {
             if (MinScore < 0 || MinScore > 1)
             {
                 yield return new ToolConfigurationIssue(nameof(MinScore), "MinScore 必须在 0~1 之间");
@@ -1780,40 +952,16 @@ namespace VisionFlow.Tools
             {
                 yield return new ToolConfigurationIssue(nameof(TopK), "TopK 必须大于等于 1");
             }
-
-            string path = DeepLearningToolShared.EnumerateModelPathCandidates(ModelFilePath).FirstOrDefault(File.Exists);
-            if (path == null)
-            {
-                yield return new ToolConfigurationIssue(nameof(ModelFilePath), "模型文件不存在");
-            }
         }
 
         public void Prepare()
         {
-            lock (_sync)
-            {
-                EnsureCachedModel(null);
-            }
+            _loader.Prepare(BuildRequest());
         }
 
         public void ReleaseResources()
         {
-            lock (_sync)
-            {
-                if (_poolEntry != null)
-                {
-                    // 只归还本实例持有的那一份；句柄由池在引用归零时统一处置。
-                    SharedDlModelCache.Release(_poolEntry);
-                    _poolEntry = null;
-                    _cached = null;
-                    return;
-                }
-                if (_cached != null)
-                {
-                    DeepLearningToolShared.TryClearDlModel(_cached.Handle);
-                    _cached = null;
-                }
-            }
+            _loader.Release();
         }
     }
 
@@ -1854,26 +1002,6 @@ namespace VisionFlow.Tools
     [ToolOutput("Found", VariableKind.Single, VariableType.Bool)]
     public sealed class DlSegmentTool : ToolBase, INotFoundPolicy, IToolResourceLifecycle, IToolConfigurationCheck
     {
-        private sealed class CachedModel
-        {
-            public object Key { get; init; }
-            public HTuple Handle { get; init; }
-            public string ResolvedPath { get; init; }
-            public string ModelType { get; init; }
-            public string DeviceUsed { get; init; }
-            public int ImageWidth { get; init; }
-            public int ImageHeight { get; init; }
-            public int ImageNumChannels { get; init; }
-            public double RangeMin { get; init; }
-            public double RangeMax { get; init; }
-            public string[] ClassNames { get; init; } = Array.Empty<string>();
-            public int[] ClassIds { get; init; } = Array.Empty<int>();
-            public string ModelSummary { get; init; } = string.Empty;
-
-            /// <summary>共享池条目；Instance 模式下为 null（句柄由本实例直接持有）。</summary>
-            public DlModelCacheEntry PoolEntry { get; init; }
-        }
-
         /// <summary>分割输出：所有权已按输出移交（Regions / MaskImage / RejectedRegion 由 HalconRegion / HalconImage 包装后交给流程）。</summary>
         private sealed class SegmentationResult
         {
@@ -1922,9 +1050,7 @@ namespace VisionFlow.Tools
         /// <summary>所有类的区域均为空（Found=false）时是否失败（默认 true）；关闭后输出 Found=false、Count=0 并继续。</summary>
         public bool FailWhenNotFound { get; set; } = true;
 
-        private readonly object _sync = new object();
-        private CachedModel _cached;
-        private DlModelCacheEntry _poolEntry;
+        private readonly DlModelLoader _loader = new DlModelLoader();
 
         public DlSegmentTool(string moduleName) : base(moduleName)
         {
@@ -1947,11 +1073,7 @@ namespace VisionFlow.Tools
 
             try
             {
-                CachedModel model;
-                lock (_sync)
-                {
-                    model = EnsureCachedModel(ctx);
-                }
+                CachedModel model = _loader.Ensure(ctx, BuildRequest());
 
                 // ROI（§14.3）：reduce_domain 对 DL 推理无效，先裁剪后推理；
                 // 裁剪原点取 ROI 最小外接矩形左上角，分割区域缩放后加该偏移回原图（同 DL-02）。
@@ -1982,7 +1104,7 @@ namespace VisionFlow.Tools
                     HOperatorSet.CountChannels(runImage, out HTuple channels);
 
                     // 共享句柄上的推理在条目 Gate 上串行（§5.4：省显存、牺牲并发）。
-                    object gate = model.PoolEntry != null ? model.PoolEntry.Gate : _sync;
+                    object gate = model.PoolEntry != null ? model.PoolEntry.Gate : _loader.Sync;
                     SegmentationResult segmentation;
                     lock (gate)
                     {
@@ -2242,188 +1364,25 @@ namespace VisionFlow.Tools
             return set.Count > 0 ? set : null;
         }
 
-        // ======================= 模型加载（DlModelCachePolicy 三模式，§5.4） =======================
+        // ======================= 模型加载（委托 DlModelLoader 三模式，§5.4） =======================
 
-        private CachedModel EnsureCachedModel(FlowContext ctx)
+        /// <summary>组装一次模型装载请求：ModuleName 可变，按调用时快照当前配置；类型校验与回退日志措辞保持本工具原文。</summary>
+        private DlModelLoadRequest BuildRequest()
         {
-            string resolvedPath = DeepLearningToolShared.ResolveExistingModelPath(ModelFilePath);
-            if (ModelCacheMode != ModelCacheMode.Instance)
+            return new DlModelLoadRequest
             {
-                // 共享模式（Flow / Project，§5.4）：锚点缺失时 EnsureSharedCachedModel 返回 null 回退 Instance。
-                CachedModel shared = EnsureSharedCachedModel(ctx, resolvedPath);
-                if (shared != null)
-                {
-                    return shared;
-                }
-            }
-            return EnsureInstanceCachedModel(resolvedPath);
-        }
-
-        private CachedModel EnsureSharedCachedModel(FlowContext ctx, string resolvedPath)
-        {
-            object anchor = DlModelCachePolicy.ResolveAnchor(ctx);
-            if (!DlModelCachePolicy.TryResolveSharedScope(ModelCacheMode, anchor, out object scopeToken))
-            {
-                // Flow 模式但无法确定流程根锚点（Prepare(IEnumerable<ToolNode>) 快照预热入口），回退 Instance 并补记日志。
-                ctx?.AddLog(FlowLogLevel.Warning,
-                    $"[深度学习分割] {ModuleName} ModelCacheMode=Flow 但本次入口无流程根锚点（可能经快照预热），已回退为 Instance 模式加载");
-                return null;
-            }
-
-            DlModelPoolKey key = DlModelCachePolicy.BuildKey(scopeToken, resolvedPath,
-                File.GetLastWriteTimeUtc(resolvedPath).Ticks, DeepLearningModelKind.Segmentation, Device, BatchSize, OptimizeForInference);
-            if (_poolEntry != null && _poolEntry.Key.Equals(key) && SharedDlModelCache.IsUsable(_poolEntry))
-            {
-                // 引用计数按"实例持有"：键不变复用已持有条目，不重复 Acquire。
-                return _cached;
-            }
-
-            // 键变化（或已失效）：先归还旧键引用（或旧实例句柄），再 Acquire 新键。
-            ReleaseResources();
-            DlModelCacheEntry entry = SharedDlModelCache.Acquire(key, () => LoadSharedEntry(key));
-            _poolEntry = entry;
-            _cached = ToCachedModel(entry, key);
-            return _cached;
-        }
-
-        private DlModelCacheEntry LoadSharedEntry(DlModelPoolKey key)
-        {
-            HTuple modelHandle = null;
-            try
-            {
-                CachedModel loaded = LoadModel(key.ResolvedPath);
-                modelHandle = loaded.Handle;
-                HTuple handle = loaded.Handle;
-                return new DlModelCacheEntry
-                {
-                    Key = key,
-                    Handle = loaded.Handle,
-                    ResolvedPath = key.ResolvedPath,
-                    ModelType = loaded.ModelType,
-                    DeviceUsed = loaded.DeviceUsed,
-                    ImageWidth = loaded.ImageWidth,
-                    ImageHeight = loaded.ImageHeight,
-                    ClassNames = loaded.ClassNames,
-                    ClassIds = loaded.ClassIds,
-                    ModelSummary = loaded.ModelSummary,
-                    ClearAction = () => DeepLearningToolShared.TryClearDlModel(handle)
-                };
-            }
-            catch
-            {
-                if (modelHandle != null)
-                {
-                    DeepLearningToolShared.TryClearDlModel(modelHandle);
-                }
-                throw;
-            }
-        }
-
-        private CachedModel EnsureInstanceCachedModel(string resolvedPath)
-        {
-            object key = (resolvedPath.ToUpperInvariant(), File.GetLastWriteTimeUtc(resolvedPath).Ticks,
-                DeepLearningModelKind.Segmentation, Device, BatchSize, OptimizeForInference);
-            if (_cached != null && Equals(_cached.Key, key))
-            {
-                return _cached;
-            }
-
-            ReleaseResources();
-            CachedModel loaded = LoadModel(resolvedPath);
-            _cached = ToCachedModel(loaded, key, resolvedPath);
-            return _cached;
-        }
-
-        /// <summary>读取分割模型并校验类型（固定 segmentation，不匹配抛中文错误）、设置 batch/optimize 与设备。</summary>
-        private CachedModel LoadModel(string resolvedPath)
-        {
-            HOperatorSet.ReadDlModel(resolvedPath, out HTuple modelHandle);
-            try
-            {
-                string actualType = DeepLearningToolShared.NormalizeModelType(
-                    DeepLearningToolShared.ReadStringParam(modelHandle, "type", "generic"));
-                if (!string.Equals(actualType, "segmentation", StringComparison.OrdinalIgnoreCase))
-                {
-                    throw new InvalidOperationException(
-                        $"{ModuleName} 深度学习模型类型不匹配：分割工具需要 segmentation 类型模型，实际模型为 {actualType}");
-                }
-
-                if (BatchSize > 0)
-                {
-                    HOperatorSet.SetDlModelParam(modelHandle, "batch_size", BatchSize);
-                }
-                if (OptimizeForInference)
-                {
-                    HOperatorSet.SetDlModelParam(modelHandle, "optimize_for_inference", "true");
-                }
-
-                string deviceUsed = DeepLearningToolShared.ConfigureDevice(modelHandle, Device);
-                return new CachedModel
-                {
-                    Key = null,
-                    Handle = modelHandle,
-                    ResolvedPath = resolvedPath,
-                    ModelType = actualType,
-                    DeviceUsed = deviceUsed,
-                    ImageWidth = DeepLearningToolShared.ReadIntParam(modelHandle, "image_width", fallback: 0),
-                    ImageHeight = DeepLearningToolShared.ReadIntParam(modelHandle, "image_height", fallback: 0),
-                    ImageNumChannels = DeepLearningToolShared.ReadIntParam(modelHandle, "image_num_channels", fallback: 0),
-                    RangeMin = DeepLearningToolShared.ReadDoubleParam(modelHandle, "image_range_min", fallback: 0),
-                    RangeMax = DeepLearningToolShared.ReadDoubleParam(modelHandle, "image_range_max", fallback: 255),
-                    ClassNames = DeepLearningToolShared.ReadStringArrayParam(modelHandle, "class_names"),
-                    ClassIds = DeepLearningToolShared.ReadIntArrayParam(modelHandle, "class_ids"),
-                    ModelSummary = DeepLearningToolShared.ReadStringParam(modelHandle, "summary", string.Empty),
-                    PoolEntry = null
-                };
-            }
-            catch
-            {
-                DeepLearningToolShared.TryClearDlModel(modelHandle);
-                throw;
-            }
-        }
-
-        private CachedModel ToCachedModel(DlModelCacheEntry entry, object key)
-        {
-            // 预处理参数（range/通道数）不进入池键（模型身份的一部分），随句柄每次读取。
-            HTuple handle = entry.Handle;
-            return new CachedModel
-            {
-                Key = key,
-                Handle = entry.Handle,
-                ResolvedPath = entry.ResolvedPath,
-                ModelType = entry.ModelType,
-                DeviceUsed = entry.DeviceUsed,
-                ImageWidth = entry.ImageWidth,
-                ImageHeight = entry.ImageHeight,
-                ImageNumChannels = DeepLearningToolShared.ReadIntParam(handle, "image_num_channels", fallback: 0),
-                RangeMin = DeepLearningToolShared.ReadDoubleParam(handle, "image_range_min", fallback: 0),
-                RangeMax = DeepLearningToolShared.ReadDoubleParam(handle, "image_range_max", fallback: 255),
-                ClassNames = entry.ClassNames,
-                ClassIds = entry.ClassIds,
-                ModelSummary = entry.ModelSummary,
-                PoolEntry = entry
-            };
-        }
-
-        private CachedModel ToCachedModel(CachedModel loaded, object key, string resolvedPath)
-        {
-            return new CachedModel
-            {
-                Key = key,
-                Handle = loaded.Handle,
-                ResolvedPath = resolvedPath,
-                ModelType = loaded.ModelType,
-                DeviceUsed = loaded.DeviceUsed,
-                ImageWidth = loaded.ImageWidth,
-                ImageHeight = loaded.ImageHeight,
-                ImageNumChannels = loaded.ImageNumChannels,
-                RangeMin = loaded.RangeMin,
-                RangeMax = loaded.RangeMax,
-                ClassNames = loaded.ClassNames,
-                ClassIds = loaded.ClassIds,
-                ModelSummary = loaded.ModelSummary,
-                PoolEntry = null
+                ModuleName = ModuleName,
+                ModelFilePath = ModelFilePath,
+                Device = Device,
+                BatchSize = BatchSize,
+                OptimizeForInference = OptimizeForInference,
+                ModelCacheMode = ModelCacheMode,
+                ModelKind = DeepLearningModelKind.Segmentation,
+                ValidateModelType = actualType => string.Equals(actualType, "segmentation", StringComparison.OrdinalIgnoreCase)
+                    ? null
+                    : $"{ModuleName} 深度学习模型类型不匹配：分割工具需要 segmentation 类型模型，实际模型为 {actualType}",
+                BuildNoAnchorFallbackLog = moduleName =>
+                    $"[深度学习分割] {moduleName} ModelCacheMode=Flow 但本次入口无流程根锚点（可能经快照预热），已回退为 Instance 模式加载"
             };
         }
 
@@ -2470,21 +1429,12 @@ namespace VisionFlow.Tools
 
         public IEnumerable<ToolConfigurationIssue> CheckConfiguration()
         {
-            if (string.IsNullOrWhiteSpace(ModelFilePath))
-            {
-                yield return new ToolConfigurationIssue(nameof(ModelFilePath), "请先指定 .hdl 模型文件");
-                yield break;
-            }
+            return DlModelLoader.CheckModelConfiguration(ModelFilePath, BatchSize,
+                nameof(ModelFilePath), nameof(BatchSize), CheckToolSpecificConfiguration());
+        }
 
-            string expanded = Environment.ExpandEnvironmentVariables(ModelFilePath.Trim());
-            if (Path.GetExtension(expanded).Length > 0 && !string.Equals(Path.GetExtension(expanded), ".hdl", StringComparison.OrdinalIgnoreCase))
-            {
-                yield return new ToolConfigurationIssue(nameof(ModelFilePath), "模型文件应为 .hdl");
-            }
-            if (BatchSize <= 0)
-            {
-                yield return new ToolConfigurationIssue(nameof(BatchSize), "BatchSize 必须大于 0");
-            }
+        private IEnumerable<ToolConfigurationIssue> CheckToolSpecificConfiguration()
+        {
             if (MinScore < 0 || MinScore > 1)
             {
                 yield return new ToolConfigurationIssue(nameof(MinScore), "MinScore 必须在 0~1 之间");
@@ -2493,40 +1443,16 @@ namespace VisionFlow.Tools
             {
                 yield return new ToolConfigurationIssue(nameof(ClassFilter), "ClassFilter 格式无效：应为逗号分隔的类别名，如 pill,defect");
             }
-
-            string path = DeepLearningToolShared.EnumerateModelPathCandidates(ModelFilePath).FirstOrDefault(File.Exists);
-            if (path == null)
-            {
-                yield return new ToolConfigurationIssue(nameof(ModelFilePath), "模型文件不存在");
-            }
         }
 
         public void Prepare()
         {
-            lock (_sync)
-            {
-                EnsureCachedModel(null);
-            }
+            _loader.Prepare(BuildRequest());
         }
 
         public void ReleaseResources()
         {
-            lock (_sync)
-            {
-                if (_poolEntry != null)
-                {
-                    // 只归还本实例持有的那一份；句柄由池在引用归零时统一处置。
-                    SharedDlModelCache.Release(_poolEntry);
-                    _poolEntry = null;
-                    _cached = null;
-                    return;
-                }
-                if (_cached != null)
-                {
-                    DeepLearningToolShared.TryClearDlModel(_cached.Handle);
-                    _cached = null;
-                }
-            }
+            _loader.Release();
         }
     }
 }
