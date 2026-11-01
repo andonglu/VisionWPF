@@ -382,14 +382,24 @@ public class FlowSerializerCompatTests
     }
 
     [Fact]
-    public void 未知工具_明确报错且包含身份信息()
+    public void 未知工具_降级为占位工具并保留身份信息()
     {
         var node = System.Text.Json.Nodes.JsonNode.Parse(FlowSerializer.Save(SampleFlow()))!;
         var tool = node["Children"]![0]!["Tool"]!;
         tool["TypeName"] = "No.Such.Tool, NoAssembly";
         tool["ToolId"] = "no.such.id";
-        var ex = Assert.Throws<InvalidOperationException>(() => FlowSerializer.Load(node.ToJsonString()));
-        Assert.Contains("no.such.id", ex.Message);
+        var warnings = new List<string>();
+
+        SequenceNode root = FlowSerializer.Load(node.ToJsonString(), warnings);
+
+        // RF-01：加载不再崩溃，占位工具保留原 ToolId，警告包含身份信息。
+        var toolNode = Assert.IsType<ToolNode>(root.Children[0]);
+        var unknown = Assert.IsType<UnknownTool>(toolNode.Tool);
+        Assert.Equal("no.such.id", unknown.StoredToolId);
+        Assert.Contains(warnings, w => w.Contains("no.such.id"));
+        // 保存后身份不丢
+        string saved = FlowSerializer.Save(root);
+        Assert.Contains("\"ToolId\": \"no.such.id\"", saved);
     }
 
     [Fact]

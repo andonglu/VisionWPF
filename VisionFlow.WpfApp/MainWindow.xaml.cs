@@ -483,14 +483,26 @@ namespace VisionFlow.WpfApp
                 return;
             }
 
-            HOperatorSet.ReadImage(out HObject image, dialog.FileName);
-            _inputImage?.Dispose();
-            _inputImage = image;
-            _inputImagePath = dialog.FileName;
-            ImageView.ShowImage(_inputImage);
-            ImageView.ClearOverlay();
-            OutputDisplayCombo.SelectedItem = null;
-            SetStatus("已打开图像：" + dialog.FileName);
+            try
+            {
+                HOperatorSet.ReadImage(out HObject image, dialog.FileName);
+                _inputImage?.Dispose();
+                _inputImage = image;
+                _inputImagePath = dialog.FileName;
+                ImageView.ShowImage(_inputImage);
+                ImageView.ClearOverlay();
+                OutputDisplayCombo.SelectedItem = null;
+                SetStatus("已打开图像：" + dialog.FileName);
+            }
+            catch (DllNotFoundException)
+            {
+                ShowWarning("无法打开图像", "未找到 HALCON 运行库，无法读取图像。\r\n" +
+                                            "请检查 HALCON 安装，或确认 halcon.dll 所在目录已加入 PATH。");
+            }
+            catch (Exception ex)
+            {
+                ShowWarning("无法打开图像", "图像打开失败：\r\n" + ex.GetBaseException().Message);
+            }
         }
 
         private void NewFlow_Click(object sender, RoutedEventArgs e)
@@ -547,7 +559,17 @@ namespace VisionFlow.WpfApp
                 return;
             }
 
-            FlowLoadResult load = _document.Load(dialog.FileName);
+            FlowLoadResult load;
+            try
+            {
+                load = _document.Load(dialog.FileName);
+            }
+            catch (Exception ex)
+            {
+                // 加载失败（格式错误、版本过高、工具解析失败等）：提示并保留当前流程（RF-01）。
+                ShowWarning("流程加载失败", "无法加载流程文件：\r\n" + ex.GetBaseException().Message);
+                return;
+            }
             // 打开的是另一个流程：上次运行结果不再属于当前文档，回收其 HALCON 资源（VF-04）
             DiscardLastRunResult();
             VariablesGrid.ItemsSource = null;

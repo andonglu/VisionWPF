@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using VisionFlow.Conditions;
 using VisionFlow.Core;
 using VisionFlow.Nodes;
@@ -55,6 +56,10 @@ namespace VisionFlow.Editing
                 return;
             }
             _defaultsRegistered = true;
+
+            // 工厂 lambda 在被调用前不会加载 VisionFlow.Tools，而稳定 ToolId（如 threshold）
+            // 依赖其模块初始化器登记；强制先运行模块构造器，避免打开流程时解析不到工具（RF-01）。
+            RuntimeHelpers.RunModuleConstructor(typeof(ThresholdTool).Module.ModuleHandle);
 
             Register(new ToolboxItem("match", "01 定位匹配", "模板匹配", () =>
                 new ToolNode(new HalconModelMatchTool(NextModuleName("模板匹配"))

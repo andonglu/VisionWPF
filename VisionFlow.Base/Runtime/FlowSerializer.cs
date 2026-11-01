@@ -269,14 +269,13 @@ namespace VisionFlow.Editing
                     RegisterToolType(type);
                     return type;
                 }
-                catch (Exception ex)
+                catch (Exception)
                 {
-                    throw new InvalidOperationException(
-                        $"无法加载工具（ToolId: {dto.ToolId ?? "-"}，TypeName: {dto.TypeName}）。" +
-                        $"请确认对应工具库已加载或插件已注册。原因：{ex.Message}", ex);
+                    // 类型不存在/程序集未加载：交由调用方降级为占位工具（RF-01）。
+                    return null;
                 }
             }
-            throw new InvalidOperationException($"工具节点缺少工具类型（ToolId: {dto.ToolId ?? "-"}）。");
+            return null;
         }
 
         /// <summary>按需扫描已加载程序集，建立稳定 ID → 类型的映射（宿主也可提前 RegisterToolType）。</summary>
@@ -567,6 +566,17 @@ namespace VisionFlow.Editing
 
         private static ToolDto ToToolDto(ToolBase tool)
         {
+            if (tool is UnknownTool unknown)
+            {
+                // 占位工具按原 ToolId 与原始参数写回，保证工具库装回后数据不丢（RF-01）。
+                return new ToolDto
+                {
+                    ToolId = unknown.StoredToolId,
+                    TypeName = null,
+                    ModuleName = unknown.ModuleName,
+                    Properties = unknown.RawProperties.ToDictionary(p => p.Key, p => p.Value)
+                };
+            }
             Type type = tool.GetType();
             RegisterToolType(type);
             var dto = new ToolDto
@@ -589,7 +599,14 @@ namespace VisionFlow.Editing
             {
                 throw new InvalidOperationException("工具节点缺少工具类型。");
             }
+            // 工具类型未安装/未登记：降级为占位工具，原样保留 ToolId 与全部参数（RF-01）。
+            // 身份登记冲突等异常仍向外抛出（EnsureToolIdentities 内的冲突检查不受此处影响）。
             Type type = ResolveToolType(dto);
+            if (type == null)
+            {
+                warnings?.Add($"工具 '{dto.ModuleName}' 的类型 '{dto.ToolId ?? dto.TypeName}' 在当前环境未安装或尚未登记，已保留原参数。");
+                return new UnknownTool(dto.ModuleName, dto.ToolId ?? dto.TypeName, dto.Properties);
+            }
             var tool = Activator.CreateInstance(type, dto.ModuleName) as ToolBase;
             if (tool == null)
             {
